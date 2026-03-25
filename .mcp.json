@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "notebooklm-mcp": {
+      "command": "npx",
+      "args": ["notebooklm-mcp@latest"]
+    }
+  }
+}
