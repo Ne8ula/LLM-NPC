@@ -15,6 +15,12 @@ void ANPCPlayerController::BeginPlay()
 	FInputModeGameAndUI InputMode;
 	InputMode.SetHideCursorDuringCapture(false);
 	SetInputMode(InputMode);
+
+	// Chat starts visible, so disable pawn movement immediately
+	GetWorldTimerManager().SetTimerForNextTick([this]()
+	{
+		if (GetPawn()) GetPawn()->DisableInput(this);
+	});
 }
 
 void ANPCPlayerController::SetupInputComponent()
@@ -32,20 +38,24 @@ void ANPCPlayerController::Tick(float DeltaTime)
 		return;
 	}
 
-	// T key toggle with edge detection
+	// T key toggle with edge detection — only when Escape is pressed to close
 	bool bTDown = IsInputKeyDown(EKeys::T);
 	if (bTDown && !bTKeyWasDown && !HUD->IsDialogueVisible())
 	{
 		HUD->ToggleDialogueInput();
-	}
-	// Only allow T to close when not typing
-	if (bTDown && !bTKeyWasDown && HUD->IsDialogueVisible() && HUD->GetInputBuffer().IsEmpty())
-	{
-		HUD->ToggleDialogueInput();
+		// Disable pawn movement
+		if (GetPawn()) GetPawn()->DisableInput(this);
 	}
 	bTKeyWasDown = bTDown;
 
-	// When dialogue is visible, capture keyboard for typing
+	// Escape closes chat and re-enables movement
+	if (WasInputKeyJustPressed(EKeys::Escape) && HUD->IsDialogueVisible())
+	{
+		HUD->ToggleDialogueInput();
+		if (GetPawn()) GetPawn()->EnableInput(this);
+	}
+
+	// When dialogue is visible, disable pawn and capture keyboard for typing
 	if (HUD->IsDialogueVisible())
 	{
 		// Enter to submit

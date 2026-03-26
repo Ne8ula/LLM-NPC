@@ -295,9 +295,21 @@ FClaudeAPIResponse UClaudeAPISubsystem::ParseResponse(const FString& ResponseBod
 		return Result;
 	}
 
+	// Try to extract JSON from the response text
+	// Claude may return pure JSON, or JSON embedded in text
+	FString JsonText = RawText;
+
+	// Find the first { and last } to extract JSON block
+	int32 FirstBrace = RawText.Find(TEXT("{"));
+	int32 LastBrace = RawText.Find(TEXT("}"), ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+	if (FirstBrace != INDEX_NONE && LastBrace != INDEX_NONE && LastBrace > FirstBrace)
+	{
+		JsonText = RawText.Mid(FirstBrace, LastBrace - FirstBrace + 1);
+	}
+
 	// Parse the structured JSON from Claude's text response
 	TSharedPtr<FJsonObject> StructuredResponse;
-	TSharedRef<TJsonReader<>> InnerReader = TJsonReaderFactory<>::Create(RawText);
+	TSharedRef<TJsonReader<>> InnerReader = TJsonReaderFactory<>::Create(JsonText);
 
 	if (FJsonSerializer::Deserialize(InnerReader, StructuredResponse) && StructuredResponse.IsValid())
 	{
@@ -313,10 +325,11 @@ FClaudeAPIResponse UClaudeAPISubsystem::ParseResponse(const FString& ResponseBod
 		StructuredResponse->TryGetStringField(TEXT("item_id"), Result.ItemID);
 
 		Result.bSuccess = true;
+		UE_LOG(LogTemp, Log, TEXT("ClaudeAPISubsystem: Parsed structured response. Emotion: %s"), *EmotionString);
 	}
 	else
 	{
-		// Fallback: if Claude didn't return valid JSON, use the raw text as the response
+		// Fallback: use raw text but strip any JSON-looking content
 		Result.ResponseText = RawText;
 		Result.NPCEmotionUpdate = EEmotionType::Neutral;
 		Result.bShouldGiveItem = false;
