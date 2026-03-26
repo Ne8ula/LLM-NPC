@@ -22,7 +22,8 @@ public class LLM_NPC : ModuleRules
 			"UMG",
 			"SlateCore",
 			"Slate",
-			"AIModule"
+			"AIModule",
+			"EnhancedInput"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]

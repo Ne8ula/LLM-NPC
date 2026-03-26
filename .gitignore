@@ -1,2 +1,47 @@
-*.bin
+
+# UE5 generated folders
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+.vs/
+Build/
+
+# UE5 local files
+*.sln
+*.suo
+*.opensdf
+*.sdf
+*.cachefile
+*.VC.db
+*.VC.opendb
+
+# Compiled files
 *.pch
+*.pdb
+*.obj
+*.o
+
+# Keep Content assets but ignore large binaries
+Content/Collections/
+Content/Developers/
+
+# ThirdParty binaries (download locally, don't commit)
+ThirdParty/whisper.cpp/lib/*.dll
+ThirdParty/whisper.cpp/lib/*.lib
+ThirdParty/whisper.cpp/lib/*.a
+ThirdParty/OpenCV/lib/*.dll
+ThirdParty/OpenCV/lib/*.lib
+ThirdParty/OpenCV/lib/*.a
+ThirdParty/ONNXRuntime/lib/*.dll
+ThirdParty/ONNXRuntime/lib/*.lib
+ThirdParty/ONNXRuntime/lib/*.a
+
+# ML models (too large for git)
+Content/Models/*.bin
+Content/Models/*.onnx
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini

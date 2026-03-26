@@ -7,6 +7,7 @@
 /**
  * Player controller that handles NPC interaction input.
  * Press T to toggle the dialogue text input.
+ * Uses WasInputKeyJustPressed polling for UE5.7 Enhanced Input compatibility.
  */
 UCLASS()
 class LLM_NPC_API ANPCPlayerController : public APlayerController
@@ -17,9 +18,10 @@ public:
 	ANPCPlayerController();
 
 protected:
+	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
+	virtual void Tick(float DeltaTime) override;
 
 private:
-	/** Toggle dialogue input on T press. */
 	void ToggleDialogueInput();
 };
