@@ -100,9 +100,18 @@ public class LLM_NPC : ModuleRules
 			RuntimeDependencies.Add(Path.Combine(ONNXLibPath, "libonnxruntime.dylib"));
 		}
 
-		PublicDefinitions.Add("WITH_OPENCV=1");
-		PublicDefinitions.Add("WITH_ONNXRUNTIME=1");
-		PublicDefinitions.Add("WITH_WHISPER=1");
+		// Only enable third-party integrations if the libraries are actually present
+		bool bHasOpenCV = File.Exists(Path.Combine(OpenCVPath, "include", "opencv2", "opencv.hpp"))
+			|| File.Exists(Path.Combine(OpenCVPath, "include", "opencv2", "core.hpp"));
+		bool bHasONNX = File.Exists(Path.Combine(ONNXPath, "include", "onnxruntime_cxx_api.h"));
+		bool bHasWhisper = File.Exists(Path.Combine(WhisperPath, "include", "whisper.h"))
+			&& File.Exists(Path.Combine(WhisperPath, "include", "ggml.h"));
+
+		PublicDefinitions.Add(string.Format("WITH_OPENCV={0}", bHasOpenCV ? "1" : "0"));
+		PublicDefinitions.Add(string.Format("WITH_ONNXRUNTIME={0}", bHasONNX ? "1" : "0"));
+		PublicDefinitions.Add(string.Format("WITH_WHISPER={0}", bHasWhisper ? "1" : "0"));
+
+		System.Console.WriteLine("LLM_NPC ThirdParty: OpenCV={0}, ONNX={1}, Whisper={2}", bHasOpenCV, bHasONNX, bHasWhisper);
 	}
 
 	private string GetPlatformLibName(string BaseName)
