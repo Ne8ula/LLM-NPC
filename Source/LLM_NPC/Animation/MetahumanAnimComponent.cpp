@@ -1,6 +1,7 @@
 #include "MetahumanAnimComponent.h"
 #include "LLM_NPC/Emotion/EmotionComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/ChildActorComponent.h"
 
 UMetahumanAnimComponent::UMetahumanAnimComponent()
 {
@@ -45,38 +46,73 @@ void UMetahumanAnimComponent::InitializeSubsystem()
 			UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: No EmotionComponent found on owner"));
 		}
 
-		// Find the Face skeletal mesh (Metahumans have separate Face and Body meshes)
-		// Look for a component with "Face" in its name, or fall back to first skeletal mesh
-		TArray<USkeletalMeshComponent*> SkeletalMeshes;
-		Owner->GetComponents<USkeletalMeshComponent>(SkeletalMeshes);
-
-		for (USkeletalMeshComponent* SMC : SkeletalMeshes)
+		// Find the Face skeletal mesh — search owner first, then Child Actors (for Metahuman setup)
+		auto FindFaceMesh = [](AActor* Actor) -> USkeletalMeshComponent*
 		{
-			if (SMC && SMC->GetName().Contains(TEXT("Face")))
+			TArray<USkeletalMeshComponent*> SkeletalMeshes;
+			Actor->GetComponents<USkeletalMeshComponent>(SkeletalMeshes);
+
+			for (USkeletalMeshComponent* SMC : SkeletalMeshes)
 			{
-				CachedSkeletalMesh = SMC;
-				UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found Face mesh: %s"), *SMC->GetName());
-				break;
+				if (SMC && SMC->GetName().Contains(TEXT("Face")))
+				{
+					return SMC;
+				}
 			}
-		}
+			return nullptr;
+		};
 
-		// Fallback to first skeletal mesh if no Face mesh found
-		if (!CachedSkeletalMesh && SkeletalMeshes.Num() > 0)
+		// First search the owner actor
+		CachedSkeletalMesh = FindFaceMesh(Owner);
+
+		// If not found, search inside Child Actor components (Metahuman is spawned as Child Actor)
+		if (!CachedSkeletalMesh)
 		{
-			CachedSkeletalMesh = SkeletalMeshes[0];
-			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Using fallback mesh: %s"), *CachedSkeletalMesh->GetName());
+			TArray<UChildActorComponent*> ChildActors;
+			Owner->GetComponents<UChildActorComponent>(ChildActors);
+
+			for (UChildActorComponent* CAC : ChildActors)
+			{
+				if (CAC && CAC->GetChildActor())
+				{
+					UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Searching Child Actor: %s"), *CAC->GetChildActor()->GetName());
+
+					// Search the child actor for face mesh
+					CachedSkeletalMesh = FindFaceMesh(CAC->GetChildActor());
+					if (CachedSkeletalMesh)
+					{
+						UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found Face mesh in Child Actor: %s"), *CachedSkeletalMesh->GetName());
+						break;
+					}
+
+					// Also search recursively — Metahumans have nested child actors for Face
+					TArray<UChildActorComponent*> NestedChildren;
+					CAC->GetChildActor()->GetComponents<UChildActorComponent>(NestedChildren);
+					for (UChildActorComponent* Nested : NestedChildren)
+					{
+						if (Nested && Nested->GetChildActor())
+						{
+							CachedSkeletalMesh = FindFaceMesh(Nested->GetChildActor());
+							if (CachedSkeletalMesh)
+							{
+								UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found Face mesh in nested Child Actor: %s"), *CachedSkeletalMesh->GetName());
+								break;
+							}
+						}
+					}
+					if (CachedSkeletalMesh) break;
+				}
+			}
 		}
 
 		if (!CachedSkeletalMesh)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: No skeletal mesh found on owner '%s'"),
-				*Owner->GetName());
+			UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: No Face skeletal mesh found on owner or Child Actors"));
 		}
 		else
 		{
-			// Log morph target count for debugging
 			TMap<FName, float> MorphMap = CachedSkeletalMesh->GetMorphTargetCurves();
-			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Skeletal mesh found with %d active morph targets"), MorphMap.Num());
+			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Using mesh '%s' with %d active morph targets"), *CachedSkeletalMesh->GetName(), MorphMap.Num());
 		}
 	}
 }
