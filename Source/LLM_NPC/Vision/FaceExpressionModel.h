@@ -7,7 +7,8 @@
 
 /**
  * Wraps ONNX Runtime inference for facial expression classification.
- * Preprocesses face ROI to 48x48 grayscale and runs a 7-class emotion model.
+ * Uses trpakov/vit-face-expression (ViT-base) model from HuggingFace.
+ * Preprocesses face ROI to 224x224 RGB and runs a 7-class emotion model.
  * Temporal smoothing via exponential moving average prevents noisy flickering.
  * A new dominant emotion is only reported after persisting for 0.5 seconds.
  */
@@ -42,7 +43,7 @@ public:
 	bool IsModelLoaded() const { return bModelLoaded; }
 
 private:
-	/** Preprocess face ROI: resize to 48x48, convert to grayscale, normalize to [0,1]. */
+	/** Preprocess face ROI: resize to 224x224 RGB, normalize with ImageNet mean/std. */
 	TArray<float> Preprocess(const TArray<uint8>& FaceROI, int32 Width, int32 Height);
 
 	/** Run inference and return raw softmax probabilities for 7 classes. */
@@ -75,7 +76,7 @@ private:
 	EEmotionType LastReportedEmotion = EEmotionType::Neutral;
 	double DominantEmotionStartTime = 0.0;
 
-	/** 7-class lookup table mapping index to emotion:
-	 *  0=Neutral, 1=Joy, 2=Sadness, 3=Anger, 4=Fear, 5=Surprise, 6=Disgust */
+	/** 7-class lookup table matching trpakov/vit-face-expression ordering:
+	 *  0=Angry, 1=Disgust, 2=Fear, 3=Happy, 4=Sad, 5=Surprise, 6=Neutral */
 	static const EEmotionType EmotionLookupTable[7];
 };
