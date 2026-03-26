@@ -13,22 +13,38 @@ UEmotionStateMachine::UEmotionStateMachine()
 
 void UEmotionStateMachine::ProcessSignal(const FEmotionSignal& Signal)
 {
+	// If no transition rules exist (default state machine), directly use the signal
+	if (TransitionRules.Num() == 0)
+	{
+		if (Signal.TargetEmotion == CurrentState.PrimaryEmotion)
+		{
+			// Reinforce current emotion
+			CurrentState.Intensity = FMath::Clamp(CurrentState.Intensity + Signal.Strength, 0.0f, 1.0f);
+		}
+		else
+		{
+			// Direct transition
+			TransitionTo(Signal.TargetEmotion, FMath::Clamp(Signal.Strength, 0.0f, 1.0f));
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("EmotionStateMachine: Direct signal -> %s (intensity: %.2f)"),
+			*UEnum::GetValueAsString(CurrentState.PrimaryEmotion), CurrentState.Intensity);
+		return;
+	}
+
 	const EEmotionType BestTarget = FindBestTransition(Signal);
 
 	if (BestTarget == CurrentState.PrimaryEmotion && BestTarget != Signal.TargetEmotion)
 	{
-		// No valid transition found; boost intensity of current state instead
 		CurrentState.Intensity = FMath::Clamp(CurrentState.Intensity + Signal.Strength * 0.25f, 0.0f, 1.0f);
 		return;
 	}
 
 	if (BestTarget == CurrentState.PrimaryEmotion)
 	{
-		// Same emotion — reinforce intensity
 		const float NewIntensity = FMath::Clamp(CurrentState.Intensity + Signal.Strength, 0.0f, 1.0f);
 		CurrentState.Intensity = NewIntensity;
 
-		// Update target PAD toward the reinforced emotion
 		const FPADVector CanonicalPAD = EmotionPADDefaults::GetCanonicalPAD(BestTarget);
 		TargetPAD = FPADVector(
 			CanonicalPAD.Pleasure * NewIntensity,
@@ -38,7 +54,6 @@ void UEmotionStateMachine::ProcessSignal(const FEmotionSignal& Signal)
 	}
 	else
 	{
-		// Transition to a new emotion
 		TransitionTo(BestTarget, FMath::Clamp(Signal.Strength, 0.0f, 1.0f));
 	}
 }
