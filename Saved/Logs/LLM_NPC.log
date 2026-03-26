@@ -336,3 +336,12 @@ Total time in Unreal Build Accelerator local executor: 29.92 seconds
 Result: Failed (OtherCompilationError)
 Total execution time: 33.99 seconds
 LogInit: Warning: Still incompatible or missing module: LLM_NPC
+LogCore: Engine exit requested (reason: EngineExit() was called)
+LogAudio: Display: Beginning Audio Device Manager Shutdown (Module: )...
+LogAudio: Display: Audio Device Manager Shutdown
+LogExit: Preparing to exit.
+LogXGEController: Cannot use XGE Controller as Incredibuild is not installed on this machine.
+LogXGEController: Cleaning working directory: C:/Users/alexx/AppData/Local/Temp/UnrealXGEWorkingDir/
+LogPakFile: Destroying PakPlatformFile
+LogExit: Exiting.
+Log file closed, 03/26/26 01:23:03
