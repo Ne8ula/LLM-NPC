@@ -79,4 +79,7 @@ private:
 	/** Called when DialogueComponent receives a Claude response — forwards text to TTS. */
 	UFUNCTION()
 	void OnDialogueResponse(const FString& ResponseText, EEmotionType NPCEmotionHint, bool bShouldGiveItem, FName ItemID);
+
+	/** Returns a textual voice cue for the given emotion that ElevenLabs will inflect on. */
+	FString GetEmotionVoiceCue(EEmotionType Emotion) const;
 };

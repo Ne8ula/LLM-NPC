@@ -52,6 +52,31 @@ void ANPCCharacter::InitializeNPC()
 	}
 }
 
+FString ANPCCharacter::GetEmotionVoiceCue(EEmotionType Emotion) const
+{
+	switch (Emotion)
+	{
+	case EEmotionType::Joy:
+		return TEXT("(speaking warmly and happily) ");
+	case EEmotionType::Sadness:
+		return TEXT("(speaking softly and sadly, with a heavy heart) ");
+	case EEmotionType::Anger:
+		return TEXT("(speaking firmly and with frustration) ");
+	case EEmotionType::Fear:
+		return TEXT("(speaking nervously and with worry) ");
+	case EEmotionType::Surprise:
+		return TEXT("(speaking with wide-eyed astonishment) ");
+	case EEmotionType::Disgust:
+		return TEXT("(speaking with revulsion and distaste) ");
+	case EEmotionType::Trust:
+		return TEXT("(speaking gently and reassuringly) ");
+	case EEmotionType::Anticipation:
+		return TEXT("(speaking eagerly and with excitement) ");
+	default:
+		return TEXT("");
+	}
+}
+
 void ANPCCharacter::OnDialogueResponse(const FString& ResponseText, EEmotionType NPCEmotionHint, bool bShouldGiveItem, FName ItemID)
 {
 	if (ElevenLabsTTSComponent && ElevenLabsTTSComponent->IsSubsystemAvailable() && !ResponseText.IsEmpty())
@@ -68,6 +93,13 @@ void ANPCCharacter::OnDialogueResponse(const FString& ResponseText, EEmotionType
 			SimilarityBoost = NPCConfig->VoiceSimilarityBoost;
 		}
 
-		ElevenLabsTTSComponent->SpeakText(ResponseText, VoiceID, Stability, SimilarityBoost);
+		// Prepend emotional voice cue so ElevenLabs inflects accordingly
+		FString EmotionCue = GetEmotionVoiceCue(NPCEmotionHint);
+		FString TTSText = EmotionCue + ResponseText;
+
+		UE_LOG(LogTemp, Log, TEXT("ANPCCharacter: TTS with emotion '%s': %s"),
+			*UEnum::GetValueAsString(NPCEmotionHint), *TTSText.Left(80));
+
+		ElevenLabsTTSComponent->SpeakText(TTSText, VoiceID, Stability, SimilarityBoost);
 	}
 }
