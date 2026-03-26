@@ -1,0 +1,27 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.4",
+	"Category": "Research",
+	"Description": "Claude-powered interactive NPC with Metahuman facial animation, emotion engine, gesture recognition, and voice interaction",
+	"Modules": [
+		{
+			"Name": "LLM_NPC",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{
+			"Name": "MetaHuman",
+			"Enabled": true
+		},
+		{
+			"Name": "AudioCapture",
+			"Enabled": true
+		},
+		{
+			"Name": "OVRLipSync",
+			"Enabled": true
+		}
+	]
+}
