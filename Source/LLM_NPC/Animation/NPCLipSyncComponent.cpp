@@ -113,11 +113,6 @@ void UNPCLipSyncComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 		// check if the component is actively producing sound.
 		if (ActiveAudioComponent->IsPlaying())
 		{
-			// Approximate amplitude from the audio component's internal state.
-			// This is a simplified placeholder — a real implementation would use
-			// an FFT or OVRLipSync phoneme analysis.
-			const float RawAmplitude = ActiveAudioComponent->GetPlaybackPercentage();
-
 			// Generate a pseudo-amplitude using a sine wave modulated by time
 			// to simulate mouth movement when real amplitude data is not available.
 			const float Time = GetWorld()->GetTimeSeconds();
