@@ -81,7 +81,7 @@ protected:
 private:
 	/** Callback bound to the Emotion subsystem's OnEmotionStateChanged delegate. */
 	UFUNCTION()
-	void HandleEmotionStateChanged(const FEmotionState& NewState);
+	void HandleEmotionStateChanged(FEmotionState OldState, FEmotionState NewState);
 
 	/** Check whether a single unlock condition is satisfied. */
 	bool IsConditionMet(const FEmotionUnlockCondition& Condition, const FEmotionState& CurrentState) const;
