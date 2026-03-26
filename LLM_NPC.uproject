@@ -1,6 +1,6 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "5.4",
+	"EngineAssociation": "5.7",
 	"Category": "Research",
 	"Description": "Claude-powered interactive NPC with Metahuman facial animation, emotion engine, gesture recognition, and voice interaction",
 	"Modules": [
@@ -17,10 +17,6 @@
 		},
 		{
 			"Name": "AudioCapture",
-			"Enabled": true
-		},
-		{
-			"Name": "OVRLipSync",
 			"Enabled": true
 		}
 	]
