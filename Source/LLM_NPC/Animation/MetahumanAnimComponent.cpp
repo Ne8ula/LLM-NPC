@@ -2,6 +2,7 @@
 #include "LLM_NPC/Emotion/EmotionComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/ChildActorComponent.h"
+#include "Animation/AnimInstance.h"
 
 UMetahumanAnimComponent::UMetahumanAnimComponent()
 {
@@ -214,6 +215,9 @@ void UMetahumanAnimComponent::UpdateBlendShapes(float DeltaTime)
 		return;
 	}
 
+	// Get the AnimInstance — Metahumans use animation curves, not direct morph targets
+	UAnimInstance* AnimInst = CachedSkeletalMesh->GetAnimInstance();
+
 	for (const auto& Pair : TargetBlendShapeValues)
 	{
 		const FName& MorphName = Pair.Key;
@@ -224,8 +228,25 @@ void UMetahumanAnimComponent::UpdateBlendShapes(float DeltaTime)
 		// Smoothly interpolate toward target
 		CurrentValue = FMath::FInterpTo(CurrentValue, TargetValue, DeltaTime, InterpolationSpeed);
 
-		// Apply to skeletal mesh
+		// Method 1: Set morph target directly (works for standard skeletal meshes)
 		CachedSkeletalMesh->SetMorphTarget(MorphName, CurrentValue);
+
+		// Method 2: Set animation curve value (works for Metahuman AnimBP-driven faces)
+		if (AnimInst)
+		{
+			// Strip the prefix to get just the curve name that the AnimBP expects
+			FString MorphStr = MorphName.ToString();
+			// Try with full name
+			AnimInst->GetProxy().GetAnimationCurves().Set(MorphName, CurrentValue, ERawCurveTrackTypes::RCT_Float);
+
+			// Also try without the "head_lod0_mesh__" prefix
+			if (MorphStr.StartsWith(TEXT("head_lod0_mesh__")))
+			{
+				FString ShortName = MorphStr.RightChop(16); // Remove "head_lod0_mesh__"
+				FName ShortFName(*ShortName);
+				CachedSkeletalMesh->SetMorphTarget(ShortFName, CurrentValue);
+			}
+		}
 	}
 
 	// Remove blend shapes that have reached zero and are no longer in the target set
