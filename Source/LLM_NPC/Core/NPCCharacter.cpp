@@ -8,6 +8,7 @@
 #include "LLM_NPC/Animation/MetahumanAnimComponent.h"
 #include "LLM_NPC/Animation/NPCLipSyncComponent.h"
 #include "LLM_NPC/Dialogue/WhisperSTTComponent.h"
+#include "LLM_NPC/Dialogue/ElevenLabsTTSComponent.h"
 #include "LLM_NPC/Fallback/FallbackManagerComponent.h"
 
 ANPCCharacter::ANPCCharacter()
@@ -23,6 +24,7 @@ ANPCCharacter::ANPCCharacter()
 	MetahumanAnimComponent = CreateDefaultSubobject<UMetahumanAnimComponent>(TEXT("MetahumanAnimComponent"));
 	LipSyncComponent = CreateDefaultSubobject<UNPCLipSyncComponent>(TEXT("LipSyncComponent"));
 	WhisperSTTComponent = CreateDefaultSubobject<UWhisperSTTComponent>(TEXT("WhisperSTTComponent"));
+	ElevenLabsTTSComponent = CreateDefaultSubobject<UElevenLabsTTSComponent>(TEXT("ElevenLabsTTSComponent"));
 	FallbackManagerComponent = CreateDefaultSubobject<UFallbackManagerComponent>(TEXT("FallbackManagerComponent"));
 }
 
@@ -42,6 +44,30 @@ void ANPCCharacter::InitializeNPC()
 
 	UE_LOG(LogTemp, Log, TEXT("ANPCCharacter::InitializeNPC - Initializing NPC: %s"), *NPCConfig->NPCName.ToString());
 
-	// Each subsystem's BeginPlay calls InitializeSubsystem automatically.
-	// Additional config-dependent setup can be done here as subsystems are extended.
+	// Wire dialogue responses to TTS so the NPC speaks aloud
+	if (DialogueComponent && ElevenLabsTTSComponent && ElevenLabsTTSComponent->IsSubsystemAvailable())
+	{
+		DialogueComponent->OnDialogueResponseReceived.AddDynamic(this, &ANPCCharacter::OnDialogueResponse);
+		UE_LOG(LogTemp, Log, TEXT("ANPCCharacter: Wired dialogue responses to ElevenLabs TTS."));
+	}
+}
+
+void ANPCCharacter::OnDialogueResponse(const FString& ResponseText, EEmotionType NPCEmotionHint, bool bShouldGiveItem, FName ItemID)
+{
+	if (ElevenLabsTTSComponent && ElevenLabsTTSComponent->IsSubsystemAvailable() && !ResponseText.IsEmpty())
+	{
+		// Use voice config from NPCConfig if available
+		FString VoiceID;
+		float Stability = 0.5f;
+		float SimilarityBoost = 0.75f;
+
+		if (NPCConfig)
+		{
+			VoiceID = NPCConfig->ElevenLabsVoiceID;
+			Stability = NPCConfig->VoiceStability;
+			SimilarityBoost = NPCConfig->VoiceSimilarityBoost;
+		}
+
+		ElevenLabsTTSComponent->SpeakText(ResponseText, VoiceID, Stability, SimilarityBoost);
+	}
 }
