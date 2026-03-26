@@ -63,9 +63,9 @@ public class LLM_NPC : ModuleRules
 
 		if (Target.Platform == UnrealTargetPlatform.Win64)
 		{
-			PublicAdditionalLibraries.Add(Path.Combine(OpenCVLibPath, "opencv_world490.lib"));
-			PublicDelayLoadDLLs.Add("opencv_world490.dll");
-			RuntimeDependencies.Add(Path.Combine(OpenCVLibPath, "opencv_world490.dll"));
+			PublicAdditionalLibraries.Add(Path.Combine(OpenCVLibPath, "opencv_world4120.lib"));
+			PublicDelayLoadDLLs.Add("opencv_world4120.dll");
+			RuntimeDependencies.Add(Path.Combine(OpenCVLibPath, "opencv_world4120.dll"));
 		}
 		else if (Target.Platform == UnrealTargetPlatform.Linux)
 		{
