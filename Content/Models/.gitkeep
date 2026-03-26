@@ -1,0 +1,10 @@
+Place ML model files here:
+
+1. ggml-base.en.bin (~150MB) - Whisper speech-to-text model
+   Download from: https://huggingface.co/ggerganov/whisper.cpp/tree/main
+
+2. fer_expression.onnx (~10MB) - Facial expression recognition model
+   Search "facial expression recognition onnx" on HuggingFace
+
+3. hand_landmark.onnx (~5MB) - Hand landmark detection model
+   MediaPipe hand landmark model exported to ONNX
