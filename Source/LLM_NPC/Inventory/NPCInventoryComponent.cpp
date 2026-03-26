@@ -59,7 +59,7 @@ void UNPCInventoryComponent::InitializeSubsystem()
 	{
 		if (UEmotionComponent* EmotionComp = Owner->FindComponentByClass<UEmotionComponent>())
 		{
-			EmotionComp->OnEmotionStateChanged.AddDynamic(this, &UNPCInventoryComponent::HandleEmotionStateChanged);
+			EmotionComp->OnEmotionChanged.AddDynamic(this, &UNPCInventoryComponent::HandleEmotionStateChanged);
 			UE_LOG(LogTemp, Log, TEXT("NPC Inventory: Bound to EmotionComponent's OnEmotionStateChanged"));
 		}
 		else
@@ -86,7 +86,7 @@ void UNPCInventoryComponent::ShutdownSubsystem()
 	Super::ShutdownSubsystem();
 }
 
-void UNPCInventoryComponent::HandleEmotionStateChanged(const FEmotionState& NewState)
+void UNPCInventoryComponent::HandleEmotionStateChanged(FEmotionState OldState, FEmotionState NewState)
 {
 	CachedEmotionState = NewState;
 	CheckUnlockConditions(NewState);
