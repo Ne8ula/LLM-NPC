@@ -53,7 +53,7 @@ private:
 	TSharedPtr<SEditableTextBox> InputTextBox;
 	TSharedPtr<STextBlock> StatusText;
 
-	bool bInputVisible = false;
+	bool bInputVisible = true;  // Start visible so user can see it immediately
 
 	UPROPERTY()
 	TObjectPtr<UDialogueComponent> BoundDialogueComp;
