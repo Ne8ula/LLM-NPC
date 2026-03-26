@@ -232,20 +232,22 @@ void UMetahumanAnimComponent::UpdateBlendShapes(float DeltaTime)
 		CachedSkeletalMesh->SetMorphTarget(MorphName, CurrentValue);
 
 		// Method 2: Set animation curve value (works for Metahuman AnimBP-driven faces)
-		if (AnimInst)
+		// Method 2: Try without "head_lod0_mesh__" prefix
 		{
-			// Strip the prefix to get just the curve name that the AnimBP expects
 			FString MorphStr = MorphName.ToString();
-			// Try with full name
-			AnimInst->GetProxy().GetAnimationCurves().Set(MorphName, CurrentValue, ERawCurveTrackTypes::RCT_Float);
-
-			// Also try without the "head_lod0_mesh__" prefix
 			if (MorphStr.StartsWith(TEXT("head_lod0_mesh__")))
 			{
-				FString ShortName = MorphStr.RightChop(16); // Remove "head_lod0_mesh__"
+				FString ShortName = MorphStr.RightChop(16);
 				FName ShortFName(*ShortName);
 				CachedSkeletalMesh->SetMorphTarget(ShortFName, CurrentValue);
 			}
+		}
+
+		// Method 3: Force the skeletal mesh to apply morph targets immediately
+		// by marking it as needing a re-evaluation
+		if (CurrentValue > 0.001f)
+		{
+			CachedSkeletalMesh->bEnableMorphTargets = true;
 		}
 	}
 
