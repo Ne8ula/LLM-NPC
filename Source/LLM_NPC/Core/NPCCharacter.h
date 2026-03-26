@@ -80,6 +80,6 @@ private:
 	UFUNCTION()
 	void OnDialogueResponse(const FString& ResponseText, EEmotionType NPCEmotionHint, bool bShouldGiveItem, FName ItemID);
 
-	/** Returns a textual voice cue for the given emotion that ElevenLabs will inflect on. */
-	FString GetEmotionVoiceCue(EEmotionType Emotion) const;
+	/** Returns a stability modifier for the given emotion. Lower = more expressive voice. */
+	float GetEmotionStabilityModifier(EEmotionType Emotion) const;
 };

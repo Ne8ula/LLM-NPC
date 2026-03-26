@@ -216,6 +216,8 @@ FString UElevenLabsTTSComponent::BuildRequestBody(const FString& Text, float Sta
 	TSharedPtr<FJsonObject> VoiceSettings = MakeShared<FJsonObject>();
 	VoiceSettings->SetNumberField(TEXT("stability"), Stability);
 	VoiceSettings->SetNumberField(TEXT("similarity_boost"), SimilarityBoost);
+	VoiceSettings->SetNumberField(TEXT("style"), StyleExaggeration);
+	VoiceSettings->SetBoolField(TEXT("use_speaker_boost"), true);
 	RootObject->SetObjectField(TEXT("voice_settings"), VoiceSettings);
 
 	FString OutputString;

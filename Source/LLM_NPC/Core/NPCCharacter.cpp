@@ -52,28 +52,20 @@ void ANPCCharacter::InitializeNPC()
 	}
 }
 
-FString ANPCCharacter::GetEmotionVoiceCue(EEmotionType Emotion) const
+float ANPCCharacter::GetEmotionStabilityModifier(EEmotionType Emotion) const
 {
+	// Lower stability = more expressive/emotional voice in ElevenLabs
 	switch (Emotion)
 	{
-	case EEmotionType::Joy:
-		return TEXT("(speaking warmly and happily) ");
-	case EEmotionType::Sadness:
-		return TEXT("(speaking softly and sadly, with a heavy heart) ");
-	case EEmotionType::Anger:
-		return TEXT("(speaking firmly and with frustration) ");
-	case EEmotionType::Fear:
-		return TEXT("(speaking nervously and with worry) ");
-	case EEmotionType::Surprise:
-		return TEXT("(speaking with wide-eyed astonishment) ");
-	case EEmotionType::Disgust:
-		return TEXT("(speaking with revulsion and distaste) ");
-	case EEmotionType::Trust:
-		return TEXT("(speaking gently and reassuringly) ");
-	case EEmotionType::Anticipation:
-		return TEXT("(speaking eagerly and with excitement) ");
-	default:
-		return TEXT("");
+	case EEmotionType::Joy:          return -0.20f;
+	case EEmotionType::Sadness:      return -0.25f;
+	case EEmotionType::Anger:        return -0.30f;
+	case EEmotionType::Fear:         return -0.25f;
+	case EEmotionType::Surprise:     return -0.30f;
+	case EEmotionType::Disgust:      return -0.20f;
+	case EEmotionType::Trust:        return -0.10f;
+	case EEmotionType::Anticipation: return -0.20f;
+	default:                         return 0.0f;
 	}
 }
 
@@ -93,13 +85,23 @@ void ANPCCharacter::OnDialogueResponse(const FString& ResponseText, EEmotionType
 			SimilarityBoost = NPCConfig->VoiceSimilarityBoost;
 		}
 
-		// Prepend emotional voice cue so ElevenLabs inflects accordingly
-		FString EmotionCue = GetEmotionVoiceCue(NPCEmotionHint);
-		FString TTSText = EmotionCue + ResponseText;
+		// Modulate stability based on emotion — lower = more expressive
+		float StabilityMod = GetEmotionStabilityModifier(NPCEmotionHint);
+		Stability = FMath::Clamp(Stability + StabilityMod, 0.1f, 1.0f);
 
-		UE_LOG(LogTemp, Log, TEXT("ANPCCharacter: TTS with emotion '%s': %s"),
-			*UEnum::GetValueAsString(NPCEmotionHint), *TTSText.Left(80));
+		// Boost style exaggeration for emotional states
+		if (NPCEmotionHint != EEmotionType::Neutral)
+		{
+			ElevenLabsTTSComponent->StyleExaggeration = FMath::Clamp(0.7f + FMath::Abs(StabilityMod), 0.0f, 1.0f);
+		}
+		else
+		{
+			ElevenLabsTTSComponent->StyleExaggeration = 0.3f;
+		}
 
-		ElevenLabsTTSComponent->SpeakText(TTSText, VoiceID, Stability, SimilarityBoost);
+		UE_LOG(LogTemp, Log, TEXT("ANPCCharacter: TTS emotion='%s', stability=%.2f, style=%.2f: %s"),
+			*UEnum::GetValueAsString(NPCEmotionHint), Stability, ElevenLabsTTSComponent->StyleExaggeration, *ResponseText.Left(80));
+
+		ElevenLabsTTSComponent->SpeakText(ResponseText, VoiceID, Stability, SimilarityBoost);
 	}
 }
