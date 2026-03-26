@@ -111,8 +111,31 @@ void UMetahumanAnimComponent::InitializeSubsystem()
 		}
 		else
 		{
-			TMap<FName, float> MorphMap = CachedSkeletalMesh->GetMorphTargetCurves();
-			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Using mesh '%s' with %d active morph targets"), *CachedSkeletalMesh->GetName(), MorphMap.Num());
+			// List ALL available morph targets from the skeletal mesh asset
+			if (USkeletalMesh* SkelMesh = CachedSkeletalMesh->GetSkeletalMeshAsset())
+			{
+				const TArray<UMorphTarget*>& MorphTargets = SkelMesh->GetMorphTargets();
+				UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Face mesh '%s' has %d total morph targets available"),
+					*CachedSkeletalMesh->GetName(), MorphTargets.Num());
+
+				// Log first 20 morph target names for debugging
+				for (int32 i = 0; i < FMath::Min(MorphTargets.Num(), 20); ++i)
+				{
+					if (MorphTargets[i])
+					{
+						UE_LOG(LogTemp, Log, TEXT("  MorphTarget[%d]: %s"), i, *MorphTargets[i]->GetName());
+					}
+				}
+
+				if (MorphTargets.Num() > 20)
+				{
+					UE_LOG(LogTemp, Log, TEXT("  ... and %d more morph targets"), MorphTargets.Num() - 20);
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: Face mesh has no skeletal mesh asset"));
+			}
 		}
 	}
 }
@@ -153,6 +176,19 @@ void UMetahumanAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType
 
 	// Look up blend shape targets for the current emotion state
 	TArray<FEmotionBlendShapeTarget> Targets = LoadedMappingData->GetTargetsForState(CurrentState);
+
+	// Debug: log when emotion changes and targets are found (only log once per change)
+	static EEmotionType LastLoggedEmotion = EEmotionType::Neutral;
+	if (CurrentState.PrimaryEmotion != LastLoggedEmotion)
+	{
+		UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Emotion changed to %s (intensity: %.2f), found %d blend shape targets"),
+			*UEnum::GetValueAsString(CurrentState.PrimaryEmotion), CurrentState.Intensity, Targets.Num());
+		for (const FEmotionBlendShapeTarget& T : Targets)
+		{
+			UE_LOG(LogTemp, Log, TEXT("  -> Setting morph '%s' to %.2f"), *T.BlendShapeName.ToString(), T.TargetValue);
+		}
+		LastLoggedEmotion = CurrentState.PrimaryEmotion;
+	}
 
 	// Build target map — reset all existing targets to zero first
 	TMap<FName, float> NewTargets;
