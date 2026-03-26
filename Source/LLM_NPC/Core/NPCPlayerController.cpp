@@ -15,6 +15,12 @@ void ANPCPlayerController::BeginPlay()
 	FInputModeGameAndUI InputMode;
 	InputMode.SetHideCursorDuringCapture(false);
 	SetInputMode(InputMode);
+
+	// Chat starts visible, so disable pawn movement immediately
+	GetWorldTimerManager().SetTimerForNextTick([this]()
+	{
+		if (GetPawn()) GetPawn()->DisableInput(this);
+	});
 }
 
 void ANPCPlayerController::SetupInputComponent()
@@ -32,20 +38,24 @@ void ANPCPlayerController::Tick(float DeltaTime)
 		return;
 	}
 
-	// T key toggle with edge detection
+	// T key toggle with edge detection — only when Escape is pressed to close
 	bool bTDown = IsInputKeyDown(EKeys::T);
 	if (bTDown && !bTKeyWasDown && !HUD->IsDialogueVisible())
 	{
 		HUD->ToggleDialogueInput();
-	}
-	// Only allow T to close when not typing
-	if (bTDown && !bTKeyWasDown && HUD->IsDialogueVisible() && HUD->GetInputBuffer().IsEmpty())
-	{
-		HUD->ToggleDialogueInput();
+		// Disable pawn movement
+		if (GetPawn()) GetPawn()->DisableInput(this);
 	}
 	bTKeyWasDown = bTDown;
 
-	// When dialogue is visible, capture keyboard for typing
+	// Escape closes chat and re-enables movement
+	if (WasInputKeyJustPressed(EKeys::Escape) && HUD->IsDialogueVisible())
+	{
+		HUD->ToggleDialogueInput();
+		if (GetPawn()) GetPawn()->EnableInput(this);
+	}
+
+	// When dialogue is visible, disable pawn and capture keyboard for typing
 	if (HUD->IsDialogueVisible())
 	{
 		// Enter to submit
@@ -64,59 +74,66 @@ void ANPCPlayerController::Tick(float DeltaTime)
 			HUD->BackspaceInput();
 		}
 
-		// Capture typed characters (A-Z, 0-9, space, punctuation)
-		static const EKeys::Type CharKeys[] = {
-			EKeys::A, EKeys::B, EKeys::C, EKeys::D, EKeys::E, EKeys::F, EKeys::G,
-			EKeys::H, EKeys::I, EKeys::J, EKeys::K, EKeys::L, EKeys::M, EKeys::N,
-			EKeys::O, EKeys::P, EKeys::Q, EKeys::R, EKeys::S, EKeys::U,
-			EKeys::V, EKeys::W, EKeys::X, EKeys::Y, EKeys::Z,
-			EKeys::Zero, EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four,
-			EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine,
-			EKeys::SpaceBar, EKeys::Period, EKeys::Comma, EKeys::Semicolon,
-			EKeys::Apostrophe, EKeys::Hyphen, EKeys::Equals, EKeys::Slash,
-			EKeys::Exclamation
-		};
-
+		// Capture typed characters using FKey
 		bool bShift = IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift);
 
-		for (EKeys::Type Key : CharKeys)
+		// Helper lambda to check key and append char
+		auto TryKey = [&](FKey InKey, const TCHAR* Normal, const TCHAR* Shifted = nullptr)
 		{
-			if (WasInputKeyJustPressed(FKey(Key)))
+			if (WasInputKeyJustPressed(InKey))
 			{
-				FString KeyName = FKey(Key).GetFName().ToString();
-
-				// Map key to character
-				FString Char;
-				if (KeyName.Len() == 1)
-				{
-					Char = bShift ? KeyName.ToUpper() : KeyName.ToLower();
-				}
-				else if (Key == EKeys::SpaceBar) Char = TEXT(" ");
-				else if (Key == EKeys::Period) Char = bShift ? TEXT(">") : TEXT(".");
-				else if (Key == EKeys::Comma) Char = bShift ? TEXT("<") : TEXT(",");
-				else if (Key == EKeys::Semicolon) Char = bShift ? TEXT(":") : TEXT(";");
-				else if (Key == EKeys::Apostrophe) Char = bShift ? TEXT("\"") : TEXT("'");
-				else if (Key == EKeys::Hyphen) Char = bShift ? TEXT("_") : TEXT("-");
-				else if (Key == EKeys::Equals) Char = bShift ? TEXT("+") : TEXT("=");
-				else if (Key == EKeys::Slash) Char = bShift ? TEXT("?") : TEXT("/");
-				else if (Key == EKeys::Exclamation) Char = TEXT("!");
-				else if (KeyName.StartsWith(TEXT("Zero"))) Char = bShift ? TEXT(")") : TEXT("0");
-				else if (KeyName.StartsWith(TEXT("One"))) Char = bShift ? TEXT("!") : TEXT("1");
-				else if (KeyName.StartsWith(TEXT("Two"))) Char = bShift ? TEXT("@") : TEXT("2");
-				else if (KeyName.StartsWith(TEXT("Three"))) Char = bShift ? TEXT("#") : TEXT("3");
-				else if (KeyName.StartsWith(TEXT("Four"))) Char = bShift ? TEXT("$") : TEXT("4");
-				else if (KeyName.StartsWith(TEXT("Five"))) Char = bShift ? TEXT("%") : TEXT("5");
-				else if (KeyName.StartsWith(TEXT("Six"))) Char = bShift ? TEXT("^") : TEXT("6");
-				else if (KeyName.StartsWith(TEXT("Seven"))) Char = bShift ? TEXT("&") : TEXT("7");
-				else if (KeyName.StartsWith(TEXT("Eight"))) Char = bShift ? TEXT("*") : TEXT("8");
-				else if (KeyName.StartsWith(TEXT("Nine"))) Char = bShift ? TEXT("(") : TEXT("9");
-
-				if (!Char.IsEmpty())
-				{
-					HUD->AppendToInput(Char);
-				}
+				HUD->AppendToInput(FString((bShift && Shifted) ? Shifted : Normal));
 			}
-		}
+		};
+
+		// Letters
+		TryKey(EKeys::A, TEXT("a"), TEXT("A"));
+		TryKey(EKeys::B, TEXT("b"), TEXT("B"));
+		TryKey(EKeys::C, TEXT("c"), TEXT("C"));
+		TryKey(EKeys::D, TEXT("d"), TEXT("D"));
+		TryKey(EKeys::E, TEXT("e"), TEXT("E"));
+		TryKey(EKeys::F, TEXT("f"), TEXT("F"));
+		TryKey(EKeys::G, TEXT("g"), TEXT("G"));
+		TryKey(EKeys::H, TEXT("h"), TEXT("H"));
+		TryKey(EKeys::I, TEXT("i"), TEXT("I"));
+		TryKey(EKeys::J, TEXT("j"), TEXT("J"));
+		TryKey(EKeys::K, TEXT("k"), TEXT("K"));
+		TryKey(EKeys::L, TEXT("l"), TEXT("L"));
+		TryKey(EKeys::M, TEXT("m"), TEXT("M"));
+		TryKey(EKeys::N, TEXT("n"), TEXT("N"));
+		TryKey(EKeys::O, TEXT("o"), TEXT("O"));
+		TryKey(EKeys::P, TEXT("p"), TEXT("P"));
+		TryKey(EKeys::Q, TEXT("q"), TEXT("Q"));
+		TryKey(EKeys::R, TEXT("r"), TEXT("R"));
+		TryKey(EKeys::S, TEXT("s"), TEXT("S"));
+		TryKey(EKeys::U, TEXT("u"), TEXT("U"));
+		TryKey(EKeys::V, TEXT("v"), TEXT("V"));
+		TryKey(EKeys::W, TEXT("w"), TEXT("W"));
+		TryKey(EKeys::X, TEXT("x"), TEXT("X"));
+		TryKey(EKeys::Y, TEXT("y"), TEXT("Y"));
+		TryKey(EKeys::Z, TEXT("z"), TEXT("Z"));
+
+		// Numbers
+		TryKey(EKeys::Zero, TEXT("0"), TEXT(")"));
+		TryKey(EKeys::One, TEXT("1"), TEXT("!"));
+		TryKey(EKeys::Two, TEXT("2"), TEXT("@"));
+		TryKey(EKeys::Three, TEXT("3"), TEXT("#"));
+		TryKey(EKeys::Four, TEXT("4"), TEXT("$"));
+		TryKey(EKeys::Five, TEXT("5"), TEXT("%"));
+		TryKey(EKeys::Six, TEXT("6"), TEXT("^"));
+		TryKey(EKeys::Seven, TEXT("7"), TEXT("&"));
+		TryKey(EKeys::Eight, TEXT("8"), TEXT("*"));
+		TryKey(EKeys::Nine, TEXT("9"), TEXT("("));
+
+		// Punctuation and space
+		TryKey(EKeys::SpaceBar, TEXT(" "));
+		TryKey(EKeys::Period, TEXT("."), TEXT(">"));
+		TryKey(EKeys::Comma, TEXT(","), TEXT("<"));
+		TryKey(EKeys::Semicolon, TEXT(";"), TEXT(":"));
+		TryKey(EKeys::Apostrophe, TEXT("'"), TEXT("\""));
+		TryKey(EKeys::Hyphen, TEXT("-"), TEXT("_"));
+		TryKey(EKeys::Equals, TEXT("="), TEXT("+"));
+		TryKey(EKeys::Slash, TEXT("/"), TEXT("?"));
 	}
 }
 
