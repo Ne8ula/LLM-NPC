@@ -243,11 +243,10 @@ void UMetahumanAnimComponent::UpdateBlendShapes(float DeltaTime)
 			}
 		}
 
-		// Method 3: Force the skeletal mesh to apply morph targets immediately
-		// by marking it as needing a re-evaluation
+		// Method 3: Force morph target recalculation
 		if (CurrentValue > 0.001f)
 		{
-			CachedSkeletalMesh->bEnableMorphTargets = true;
+			CachedSkeletalMesh->MarkRenderDynamicDataDirty();
 		}
 	}
 
