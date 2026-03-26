@@ -58,7 +58,7 @@ void UMetahumanAnimComponent::InitializeSubsystem()
 			// Disable the Face mesh's AnimBP/RigLogic so our SetMorphTarget calls aren't overwritten.
 			// Metahuman uses RigLogic DNA deformation which recalculates ALL morph targets every frame.
 			// By switching to "No Animation" mode, we take full control of the face.
-			CachedSkeletalMesh->SetAnimationMode(EAnimationMode::CustomMode);
+			CachedSkeletalMesh->SetAnimationMode(EAnimationMode::AnimationCustomMode);
 			CachedSkeletalMesh->Stop();
 			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Disabled Face AnimBP/RigLogic for code-driven morph targets"));
 
