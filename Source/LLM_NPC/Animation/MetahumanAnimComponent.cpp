@@ -7,6 +7,8 @@
 UMetahumanAnimComponent::UMetahumanAnimComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
+	// Tick AFTER animation so our morph targets aren't overwritten by the AnimBP
+	PrimaryComponentTick.TickGroup = TG_PostUpdateWork;
 	SubsystemName = TEXT("MetahumanAnimation");
 }
 
@@ -28,124 +30,199 @@ void UMetahumanAnimComponent::InitializeSubsystem()
 			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Loaded BlendShapeMappingDataAsset with %d mappings"),
 				LoadedMappingData->Mappings.Num());
 		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: Failed to load BlendShapeMappingDataAsset"));
-		}
 	}
-	else
+
+	// If no data asset, create default mappings in memory
+	if (!LoadedMappingData)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: No BlendShapeMappingDataAsset assigned"));
+		UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: No BlendShapeMappingDataAsset assigned, creating defaults"));
+		LoadedMappingData = NewObject<UBlendShapeMappingDataAsset>(this);
+		PopulateDefaultMappings();
 	}
 
 	// Cache the EmotionComponent
 	if (AActor* Owner = GetOwner())
 	{
 		CachedEmotionComp = Owner->FindComponentByClass<UEmotionComponent>();
-		if (!CachedEmotionComp)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: No EmotionComponent found on owner"));
-		}
 
 		// Find the Face skeletal mesh — search owner first, then Child Actors (for Metahuman setup)
-		auto FindFaceMesh = [](AActor* Actor) -> USkeletalMeshComponent*
-		{
-			TArray<USkeletalMeshComponent*> SkeletalMeshes;
-			Actor->GetComponents<USkeletalMeshComponent>(SkeletalMeshes);
-
-			for (USkeletalMeshComponent* SMC : SkeletalMeshes)
-			{
-				if (SMC && SMC->GetName().Contains(TEXT("Face")))
-				{
-					return SMC;
-				}
-			}
-			return nullptr;
-		};
-
-		// First search the owner actor
 		CachedSkeletalMesh = FindFaceMesh(Owner);
 
-		// If not found, search inside Child Actor components (Metahuman is spawned as Child Actor)
-		if (!CachedSkeletalMesh)
+		if (CachedSkeletalMesh)
 		{
-			TArray<UChildActorComponent*> ChildActors;
-			Owner->GetComponents<UChildActorComponent>(ChildActors);
-
-			for (UChildActorComponent* CAC : ChildActors)
-			{
-				if (CAC && CAC->GetChildActor())
-				{
-					UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Searching Child Actor: %s"), *CAC->GetChildActor()->GetName());
-
-					// Search the child actor for face mesh
-					CachedSkeletalMesh = FindFaceMesh(CAC->GetChildActor());
-					if (CachedSkeletalMesh)
-					{
-						UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found Face mesh in Child Actor: %s"), *CachedSkeletalMesh->GetName());
-						break;
-					}
-
-					// Also search recursively — Metahumans have nested child actors for Face
-					TArray<UChildActorComponent*> NestedChildren;
-					CAC->GetChildActor()->GetComponents<UChildActorComponent>(NestedChildren);
-					for (UChildActorComponent* Nested : NestedChildren)
-					{
-						if (Nested && Nested->GetChildActor())
-						{
-							CachedSkeletalMesh = FindFaceMesh(Nested->GetChildActor());
-							if (CachedSkeletalMesh)
-							{
-								UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found Face mesh in nested Child Actor: %s"), *CachedSkeletalMesh->GetName());
-								break;
-							}
-						}
-					}
-					if (CachedSkeletalMesh) break;
-				}
-			}
-		}
-
-		if (!CachedSkeletalMesh)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: No Face skeletal mesh found on owner or Child Actors"));
+			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found Face mesh '%s' with %d morph targets"),
+				*CachedSkeletalMesh->GetName(),
+				CachedSkeletalMesh->GetSkeletalMeshAsset() ?
+					CachedSkeletalMesh->GetSkeletalMeshAsset()->GetMorphTargets().Num() : 0);
 		}
 		else
 		{
-			// List ALL available morph targets from the skeletal mesh asset
-			if (USkeletalMesh* SkelMesh = CachedSkeletalMesh->GetSkeletalMeshAsset())
-			{
-				const TArray<UMorphTarget*>& MorphTargets = SkelMesh->GetMorphTargets();
-				UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Face mesh '%s' has %d total morph targets available"),
-					*CachedSkeletalMesh->GetName(), MorphTargets.Num());
-
-				// Log morph targets containing key facial feature keywords
-				TArray<FString> Keywords = {TEXT("smile"), TEXT("frown"), TEXT("mouth"), TEXT("eye_s"), TEXT("eye_w"), TEXT("jaw"), TEXT("nose"), TEXT("cheek"), TEXT("pucker")};
-				for (const UMorphTarget* MT : MorphTargets)
-				{
-					if (!MT) continue;
-					FString Name = MT->GetName();
-					for (const FString& Keyword : Keywords)
-					{
-						if (Name.Contains(Keyword, ESearchCase::IgnoreCase))
-						{
-							UE_LOG(LogTemp, Log, TEXT("  FacialMorph: %s"), *Name);
-							break;
-						}
-					}
-				}
-			}
-			else
-			{
-				UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: Face mesh has no skeletal mesh asset"));
-			}
+			UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: No Face skeletal mesh found"));
 		}
 	}
 }
 
+USkeletalMeshComponent* UMetahumanAnimComponent::FindFaceMesh(AActor* Actor) const
+{
+	if (!Actor) return nullptr;
+
+	auto SearchForFace = [](AActor* SearchActor) -> USkeletalMeshComponent*
+	{
+		TArray<USkeletalMeshComponent*> SkeletalMeshes;
+		SearchActor->GetComponents<USkeletalMeshComponent>(SkeletalMeshes);
+		for (USkeletalMeshComponent* SMC : SkeletalMeshes)
+		{
+			if (SMC && SMC->GetName().Contains(TEXT("Face")))
+			{
+				return SMC;
+			}
+		}
+		return nullptr;
+	};
+
+	// Search the actor directly
+	if (USkeletalMeshComponent* Found = SearchForFace(Actor))
+	{
+		return Found;
+	}
+
+	// Search Child Actors (Metahuman spawned as Child Actor)
+	TArray<UChildActorComponent*> ChildActors;
+	Actor->GetComponents<UChildActorComponent>(ChildActors);
+	for (UChildActorComponent* CAC : ChildActors)
+	{
+		if (!CAC || !CAC->GetChildActor()) continue;
+
+		if (USkeletalMeshComponent* Found = SearchForFace(CAC->GetChildActor()))
+		{
+			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found Face mesh in Child Actor: %s"), *Found->GetName());
+			return Found;
+		}
+
+		// Search nested child actors
+		TArray<UChildActorComponent*> NestedChildren;
+		CAC->GetChildActor()->GetComponents<UChildActorComponent>(NestedChildren);
+		for (UChildActorComponent* Nested : NestedChildren)
+		{
+			if (Nested && Nested->GetChildActor())
+			{
+				if (USkeletalMeshComponent* Found = SearchForFace(Nested->GetChildActor()))
+				{
+					return Found;
+				}
+			}
+		}
+	}
+
+	return nullptr;
+}
+
+void UMetahumanAnimComponent::PopulateDefaultMappings()
+{
+	if (!LoadedMappingData) return;
+
+	LoadedMappingData->Mappings.Empty();
+
+	// Helper to add a mapping
+	auto AddMapping = [this](EEmotionType Emotion, TArray<TPair<FString, float>> Targets)
+	{
+		FEmotionBlendShapeMapping Mapping;
+		Mapping.EmotionType = Emotion;
+		Mapping.MinIntensity = 0.0f;
+		Mapping.MaxIntensity = 1.0f;
+
+		for (const auto& T : Targets)
+		{
+			FEmotionBlendShapeTarget Target;
+			Target.BlendShapeName = FName(*T.Key);
+			Target.TargetValue = T.Value;
+			Mapping.BlendShapeTargets.Add(Target);
+		}
+
+		LoadedMappingData->Mappings.Add(Mapping);
+	};
+
+	// Joy — smile, cheek raise, slight squint
+	AddMapping(EEmotionType::Joy, {
+		{TEXT("head_lod0_mesh__mouth_cornerPull_left"), 0.8f},
+		{TEXT("head_lod0_mesh__mouth_cornerPull_right"), 0.8f},
+		{TEXT("head_lod0_mesh__eye_cheekRaise_L"), 0.5f},
+		{TEXT("head_lod0_mesh__eye_cheekRaise_R"), 0.5f},
+		{TEXT("head_lod0_mesh__eye_squintInner_L"), 0.3f},
+		{TEXT("head_lod0_mesh__eye_squintInner_R"), 0.3f},
+	});
+
+	// Sadness — frown, inner brow raise, mouth corners down
+	AddMapping(EEmotionType::Sadness, {
+		{TEXT("head_lod0_mesh__mouth_cornerDepress_L"), 0.6f},
+		{TEXT("head_lod0_mesh__mouth_cornerDepress_R"), 0.6f},
+		{TEXT("head_lod0_mesh__mouth_stretch_left"), 0.3f},
+		{TEXT("head_lod0_mesh__mouth_stretch_right"), 0.3f},
+		{TEXT("head_lod0_mesh__eye_squintInner_L"), 0.4f},
+		{TEXT("head_lod0_mesh__eye_squintInner_R"), 0.4f},
+	});
+
+	// Anger — brow lower, nose wrinkle, jaw clench, lips tight
+	AddMapping(EEmotionType::Anger, {
+		{TEXT("head_lod0_mesh__nose_wrinkle_left"), 0.7f},
+		{TEXT("head_lod0_mesh__nose_wrinkle_right"), 0.7f},
+		{TEXT("head_lod0_mesh__jaw_clench_L"), 0.5f},
+		{TEXT("head_lod0_mesh__jaw_clench_R"), 0.5f},
+		{TEXT("head_lod0_mesh__mouth_press_UL"), 0.4f},
+		{TEXT("head_lod0_mesh__mouth_press_UR"), 0.4f},
+		{TEXT("head_lod0_mesh__mouth_cornerDepress_L"), 0.3f},
+		{TEXT("head_lod0_mesh__mouth_cornerDepress_R"), 0.3f},
+	});
+
+	// Fear — eyes wide, brows up, mouth slightly open
+	AddMapping(EEmotionType::Fear, {
+		{TEXT("head_lod0_mesh__eye_widen_L"), 0.7f},
+		{TEXT("head_lod0_mesh__eye_widen_R"), 0.7f},
+		{TEXT("head_lod0_mesh__jaw_open"), 0.3f},
+		{TEXT("head_lod0_mesh__mouth_stretch_left"), 0.4f},
+		{TEXT("head_lod0_mesh__mouth_stretch_right"), 0.4f},
+	});
+
+	// Surprise — eyes wide, jaw open, brows up
+	AddMapping(EEmotionType::Surprise, {
+		{TEXT("head_lod0_mesh__eye_widen_L"), 0.9f},
+		{TEXT("head_lod0_mesh__eye_widen_R"), 0.9f},
+		{TEXT("head_lod0_mesh__jaw_open"), 0.5f},
+		{TEXT("head_lod0_mesh__mouth_upperLipRaise_left"), 0.3f},
+		{TEXT("head_lod0_mesh__mouth_upperLipRaise_right"), 0.3f},
+	});
+
+	// Disgust — nose wrinkle, upper lip raise, squint
+	AddMapping(EEmotionType::Disgust, {
+		{TEXT("head_lod0_mesh__nose_wrinkle_left"), 0.8f},
+		{TEXT("head_lod0_mesh__nose_wrinkle_right"), 0.8f},
+		{TEXT("head_lod0_mesh__mouth_upperLipRaise_left"), 0.6f},
+		{TEXT("head_lod0_mesh__mouth_upperLipRaise_right"), 0.6f},
+		{TEXT("head_lod0_mesh__eye_squintInner_L"), 0.5f},
+		{TEXT("head_lod0_mesh__eye_squintInner_R"), 0.5f},
+	});
+
+	// Trust — gentle smile, soft eyes
+	AddMapping(EEmotionType::Trust, {
+		{TEXT("head_lod0_mesh__mouth_cornerPull_left"), 0.4f},
+		{TEXT("head_lod0_mesh__mouth_cornerPull_right"), 0.4f},
+		{TEXT("head_lod0_mesh__eye_cheekRaise_L"), 0.3f},
+		{TEXT("head_lod0_mesh__eye_cheekRaise_R"), 0.3f},
+	});
+
+	// Anticipation — slight smile, eyes widened
+	AddMapping(EEmotionType::Anticipation, {
+		{TEXT("head_lod0_mesh__mouth_cornerPull_left"), 0.3f},
+		{TEXT("head_lod0_mesh__mouth_cornerPull_right"), 0.3f},
+		{TEXT("head_lod0_mesh__eye_widen_L"), 0.4f},
+		{TEXT("head_lod0_mesh__eye_widen_R"), 0.4f},
+	});
+
+	UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Created %d default emotion mappings"), LoadedMappingData->Mappings.Num());
+}
+
 void UMetahumanAnimComponent::ShutdownSubsystem()
 {
-	// Reset all morph targets to zero
 	if (CachedSkeletalMesh)
 	{
 		for (const auto& Pair : CurrentBlendShapeValues)
@@ -160,6 +237,11 @@ void UMetahumanAnimComponent::ShutdownSubsystem()
 	Super::ShutdownSubsystem();
 }
 
+void UMetahumanAnimComponent::SetLipSyncJawOpen(float Value)
+{
+	LipSyncJawOpenValue = FMath::Clamp(Value, 0.0f, 1.0f);
+}
+
 void UMetahumanAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	FActorComponentTickFunction* ThisTickFunction)
 {
@@ -170,7 +252,7 @@ void UMetahumanAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType
 		return;
 	}
 
-	// Read the current emotion state directly from EmotionComponent
+	// Read the current emotion state from EmotionComponent
 	FEmotionState CurrentState;
 	if (CachedEmotionComp)
 	{
@@ -179,19 +261,6 @@ void UMetahumanAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType
 
 	// Look up blend shape targets for the current emotion state
 	TArray<FEmotionBlendShapeTarget> Targets = LoadedMappingData->GetTargetsForState(CurrentState);
-
-	// Debug: log when emotion changes and targets are found (only log once per change)
-	static EEmotionType LastLoggedEmotion = EEmotionType::Neutral;
-	if (CurrentState.PrimaryEmotion != LastLoggedEmotion)
-	{
-		UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Emotion changed to %s (intensity: %.2f), found %d blend shape targets"),
-			*UEnum::GetValueAsString(CurrentState.PrimaryEmotion), CurrentState.Intensity, Targets.Num());
-		for (const FEmotionBlendShapeTarget& T : Targets)
-		{
-			UE_LOG(LogTemp, Log, TEXT("  -> Setting morph '%s' to %.2f"), *T.BlendShapeName.ToString(), T.TargetValue);
-		}
-		LastLoggedEmotion = CurrentState.PrimaryEmotion;
-	}
 
 	// Build target map — reset all existing targets to zero first
 	TMap<FName, float> NewTargets;
@@ -203,6 +272,15 @@ void UMetahumanAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	{
 		NewTargets.Add(Target.BlendShapeName, Target.TargetValue);
 	}
+
+	// Add lip sync jaw open — blends with emotion jaw value
+	static const FName JawOpenName(TEXT("head_lod0_mesh__jaw_open"));
+	if (LipSyncJawOpenValue > 0.01f)
+	{
+		float& JawTarget = NewTargets.FindOrAdd(JawOpenName);
+		JawTarget = FMath::Max(JawTarget, LipSyncJawOpenValue);
+	}
+
 	TargetBlendShapeValues = NewTargets;
 
 	UpdateBlendShapes(DeltaTime);
@@ -215,9 +293,6 @@ void UMetahumanAnimComponent::UpdateBlendShapes(float DeltaTime)
 		return;
 	}
 
-	// Get the AnimInstance — Metahumans use animation curves, not direct morph targets
-	UAnimInstance* AnimInst = CachedSkeletalMesh->GetAnimInstance();
-
 	for (const auto& Pair : TargetBlendShapeValues)
 	{
 		const FName& MorphName = Pair.Key;
@@ -226,31 +301,18 @@ void UMetahumanAnimComponent::UpdateBlendShapes(float DeltaTime)
 		float& CurrentValue = CurrentBlendShapeValues.FindOrAdd(MorphName, 0.0f);
 
 		// Smoothly interpolate toward target
-		CurrentValue = FMath::FInterpTo(CurrentValue, TargetValue, DeltaTime, InterpolationSpeed);
+		float InterpSpeed = (MorphName.ToString().Contains(TEXT("jaw_open"))) ?
+			LipSyncInterpolationSpeed : InterpolationSpeed;
+		CurrentValue = FMath::FInterpTo(CurrentValue, TargetValue, DeltaTime, InterpSpeed);
 
-		// Method 1: Set morph target directly (works for standard skeletal meshes)
+		// Apply morph target — we tick in TG_PostUpdateWork so this happens AFTER the AnimBP
 		CachedSkeletalMesh->SetMorphTarget(MorphName, CurrentValue);
-
-		// Method 2: Set animation curve value (works for Metahuman AnimBP-driven faces)
-		// Method 2: Try without "head_lod0_mesh__" prefix
-		{
-			FString MorphStr = MorphName.ToString();
-			if (MorphStr.StartsWith(TEXT("head_lod0_mesh__")))
-			{
-				FString ShortName = MorphStr.RightChop(16);
-				FName ShortFName(*ShortName);
-				CachedSkeletalMesh->SetMorphTarget(ShortFName, CurrentValue);
-			}
-		}
-
-		// Method 3: Force morph target recalculation
-		if (CurrentValue > 0.001f)
-		{
-			CachedSkeletalMesh->MarkRenderDynamicDataDirty();
-		}
 	}
 
-	// Remove blend shapes that have reached zero and are no longer in the target set
+	// Force render update
+	CachedSkeletalMesh->MarkRenderDynamicDataDirty();
+
+	// Remove blend shapes that have reached zero
 	TArray<FName> ToRemove;
 	for (auto& Pair : CurrentBlendShapeValues)
 	{

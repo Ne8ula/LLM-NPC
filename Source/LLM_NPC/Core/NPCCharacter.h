@@ -74,6 +74,7 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
 
 private:
 	/** Called when DialogueComponent receives a Claude response — forwards text to TTS. */

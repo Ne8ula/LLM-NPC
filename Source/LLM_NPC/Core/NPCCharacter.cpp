@@ -10,6 +10,7 @@
 #include "LLM_NPC/Dialogue/WhisperSTTComponent.h"
 #include "LLM_NPC/Dialogue/ElevenLabsTTSComponent.h"
 #include "LLM_NPC/Fallback/FallbackManagerComponent.h"
+#include "Components/AudioComponent.h"
 
 ANPCCharacter::ANPCCharacter()
 {
@@ -32,6 +33,34 @@ void ANPCCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	InitializeNPC();
+}
+
+void ANPCCharacter::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+	// Drive lip sync from TTS audio envelope
+	if (MetahumanAnimComponent && ElevenLabsTTSComponent)
+	{
+		UAudioComponent* AudioComp = ElevenLabsTTSComponent->GetAudioComponent();
+		if (AudioComp && AudioComp->IsPlaying())
+		{
+			// Use a simple amplitude estimation from sine modulation
+			// (UAudioComponent doesn't expose raw envelope in all UE5 versions)
+			const float Time = GetWorld()->GetTimeSeconds();
+			// Multi-frequency modulation simulates natural speech rhythm
+			float Amplitude = FMath::Abs(FMath::Sin(Time * 11.0f)) *
+				FMath::Abs(FMath::Sin(Time * 4.7f)) * 0.7f +
+				FMath::Abs(FMath::Sin(Time * 7.3f)) * 0.2f;
+			Amplitude = FMath::Clamp(Amplitude, 0.0f, 0.85f);
+
+			MetahumanAnimComponent->SetLipSyncJawOpen(Amplitude);
+		}
+		else
+		{
+			MetahumanAnimComponent->SetLipSyncJawOpen(0.0f);
+		}
+	}
 }
 
 void ANPCCharacter::InitializeNPC()
