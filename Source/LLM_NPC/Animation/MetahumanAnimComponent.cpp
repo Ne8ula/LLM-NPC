@@ -7,7 +7,6 @@
 UMetahumanAnimComponent::UMetahumanAnimComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
-	// Tick AFTER animation so our morph targets aren't overwritten by the AnimBP
 	PrimaryComponentTick.TickGroup = TG_PostUpdateWork;
 	SubsystemName = TEXT("MetahumanAnimation");
 }
@@ -21,23 +20,10 @@ void UMetahumanAnimComponent::InitializeSubsystem()
 {
 	Super::InitializeSubsystem();
 
-	// Load the blend shape mapping data asset
+	// Load the blend shape mapping data asset (optional — we have defaults)
 	if (!BlendShapeMappingAssetRef.IsNull())
 	{
 		LoadedMappingData = BlendShapeMappingAssetRef.LoadSynchronous();
-		if (LoadedMappingData)
-		{
-			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Loaded BlendShapeMappingDataAsset with %d mappings"),
-				LoadedMappingData->Mappings.Num());
-		}
-	}
-
-	// If no data asset, create default mappings in memory
-	if (!LoadedMappingData)
-	{
-		UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: No BlendShapeMappingDataAsset assigned, creating defaults"));
-		LoadedMappingData = NewObject<UBlendShapeMappingDataAsset>(this);
-		PopulateDefaultMappings();
 	}
 
 	// Cache the EmotionComponent
@@ -45,45 +31,65 @@ void UMetahumanAnimComponent::InitializeSubsystem()
 	{
 		CachedEmotionComp = Owner->FindComponentByClass<UEmotionComponent>();
 
-		// Find the Face skeletal mesh — search owner first, then Child Actors (for Metahuman setup)
+		// Find the Face skeletal mesh in Child Actors (Metahuman setup)
 		CachedSkeletalMesh = FindFaceMesh(Owner);
 
 		if (CachedSkeletalMesh)
 		{
-			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found Face mesh '%s' with %d morph targets"),
-				*CachedSkeletalMesh->GetName(),
-				CachedSkeletalMesh->GetSkeletalMeshAsset() ?
-					CachedSkeletalMesh->GetSkeletalMeshAsset()->GetMorphTargets().Num() : 0);
+			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found Face mesh '%s'"), *CachedSkeletalMesh->GetName());
 
-			// Completely disable the Face mesh's animation system.
-			// Metahuman uses RigLogic which recalculates ALL morph targets every frame.
-			// We must remove the AnimBP entirely to take control.
-			CachedSkeletalMesh->SetAnimInstanceClass(nullptr);
-			CachedSkeletalMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
-			CachedSkeletalMesh->Stop();
-
-			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Cleared AnimBP on Face mesh for code-driven morph targets"));
-
-			// Set a neutral baseline — reset all morph targets to 0
-			if (USkeletalMesh* SkelMesh = CachedSkeletalMesh->GetSkeletalMeshAsset())
+			// Cache the Face AnimInstance and verify we can set properties on it
+			CachedFaceAnimInstance = CachedSkeletalMesh->GetAnimInstance();
+			if (CachedFaceAnimInstance)
 			{
-				for (const UMorphTarget* MT : SkelMesh->GetMorphTargets())
+				// Verify "Jaw Open Alpha" property exists via reflection
+				FProperty* JawProp = CachedFaceAnimInstance->GetClass()->FindPropertyByName(FName("Jaw Open Alpha"));
+				if (JawProp)
 				{
-					if (MT)
+					UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found 'Jaw Open Alpha' property on Face AnimInstance"));
+				}
+				else
+				{
+					// Try without space
+					JawProp = CachedFaceAnimInstance->GetClass()->FindPropertyByName(FName("JawOpenAlpha"));
+					if (JawProp)
 					{
-						CachedSkeletalMesh->SetMorphTarget(MT->GetFName(), 0.0f);
+						UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found 'JawOpenAlpha' property on Face AnimInstance"));
+					}
+					else
+					{
+						UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: Could not find Jaw Open Alpha property"));
 					}
 				}
-			}
 
-			// Add idle blinking on a timer
-			bShouldBlink = true;
+				// Find the "Set Control" function
+				CachedSetControlFunc = CachedFaceAnimInstance->FindFunction(FName("Set Control"));
+				if (!CachedSetControlFunc)
+				{
+					CachedSetControlFunc = CachedFaceAnimInstance->FindFunction(FName("SetControl"));
+				}
+				if (CachedSetControlFunc)
+				{
+					UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found 'Set Control' function on Face AnimInstance"));
+				}
+				else
+				{
+					UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: Could not find Set Control function"));
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: No AnimInstance on Face mesh"));
+			}
 		}
 		else
 		{
 			UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: No Face skeletal mesh found"));
 		}
 	}
+
+	// Build default emotion-to-FACS-curve mappings
+	BuildDefaultEmotionMappings();
 }
 
 USkeletalMeshComponent* UMetahumanAnimComponent::FindFaceMesh(AActor* Actor) const
@@ -104,13 +110,11 @@ USkeletalMeshComponent* UMetahumanAnimComponent::FindFaceMesh(AActor* Actor) con
 		return nullptr;
 	};
 
-	// Search the actor directly
 	if (USkeletalMeshComponent* Found = SearchForFace(Actor))
 	{
 		return Found;
 	}
 
-	// Search Child Actors (Metahuman spawned as Child Actor)
 	TArray<UChildActorComponent*> ChildActors;
 	Actor->GetComponents<UChildActorComponent>(ChildActors);
 	for (UChildActorComponent* CAC : ChildActors)
@@ -123,7 +127,6 @@ USkeletalMeshComponent* UMetahumanAnimComponent::FindFaceMesh(AActor* Actor) con
 			return Found;
 		}
 
-		// Search nested child actors
 		TArray<UChildActorComponent*> NestedChildren;
 		CAC->GetChildActor()->GetComponents<UChildActorComponent>(NestedChildren);
 		for (UChildActorComponent* Nested : NestedChildren)
@@ -141,124 +144,133 @@ USkeletalMeshComponent* UMetahumanAnimComponent::FindFaceMesh(AActor* Actor) con
 	return nullptr;
 }
 
-void UMetahumanAnimComponent::PopulateDefaultMappings()
+void UMetahumanAnimComponent::BuildDefaultEmotionMappings()
 {
-	if (!LoadedMappingData) return;
+	EmotionCurveMappings.Empty();
 
-	LoadedMappingData->Mappings.Empty();
+	// Map emotions to FACS/ARKit-compatible curve names that the Metahuman AnimBP reads
+	// These are the INPUT curves, not the output morph targets
 
-	// Helper to add a mapping
-	auto AddMapping = [this](EEmotionType Emotion, TArray<TPair<FString, float>> Targets)
-	{
-		FEmotionBlendShapeMapping Mapping;
-		Mapping.EmotionType = Emotion;
-		Mapping.MinIntensity = 0.0f;
-		Mapping.MaxIntensity = 1.0f;
-
-		for (const auto& T : Targets)
-		{
-			FEmotionBlendShapeTarget Target;
-			Target.BlendShapeName = FName(*T.Key);
-			Target.TargetValue = T.Value;
-			Mapping.BlendShapeTargets.Add(Target);
-		}
-
-		LoadedMappingData->Mappings.Add(Mapping);
-	};
-
-	// Joy — smile, cheek raise, slight squint
-	AddMapping(EEmotionType::Joy, {
-		{TEXT("head_lod0_mesh__mouth_cornerPull_left"), 0.8f},
-		{TEXT("head_lod0_mesh__mouth_cornerPull_right"), 0.8f},
-		{TEXT("head_lod0_mesh__eye_cheekRaise_L"), 0.5f},
-		{TEXT("head_lod0_mesh__eye_cheekRaise_R"), 0.5f},
-		{TEXT("head_lod0_mesh__eye_squintInner_L"), 0.3f},
-		{TEXT("head_lod0_mesh__eye_squintInner_R"), 0.3f},
+	// Joy — smile, cheek raise
+	EmotionCurveMappings.Add(EEmotionType::Joy, {
+		{FName("mouthSmile_L"), 0.8f},
+		{FName("mouthSmile_R"), 0.8f},
+		{FName("cheekSquint_L"), 0.4f},
+		{FName("cheekSquint_R"), 0.4f},
 	});
 
-	// Sadness — frown, inner brow raise, mouth corners down
-	AddMapping(EEmotionType::Sadness, {
-		{TEXT("head_lod0_mesh__mouth_cornerDepress_L"), 0.6f},
-		{TEXT("head_lod0_mesh__mouth_cornerDepress_R"), 0.6f},
-		{TEXT("head_lod0_mesh__mouth_stretch_left"), 0.3f},
-		{TEXT("head_lod0_mesh__mouth_stretch_right"), 0.3f},
-		{TEXT("head_lod0_mesh__eye_squintInner_L"), 0.4f},
-		{TEXT("head_lod0_mesh__eye_squintInner_R"), 0.4f},
+	// Sadness — frown, inner brow raise
+	EmotionCurveMappings.Add(EEmotionType::Sadness, {
+		{FName("mouthFrown_L"), 0.6f},
+		{FName("mouthFrown_R"), 0.6f},
+		{FName("browInnerUp"), 0.5f},
 	});
 
-	// Anger — brow lower, nose wrinkle, jaw clench, lips tight
-	AddMapping(EEmotionType::Anger, {
-		{TEXT("head_lod0_mesh__nose_wrinkle_left"), 0.7f},
-		{TEXT("head_lod0_mesh__nose_wrinkle_right"), 0.7f},
-		{TEXT("head_lod0_mesh__jaw_clench_L"), 0.5f},
-		{TEXT("head_lod0_mesh__jaw_clench_R"), 0.5f},
-		{TEXT("head_lod0_mesh__mouth_press_UL"), 0.4f},
-		{TEXT("head_lod0_mesh__mouth_press_UR"), 0.4f},
-		{TEXT("head_lod0_mesh__mouth_cornerDepress_L"), 0.3f},
-		{TEXT("head_lod0_mesh__mouth_cornerDepress_R"), 0.3f},
+	// Anger — brow down, nose wrinkle, jaw clench
+	EmotionCurveMappings.Add(EEmotionType::Anger, {
+		{FName("browDown_L"), 0.7f},
+		{FName("browDown_R"), 0.7f},
+		{FName("noseSneer_L"), 0.6f},
+		{FName("noseSneer_R"), 0.6f},
+		{FName("mouthFrown_L"), 0.3f},
+		{FName("mouthFrown_R"), 0.3f},
 	});
 
-	// Fear — eyes wide, brows up, mouth slightly open
-	AddMapping(EEmotionType::Fear, {
-		{TEXT("head_lod0_mesh__eye_widen_L"), 0.7f},
-		{TEXT("head_lod0_mesh__eye_widen_R"), 0.7f},
-		{TEXT("head_lod0_mesh__jaw_open"), 0.3f},
-		{TEXT("head_lod0_mesh__mouth_stretch_left"), 0.4f},
-		{TEXT("head_lod0_mesh__mouth_stretch_right"), 0.4f},
+	// Fear — wide eyes, open mouth
+	EmotionCurveMappings.Add(EEmotionType::Fear, {
+		{FName("eyeWide_L"), 0.7f},
+		{FName("eyeWide_R"), 0.7f},
+		{FName("browInnerUp"), 0.6f},
+		{FName("mouthStretch_L"), 0.3f},
+		{FName("mouthStretch_R"), 0.3f},
 	});
 
-	// Surprise — eyes wide, jaw open, brows up
-	AddMapping(EEmotionType::Surprise, {
-		{TEXT("head_lod0_mesh__eye_widen_L"), 0.9f},
-		{TEXT("head_lod0_mesh__eye_widen_R"), 0.9f},
-		{TEXT("head_lod0_mesh__jaw_open"), 0.5f},
-		{TEXT("head_lod0_mesh__mouth_upperLipRaise_left"), 0.3f},
-		{TEXT("head_lod0_mesh__mouth_upperLipRaise_right"), 0.3f},
+	// Surprise — wide eyes, jaw open
+	EmotionCurveMappings.Add(EEmotionType::Surprise, {
+		{FName("eyeWide_L"), 0.9f},
+		{FName("eyeWide_R"), 0.9f},
+		{FName("browInnerUp"), 0.7f},
 	});
 
-	// Disgust — nose wrinkle, upper lip raise, squint
-	AddMapping(EEmotionType::Disgust, {
-		{TEXT("head_lod0_mesh__nose_wrinkle_left"), 0.8f},
-		{TEXT("head_lod0_mesh__nose_wrinkle_right"), 0.8f},
-		{TEXT("head_lod0_mesh__mouth_upperLipRaise_left"), 0.6f},
-		{TEXT("head_lod0_mesh__mouth_upperLipRaise_right"), 0.6f},
-		{TEXT("head_lod0_mesh__eye_squintInner_L"), 0.5f},
-		{TEXT("head_lod0_mesh__eye_squintInner_R"), 0.5f},
+	// Disgust — nose wrinkle, upper lip raise
+	EmotionCurveMappings.Add(EEmotionType::Disgust, {
+		{FName("noseSneer_L"), 0.8f},
+		{FName("noseSneer_R"), 0.8f},
+		{FName("mouthUpperUp_L"), 0.5f},
+		{FName("mouthUpperUp_R"), 0.5f},
 	});
 
-	// Trust — gentle smile, soft eyes
-	AddMapping(EEmotionType::Trust, {
-		{TEXT("head_lod0_mesh__mouth_cornerPull_left"), 0.4f},
-		{TEXT("head_lod0_mesh__mouth_cornerPull_right"), 0.4f},
-		{TEXT("head_lod0_mesh__eye_cheekRaise_L"), 0.3f},
-		{TEXT("head_lod0_mesh__eye_cheekRaise_R"), 0.3f},
+	// Trust — gentle smile
+	EmotionCurveMappings.Add(EEmotionType::Trust, {
+		{FName("mouthSmile_L"), 0.4f},
+		{FName("mouthSmile_R"), 0.4f},
 	});
 
-	// Anticipation — slight smile, eyes widened
-	AddMapping(EEmotionType::Anticipation, {
-		{TEXT("head_lod0_mesh__mouth_cornerPull_left"), 0.3f},
-		{TEXT("head_lod0_mesh__mouth_cornerPull_right"), 0.3f},
-		{TEXT("head_lod0_mesh__eye_widen_L"), 0.4f},
-		{TEXT("head_lod0_mesh__eye_widen_R"), 0.4f},
+	// Anticipation — slight smile, widened eyes
+	EmotionCurveMappings.Add(EEmotionType::Anticipation, {
+		{FName("mouthSmile_L"), 0.3f},
+		{FName("mouthSmile_R"), 0.3f},
+		{FName("eyeWide_L"), 0.3f},
+		{FName("eyeWide_R"), 0.3f},
 	});
 
-	UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Created %d default emotion mappings"), LoadedMappingData->Mappings.Num());
+	UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Built %d emotion curve mappings"), EmotionCurveMappings.Num());
 }
 
-void UMetahumanAnimComponent::ShutdownSubsystem()
+void UMetahumanAnimComponent::SetFaceControl(FName ControlName, float Value)
 {
-	if (CachedSkeletalMesh)
+	if (!CachedFaceAnimInstance) return;
+
+	// Call the "Set Control" Blueprint function via reflection
+	if (CachedSetControlFunc)
 	{
-		for (const auto& Pair : CurrentBlendShapeValues)
+		struct
 		{
-			CachedSkeletalMesh->SetMorphTarget(Pair.Key, 0.0f);
+			FName ControlName;
+			float Value;
+			bool Result;
+			bool ControlAdded;
+		} Params;
+		Params.ControlName = ControlName;
+		Params.Value = Value;
+		Params.Result = false;
+		Params.ControlAdded = false;
+
+		CachedFaceAnimInstance->ProcessEvent(CachedSetControlFunc, &Params);
+	}
+}
+
+void UMetahumanAnimComponent::SetJawOpenAlpha(float Value)
+{
+	if (!CachedFaceAnimInstance) return;
+
+	// Set "Jaw Open Alpha" via property reflection
+	static FName PropName;
+	static FProperty* CachedProp = nullptr;
+	static bool bSearched = false;
+
+	if (!bSearched)
+	{
+		bSearched = true;
+		CachedProp = CachedFaceAnimInstance->GetClass()->FindPropertyByName(FName("Jaw Open Alpha"));
+		if (!CachedProp)
+		{
+			CachedProp = CachedFaceAnimInstance->GetClass()->FindPropertyByName(FName("JawOpenAlpha"));
+		}
+		if (!CachedProp)
+		{
+			CachedProp = CachedFaceAnimInstance->GetClass()->FindPropertyByName(FName("Jaw_Open_Alpha"));
 		}
 	}
 
-	CurrentBlendShapeValues.Empty();
-	TargetBlendShapeValues.Empty();
-
-	Super::ShutdownSubsystem();
+	if (CachedProp)
+	{
+		float* ValuePtr = CachedProp->ContainerPtrToValuePtr<float>(CachedFaceAnimInstance);
+		if (ValuePtr)
+		{
+			*ValuePtr = FMath::Clamp(Value, 0.0f, 1.0f);
+		}
+	}
 }
 
 void UMetahumanAnimComponent::SetLipSyncJawOpen(float Value)
@@ -266,133 +278,134 @@ void UMetahumanAnimComponent::SetLipSyncJawOpen(float Value)
 	LipSyncJawOpenValue = FMath::Clamp(Value, 0.0f, 1.0f);
 }
 
+void UMetahumanAnimComponent::ShutdownSubsystem()
+{
+	// Reset all controls
+	for (const auto& ActivePair : ActiveCurveValues)
+	{
+		SetFaceControl(ActivePair.Key, 0.0f);
+	}
+	ActiveCurveValues.Empty();
+	SetJawOpenAlpha(0.0f);
+
+	Super::ShutdownSubsystem();
+}
+
 void UMetahumanAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (!bIsInitialized || !LoadedMappingData || !CachedSkeletalMesh)
+	if (!bIsInitialized || !CachedFaceAnimInstance)
 	{
 		return;
 	}
 
-	// Read the current emotion state from EmotionComponent
-	FEmotionState CurrentState;
+	// Re-cache AnimInstance if it was recreated (can happen with PIE restarts)
+	if (!CachedFaceAnimInstance->IsValidLowLevel())
+	{
+		CachedFaceAnimInstance = CachedSkeletalMesh ? CachedSkeletalMesh->GetAnimInstance() : nullptr;
+		if (!CachedFaceAnimInstance) return;
+	}
+
+	// Read the current emotion state
+	EEmotionType CurrentEmotion = EEmotionType::Neutral;
+	float Intensity = 0.0f;
 	if (CachedEmotionComp)
 	{
-		CurrentState = CachedEmotionComp->GetCurrentEmotionState();
+		FEmotionState State = CachedEmotionComp->GetCurrentEmotionState();
+		CurrentEmotion = State.PrimaryEmotion;
+		Intensity = State.Intensity;
 	}
 
-	// Look up blend shape targets for the current emotion state
-	TArray<FEmotionBlendShapeTarget> Targets = LoadedMappingData->GetTargetsForState(CurrentState);
+	// Build target curve values from emotion mappings
+	TMap<FName, float> TargetCurves;
 
-	// Build target map — reset all existing targets to zero first
-	TMap<FName, float> NewTargets;
-	for (const auto& Pair : CurrentBlendShapeValues)
+	// Look up emotion curves
+	if (const auto* Curves = EmotionCurveMappings.Find(CurrentEmotion))
 	{
-		NewTargets.Add(Pair.Key, 0.0f);
-	}
-	for (const FEmotionBlendShapeTarget& Target : Targets)
-	{
-		NewTargets.Add(Target.BlendShapeName, Target.TargetValue);
-	}
-
-	// Add lip sync jaw open — blends with emotion jaw value
-	static const FName JawOpenName(TEXT("head_lod0_mesh__jaw_open"));
-	if (LipSyncJawOpenValue > 0.01f)
-	{
-		float& JawTarget = NewTargets.FindOrAdd(JawOpenName);
-		JawTarget = FMath::Max(JawTarget, LipSyncJawOpenValue);
-	}
-
-	// Idle blinking
-	if (bShouldBlink)
-	{
-		BlinkTimer -= DeltaTime;
-		if (BlinkTimer <= 0.0f)
+		for (const auto& Pair : *Curves)
 		{
-			BlinkTimer = FMath::RandRange(2.5f, 6.0f);
-			BlinkPhase = 0.0f;
-			bIsBlinking = true;
-		}
-
-		float BlinkValue = 0.0f;
-		if (bIsBlinking)
-		{
-			BlinkPhase += DeltaTime;
-			// Quick close (0-0.08s), hold (0.08-0.15s), open (0.15-0.3s)
-			if (BlinkPhase < 0.08f)
-				BlinkValue = BlinkPhase / 0.08f;
-			else if (BlinkPhase < 0.15f)
-				BlinkValue = 1.0f;
-			else if (BlinkPhase < 0.3f)
-				BlinkValue = 1.0f - (BlinkPhase - 0.15f) / 0.15f;
-			else
-			{
-				BlinkValue = 0.0f;
-				bIsBlinking = false;
-			}
-		}
-
-		if (BlinkValue > 0.01f)
-		{
-			static const FName BlinkL(TEXT("head_lod0_mesh__EcheekRaise_Eblink_L"));
-			static const FName BlinkR(TEXT("head_lod0_mesh__EcheekRaise_Eblink_R"));
-			NewTargets.FindOrAdd(BlinkL) = FMath::Max(NewTargets.FindOrAdd(BlinkL), BlinkValue);
-			NewTargets.FindOrAdd(BlinkR) = FMath::Max(NewTargets.FindOrAdd(BlinkR), BlinkValue);
+			TargetCurves.Add(Pair.Key, Pair.Value * Intensity);
 		}
 	}
 
-	TargetBlendShapeValues = NewTargets;
-
-	UpdateBlendShapes(DeltaTime);
-}
-
-void UMetahumanAnimComponent::UpdateBlendShapes(float DeltaTime)
-{
-	if (!CachedSkeletalMesh)
-	{
-		return;
-	}
-
-	for (const auto& Pair : TargetBlendShapeValues)
-	{
-		const FName& MorphName = Pair.Key;
-		const float TargetValue = Pair.Value;
-
-		float& CurrentValue = CurrentBlendShapeValues.FindOrAdd(MorphName, 0.0f);
-
-		// Smoothly interpolate toward target
-		float InterpSpeed = (MorphName.ToString().Contains(TEXT("jaw_open"))) ?
-			LipSyncInterpolationSpeed : InterpolationSpeed;
-		CurrentValue = FMath::FInterpTo(CurrentValue, TargetValue, DeltaTime, InterpSpeed);
-
-		// Apply morph target
-		CachedSkeletalMesh->SetMorphTarget(MorphName, CurrentValue);
-
-		// Debug: log once when we start applying non-zero values
-		static bool bLoggedOnce = false;
-		if (!bLoggedOnce && CurrentValue > 0.05f)
-		{
-			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: First morph target applied: '%s' = %.2f"), *MorphName.ToString(), CurrentValue);
-			bLoggedOnce = true;
-		}
-	}
-
-	// Force render update
-	CachedSkeletalMesh->MarkRenderDynamicDataDirty();
-
-	// Remove blend shapes that have reached zero
+	// Smoothly interpolate and apply all active curves
+	// First, decay curves that are no longer targeted
 	TArray<FName> ToRemove;
-	for (auto& Pair : CurrentBlendShapeValues)
+	for (auto& Pair : ActiveCurveValues)
 	{
-		if (!TargetBlendShapeValues.Contains(Pair.Key) && FMath::IsNearlyZero(Pair.Value, 0.001f))
+		if (!TargetCurves.Contains(Pair.Key))
 		{
-			ToRemove.Add(Pair.Key);
+			Pair.Value = FMath::FInterpTo(Pair.Value, 0.0f, DeltaTime, InterpolationSpeed);
+			SetFaceControl(Pair.Key, Pair.Value);
+			if (FMath::IsNearlyZero(Pair.Value, 0.005f))
+			{
+				SetFaceControl(Pair.Key, 0.0f);
+				ToRemove.Add(Pair.Key);
+			}
 		}
 	}
 	for (const FName& Name : ToRemove)
 	{
-		CurrentBlendShapeValues.Remove(Name);
+		ActiveCurveValues.Remove(Name);
 	}
+
+	// Interpolate toward target values
+	for (const auto& Pair : TargetCurves)
+	{
+		float& Current = ActiveCurveValues.FindOrAdd(Pair.Key, 0.0f);
+		Current = FMath::FInterpTo(Current, Pair.Value, DeltaTime, InterpolationSpeed);
+		SetFaceControl(Pair.Key, Current);
+	}
+
+	// Lip sync — drive Jaw Open Alpha directly
+	float JawTarget = LipSyncJawOpenValue;
+
+	// Emotion jaw open (for surprise, etc.) takes max with lip sync
+	if (const auto* Curves = EmotionCurveMappings.Find(CurrentEmotion))
+	{
+		// Check if emotion wants jaw open
+		if (CurrentEmotion == EEmotionType::Surprise)
+		{
+			JawTarget = FMath::Max(JawTarget, 0.5f * Intensity);
+		}
+	}
+
+	CurrentJawOpenValue = FMath::FInterpTo(CurrentJawOpenValue, JawTarget, DeltaTime, LipSyncInterpolationSpeed);
+	SetJawOpenAlpha(CurrentJawOpenValue);
+
+	// Blinking
+	BlinkTimer -= DeltaTime;
+	if (BlinkTimer <= 0.0f)
+	{
+		BlinkTimer = FMath::RandRange(2.5f, 6.0f);
+		BlinkPhase = 0.0f;
+		bIsBlinking = true;
+	}
+
+	if (bIsBlinking)
+	{
+		BlinkPhase += DeltaTime;
+		float BlinkValue = 0.0f;
+		if (BlinkPhase < 0.08f)
+			BlinkValue = BlinkPhase / 0.08f;
+		else if (BlinkPhase < 0.15f)
+			BlinkValue = 1.0f;
+		else if (BlinkPhase < 0.3f)
+			BlinkValue = 1.0f - (BlinkPhase - 0.15f) / 0.15f;
+		else
+		{
+			bIsBlinking = false;
+			BlinkValue = 0.0f;
+		}
+
+		SetFaceControl(FName("eyeBlink_L"), BlinkValue);
+		SetFaceControl(FName("eyeBlink_R"), BlinkValue);
+	}
+}
+
+void UMetahumanAnimComponent::UpdateBlendShapes(float DeltaTime)
+{
+	// Legacy — now handled in TickComponent via SetFaceControl / SetJawOpenAlpha
 }

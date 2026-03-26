@@ -7,11 +7,10 @@
 #include "MetahumanAnimComponent.generated.h"
 
 /**
- * Drives Metahuman facial blend shapes based on emotion state and lip sync.
+ * Drives Metahuman facial expressions via the Face AnimBP's control system.
  *
- * Ticks in TG_PostUpdateWork (after AnimBP) so morph targets aren't overwritten.
- * Reads emotion from EmotionComponent and drives facial expressions.
- * Accepts lip sync jaw open values from external audio analysis.
+ * Works WITH RigLogic by setting curves through the AnimBP's "Set Control" function
+ * and "Jaw Open Alpha" property, rather than trying to override morph targets directly.
  */
 UCLASS(ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
 class LLM_NPC_API UMetahumanAnimComponent : public UNPCSubsystemComponent
@@ -26,7 +25,7 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
 		FActorComponentTickFunction* ThisTickFunction) override;
 
-	/** Interpolate current blend shape values toward targets. */
+	/** Legacy — now handled internally. */
 	UFUNCTION(BlueprintCallable, Category = "NPC|Animation")
 	void UpdateBlendShapes(float DeltaTime);
 
@@ -34,7 +33,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "NPC|Animation")
 	void SetLipSyncJawOpen(float Value);
 
-	/** Get the cached Face skeletal mesh (useful for other systems). */
+	/** Get the cached Face skeletal mesh. */
 	USkeletalMeshComponent* GetFaceMesh() const { return CachedSkeletalMesh; }
 
 	// --- Configuration ---
@@ -42,11 +41,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Animation")
 	TSoftObjectPtr<UBlendShapeMappingDataAsset> BlendShapeMappingAssetRef;
 
-	/** Speed of interpolation for emotion blend shapes (higher = faster). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Animation", meta = (ClampMin = "0.1"))
 	float InterpolationSpeed = 4.0f;
 
-	/** Speed of interpolation for lip sync jaw movement (higher = snappier). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Animation", meta = (ClampMin = "0.1"))
 	float LipSyncInterpolationSpeed = 12.0f;
 
@@ -54,11 +51,14 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
-	/** Find the Face skeletal mesh on an actor (searches child actors recursively). */
 	USkeletalMeshComponent* FindFaceMesh(AActor* Actor) const;
+	void BuildDefaultEmotionMappings();
 
-	/** Populate LoadedMappingData with default Metahuman Hana morph target mappings. */
-	void PopulateDefaultMappings();
+	/** Call the Face AnimBP's "Set Control" function via reflection. */
+	void SetFaceControl(FName ControlName, float Value);
+
+	/** Set "Jaw Open Alpha" on the Face AnimBP via property reflection. */
+	void SetJawOpenAlpha(float Value);
 
 	UPROPERTY()
 	TObjectPtr<class UEmotionComponent> CachedEmotionComp;
@@ -69,14 +69,24 @@ private:
 	UPROPERTY()
 	TObjectPtr<UBlendShapeMappingDataAsset> LoadedMappingData;
 
-	TMap<FName, float> CurrentBlendShapeValues;
-	TMap<FName, float> TargetBlendShapeValues;
+	/** Cached Face AnimInstance for reflection calls. */
+	UPROPERTY()
+	TObjectPtr<UAnimInstance> CachedFaceAnimInstance;
 
-	/** Current lip sync jaw open value (set externally). */
+	/** Cached "Set Control" function pointer. */
+	UFunction* CachedSetControlFunc = nullptr;
+
+	/** Emotion to FACS curve mappings (curve name → target value). */
+	TMap<EEmotionType, TArray<TPair<FName, float>>> EmotionCurveMappings;
+
+	/** Currently active curve values (for smooth interpolation). */
+	TMap<FName, float> ActiveCurveValues;
+
+	/** Lip sync state. */
 	float LipSyncJawOpenValue = 0.0f;
+	float CurrentJawOpenValue = 0.0f;
 
 	/** Blinking state. */
-	bool bShouldBlink = false;
 	bool bIsBlinking = false;
 	float BlinkTimer = 3.0f;
 	float BlinkPhase = 0.0f;
