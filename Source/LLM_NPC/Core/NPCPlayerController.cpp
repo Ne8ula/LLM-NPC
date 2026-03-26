@@ -73,8 +73,7 @@ void ANPCPlayerController::Tick(float DeltaTime)
 			EKeys::Zero, EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four,
 			EKeys::Five, EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine,
 			EKeys::SpaceBar, EKeys::Period, EKeys::Comma, EKeys::Semicolon,
-			EKeys::Apostrophe, EKeys::Hyphen, EKeys::Equals, EKeys::Slash,
-			EKeys::Exclamation
+			EKeys::Apostrophe, EKeys::Hyphen, EKeys::Equals, EKeys::Slash
 		};
 
 		bool bShift = IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift);
@@ -99,7 +98,6 @@ void ANPCPlayerController::Tick(float DeltaTime)
 				else if (Key == EKeys::Hyphen) Char = bShift ? TEXT("_") : TEXT("-");
 				else if (Key == EKeys::Equals) Char = bShift ? TEXT("+") : TEXT("=");
 				else if (Key == EKeys::Slash) Char = bShift ? TEXT("?") : TEXT("/");
-				else if (Key == EKeys::Exclamation) Char = TEXT("!");
 				else if (KeyName.StartsWith(TEXT("Zero"))) Char = bShift ? TEXT(")") : TEXT("0");
 				else if (KeyName.StartsWith(TEXT("One"))) Char = bShift ? TEXT("!") : TEXT("1");
 				else if (KeyName.StartsWith(TEXT("Two"))) Char = bShift ? TEXT("@") : TEXT("2");
