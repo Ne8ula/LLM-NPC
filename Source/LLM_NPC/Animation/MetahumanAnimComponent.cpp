@@ -54,6 +54,28 @@ void UMetahumanAnimComponent::InitializeSubsystem()
 				*CachedSkeletalMesh->GetName(),
 				CachedSkeletalMesh->GetSkeletalMeshAsset() ?
 					CachedSkeletalMesh->GetSkeletalMeshAsset()->GetMorphTargets().Num() : 0);
+
+			// Disable the Face mesh's AnimBP/RigLogic so our SetMorphTarget calls aren't overwritten.
+			// Metahuman uses RigLogic DNA deformation which recalculates ALL morph targets every frame.
+			// By switching to "No Animation" mode, we take full control of the face.
+			CachedSkeletalMesh->SetAnimationMode(EAnimationMode::CustomMode);
+			CachedSkeletalMesh->Stop();
+			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Disabled Face AnimBP/RigLogic for code-driven morph targets"));
+
+			// Set a neutral baseline — reset all morph targets to 0
+			if (USkeletalMesh* SkelMesh = CachedSkeletalMesh->GetSkeletalMeshAsset())
+			{
+				for (const UMorphTarget* MT : SkelMesh->GetMorphTargets())
+				{
+					if (MT)
+					{
+						CachedSkeletalMesh->SetMorphTarget(MT->GetFName(), 0.0f);
+					}
+				}
+			}
+
+			// Add idle blinking on a timer
+			bShouldBlink = true;
 		}
 		else
 		{
@@ -279,6 +301,44 @@ void UMetahumanAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	{
 		float& JawTarget = NewTargets.FindOrAdd(JawOpenName);
 		JawTarget = FMath::Max(JawTarget, LipSyncJawOpenValue);
+	}
+
+	// Idle blinking
+	if (bShouldBlink)
+	{
+		BlinkTimer -= DeltaTime;
+		if (BlinkTimer <= 0.0f)
+		{
+			BlinkTimer = FMath::RandRange(2.5f, 6.0f);
+			BlinkPhase = 0.0f;
+			bIsBlinking = true;
+		}
+
+		float BlinkValue = 0.0f;
+		if (bIsBlinking)
+		{
+			BlinkPhase += DeltaTime;
+			// Quick close (0-0.08s), hold (0.08-0.15s), open (0.15-0.3s)
+			if (BlinkPhase < 0.08f)
+				BlinkValue = BlinkPhase / 0.08f;
+			else if (BlinkPhase < 0.15f)
+				BlinkValue = 1.0f;
+			else if (BlinkPhase < 0.3f)
+				BlinkValue = 1.0f - (BlinkPhase - 0.15f) / 0.15f;
+			else
+			{
+				BlinkValue = 0.0f;
+				bIsBlinking = false;
+			}
+		}
+
+		if (BlinkValue > 0.01f)
+		{
+			static const FName BlinkL(TEXT("head_lod0_mesh__EcheekRaise_Eblink_L"));
+			static const FName BlinkR(TEXT("head_lod0_mesh__EcheekRaise_Eblink_R"));
+			NewTargets.FindOrAdd(BlinkL) = FMath::Max(NewTargets.FindOrAdd(BlinkL), BlinkValue);
+			NewTargets.FindOrAdd(BlinkR) = FMath::Max(NewTargets.FindOrAdd(BlinkR), BlinkValue);
+		}
 	}
 
 	TargetBlendShapeValues = NewTargets;

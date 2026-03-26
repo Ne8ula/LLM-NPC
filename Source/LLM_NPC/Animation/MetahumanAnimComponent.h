@@ -74,4 +74,10 @@ private:
 
 	/** Current lip sync jaw open value (set externally). */
 	float LipSyncJawOpenValue = 0.0f;
+
+	/** Blinking state. */
+	bool bShouldBlink = false;
+	bool bIsBlinking = false;
+	float BlinkTimer = 3.0f;
+	float BlinkPhase = 0.0f;
 };
