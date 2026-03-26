@@ -7,15 +7,15 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogFaceExpression, Log, All);
 
-// 7-class lookup: standard FER-2013 ordering
+// 7-class lookup: trpakov/vit-face-expression ordering (FER-2013 standard)
 const EEmotionType UFaceExpressionModel::EmotionLookupTable[7] = {
-	EEmotionType::Neutral,   // 0
-	EEmotionType::Joy,       // 1
-	EEmotionType::Sadness,   // 2
-	EEmotionType::Anger,     // 3
-	EEmotionType::Fear,      // 4
-	EEmotionType::Surprise,  // 5
-	EEmotionType::Disgust    // 6
+	EEmotionType::Anger,     // 0 - angry
+	EEmotionType::Disgust,   // 1 - disgust
+	EEmotionType::Fear,      // 2 - fear
+	EEmotionType::Joy,       // 3 - happy
+	EEmotionType::Sadness,   // 4 - sad
+	EEmotionType::Surprise,  // 5 - surprise
+	EEmotionType::Neutral    // 6 - neutral
 };
 
 UFaceExpressionModel::UFaceExpressionModel()
@@ -73,7 +73,7 @@ FDetectedUserEmotion UFaceExpressionModel::Classify(const TArray<uint8>& FaceROI
 		return Result;
 	}
 
-	// Preprocess: resize to 48x48 grayscale, normalize
+	// Preprocess: resize to 224x224 RGB, normalize with ImageNet mean/std
 	TArray<float> InputTensor = Preprocess(FaceROI, Width, Height);
 
 	// Run ONNX inference
@@ -123,10 +123,17 @@ FDetectedUserEmotion UFaceExpressionModel::Classify(const TArray<uint8>& FaceROI
 
 TArray<float> UFaceExpressionModel::Preprocess(const TArray<uint8>& FaceROI, int32 Width, int32 Height)
 {
-	// Target: 48x48 grayscale normalized to [0, 1]
-	static constexpr int32 TargetSize = 48;
+	// Target: 224x224 RGB normalized with ImageNet mean/std for ViT model
+	// trpakov/vit-face-expression uses standard ImageNet preprocessing
+	static constexpr int32 TargetSize = 224;
+	static constexpr int32 NumOutputChannels = 3;
+
+	// ImageNet normalization constants
+	static constexpr float Mean[3] = {0.485f, 0.456f, 0.406f}; // R, G, B
+	static constexpr float Std[3] = {0.229f, 0.224f, 0.225f};
+
 	TArray<float> OutputTensor;
-	OutputTensor.SetNumZeroed(TargetSize * TargetSize);
+	OutputTensor.SetNumZeroed(NumOutputChannels * TargetSize * TargetSize);
 
 	if (FaceROI.Num() == 0 || Width <= 0 || Height <= 0)
 	{
@@ -137,6 +144,7 @@ TArray<float> UFaceExpressionModel::Preprocess(const TArray<uint8>& FaceROI, int
 	const int32 TotalPixels = Width * Height;
 	const int32 NumChannels = FaceROI.Num() / TotalPixels;
 
+	// ViT expects CHW format (channels first): [3, 224, 224]
 	for (int32 y = 0; y < TargetSize; ++y)
 	{
 		for (int32 x = 0; x < TargetSize; ++x)
@@ -146,21 +154,27 @@ TArray<float> UFaceExpressionModel::Preprocess(const TArray<uint8>& FaceROI, int
 			const int32 SrcY = FMath::Clamp(y * Height / TargetSize, 0, Height - 1);
 			const int32 SrcIdx = (SrcY * Width + SrcX) * NumChannels;
 
-			float GrayValue;
+			float R, G, B;
 			if (NumChannels >= 3)
 			{
-				// BGR to grayscale: 0.114*B + 0.587*G + 0.299*R
-				GrayValue = 0.114f * FaceROI[SrcIdx]
-					+ 0.587f * FaceROI[SrcIdx + 1]
-					+ 0.299f * FaceROI[SrcIdx + 2];
+				// Input is BGR from OpenCV
+				B = static_cast<float>(FaceROI[SrcIdx]) / 255.0f;
+				G = static_cast<float>(FaceROI[SrcIdx + 1]) / 255.0f;
+				R = static_cast<float>(FaceROI[SrcIdx + 2]) / 255.0f;
 			}
 			else
 			{
-				GrayValue = static_cast<float>(FaceROI[SrcIdx]);
+				// Grayscale: replicate to all channels
+				float Gray = static_cast<float>(FaceROI[SrcIdx]) / 255.0f;
+				R = G = B = Gray;
 			}
 
-			// Normalize to [0, 1]
-			OutputTensor[y * TargetSize + x] = GrayValue / 255.0f;
+			// ImageNet normalization: (pixel - mean) / std
+			// CHW layout: channel 0 = R, channel 1 = G, channel 2 = B
+			const int32 PixelOffset = y * TargetSize + x;
+			OutputTensor[0 * TargetSize * TargetSize + PixelOffset] = (R - Mean[0]) / Std[0];
+			OutputTensor[1 * TargetSize * TargetSize + PixelOffset] = (G - Mean[1]) / Std[1];
+			OutputTensor[2 * TargetSize * TargetSize + PixelOffset] = (B - Mean[2]) / Std[2];
 		}
 	}
 
@@ -184,8 +198,8 @@ TArray<float> UFaceExpressionModel::RunInference(const TArray<float>& InputTenso
 		Ort::Session* Session = static_cast<Ort::Session*>(OrtSession);
 		Ort::MemoryInfo MemInfo = Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
 
-		// Input shape: [1, 1, 48, 48] (batch, channels, height, width)
-		std::array<int64_t, 4> InputShape = {1, 1, 48, 48};
+		// Input shape: [1, 3, 224, 224] (batch, channels, height, width) for ViT
+		std::array<int64_t, 4> InputShape = {1, 3, 224, 224};
 		Ort::Value InputOrtTensor = Ort::Value::CreateTensor<float>(
 			MemInfo,
 			const_cast<float*>(InputTensor.GetData()),
