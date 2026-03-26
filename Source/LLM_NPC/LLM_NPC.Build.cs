@@ -35,9 +35,26 @@ public class LLM_NPC : ModuleRules
 		string ThirdPartyPath = Path.Combine(ModuleDirectory, "../../ThirdParty");
 
 		// whisper.cpp - Local speech-to-text
+		// Uses prebuilt DLL from whisper.cpp releases (whisper.dll + whisper.h)
 		string WhisperPath = Path.Combine(ThirdPartyPath, "whisper.cpp");
 		PublicIncludePaths.Add(Path.Combine(WhisperPath, "include"));
-		PublicAdditionalLibraries.Add(Path.Combine(WhisperPath, "lib", GetPlatformLibName("whisper")));
+		string WhisperLibPath = Path.Combine(WhisperPath, "lib");
+
+		if (Target.Platform == UnrealTargetPlatform.Win64)
+		{
+			// If whisper.lib exists (generated from DLL or from source build), link it
+			string WhisperLib = Path.Combine(WhisperLibPath, "whisper.lib");
+			if (File.Exists(WhisperLib))
+			{
+				PublicAdditionalLibraries.Add(WhisperLib);
+			}
+			PublicDelayLoadDLLs.Add("whisper.dll");
+			RuntimeDependencies.Add(Path.Combine(WhisperLibPath, "whisper.dll"));
+		}
+		else
+		{
+			PublicAdditionalLibraries.Add(Path.Combine(WhisperLibPath, GetPlatformLibName("whisper")));
+		}
 
 		// OpenCV 4.x - Camera capture, face detection, preprocessing
 		string OpenCVPath = Path.Combine(ThirdPartyPath, "OpenCV");
