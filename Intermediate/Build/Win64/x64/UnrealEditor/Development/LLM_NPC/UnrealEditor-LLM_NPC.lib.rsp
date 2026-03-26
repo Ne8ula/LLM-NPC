@@ -1,0 +1,14 @@
+/NOLOGO
+/errorReport:prompt
+/MACHINE:x64
+/SUBSYSTEM:WINDOWS
+/DEF
+/NAME:"UnrealEditor-LLM_NPC.dll"
+/IGNORE:4221
+/NODEFAULTLIB
+"C:/Users/alexx/OneDrive/Documents/GitHub/LLM-NPC/Intermediate/Build/Win64/x64/LLM_NPCEditor/Development/UnrealEd/SharedPCH.UnrealEd.Project.ValApi.ValExpApi.Cpp20.h.obj"
+"C:/Users/alexx/OneDrive/Documents/GitHub/LLM-NPC/Intermediate/Build/Win64/x64/UnrealEditor/Development/LLM_NPC/Module.LLM_NPC.1.cpp.obj"
+"C:/Users/alexx/OneDrive/Documents/GitHub/LLM-NPC/Intermediate/Build/Win64/x64/UnrealEditor/Development/LLM_NPC/Module.LLM_NPC.2.cpp.obj"
+"C:/Users/alexx/OneDrive/Documents/GitHub/LLM-NPC/Intermediate/Build/Win64/x64/UnrealEditor/Development/LLM_NPC/Module.LLM_NPC.3.cpp.obj"
+"C:/Users/alexx/OneDrive/Documents/GitHub/LLM-NPC/Intermediate/Build/Win64/x64/UnrealEditor/Development/LLM_NPC/Default.rc2.res"
+/OUT:"C:/Users/alexx/OneDrive/Documents/GitHub/LLM-NPC/Intermediate/Build/Win64/x64/UnrealEditor/Development/LLM_NPC/UnrealEditor-LLM_NPC.lib"

@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <None Include="..\..\.gitignore" />
+    <None Include="..\..\.mcp.json" />
+    <Filter Include="Config">
+      <UniqueIdentifier>{FA535FFB-25E1-3D20-B416-52F9BE21E06E}</UniqueIdentifier>
+    </Filter>
+    <None Include="..\..\Config\DefaultEngine.ini">
+      <Filter>Config</Filter>
+    </None>
+    <None Include="..\..\Config\DefaultGame.ini">
+      <Filter>Config</Filter>
+    </None>
+    <None Include="..\..\Config\DefaultInput.ini">
+      <Filter>Config</Filter>
+    </None>
+    <None Include="..\..\LLM_NPC.uproject" />
+    <None Include="..\..\README.md" />
+    <Filter Include="Source">
+      <UniqueIdentifier>{F31BBDD1-B3E8-3BCC-9652-680E16935819}</UniqueIdentifier>
+    </Filter>
+    <None Include="..\..\Source\LLM_NPC.Target.cs">
+      <Filter>Source</Filter>
+    </None>
+    <None Include="..\..\Source\LLM_NPCEditor.Target.cs">
+      <Filter>Source</Filter>
+    </None>
+    <Filter Include="Source\LLM_NPC">
+      <UniqueIdentifier>{4D735700-EB54-31CF-8EC5-B7331B531F0B}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source\LLM_NPC\Animation">
+      <UniqueIdentifier>{0C096620-322F-39F8-A63B-329088631F90}</UniqueIdentifier>
+    </Filter>
+    <ClCompile Include="..\..\Source\LLM_NPC\Animation\BlendShapeMappingDataAsset.cpp">
+      <Filter>Source\LLM_NPC\Animation</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Animation\BlendShapeMappingDataAsset.h">
+      <Filter>Source\LLM_NPC\Animation</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Animation\MetahumanAnimComponent.cpp">
+      <Filter>Source\LLM_NPC\Animation</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Animation\MetahumanAnimComponent.h">
+      <Filter>Source\LLM_NPC\Animation</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Animation\NPCLipSyncComponent.cpp">
+      <Filter>Source\LLM_NPC\Animation</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Animation\NPCLipSyncComponent.h">
+      <Filter>Source\LLM_NPC\Animation</Filter>
+    </ClInclude>
+    <Filter Include="Source\LLM_NPC\Core">
+      <UniqueIdentifier>{ED9A4C2E-CE78-3F9A-B0EE-990CE3536F77}</UniqueIdentifier>
+    </Filter>
+    <ClCompile Include="..\..\Source\LLM_NPC\Core\NPCAIController.cpp">
+      <Filter>Source\LLM_NPC\Core</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Core\NPCAIController.h">
+      <Filter>Source\LLM_NPC\Core</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Core\NPCCharacter.cpp">
+      <Filter>Source\LLM_NPC\Core</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Core\NPCCharacter.h">
+      <Filter>Source\LLM_NPC\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\LLM_NPC\Core\NPCConfigDataAsset.h">
+      <Filter>Source\LLM_NPC\Core</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Core\NPCSubsystemComponent.cpp">
+      <Filter>Source\LLM_NPC\Core</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Core\NPCSubsystemComponent.h">
+      <Filter>Source\LLM_NPC\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\LLM_NPC\Core\NPCTypes.h">
+      <Filter>Source\LLM_NPC\Core</Filter>
+    </ClInclude>
+    <Filter Include="Source\LLM_NPC\Dialogue">
+      <UniqueIdentifier>{A092316E-AD68-33AE-BC47-76C9EF00E176}</UniqueIdentifier>
+    </Filter>
+    <ClCompile Include="..\..\Source\LLM_NPC\Dialogue\ClaudeAPISubsystem.cpp">
+      <Filter>Source\LLM_NPC\Dialogue</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Dialogue\ClaudeAPISubsystem.h">
+      <Filter>Source\LLM_NPC\Dialogue</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Dialogue\DialogueComponent.cpp">
+      <Filter>Source\LLM_NPC\Dialogue</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Dialogue\DialogueComponent.h">
+      <Filter>Source\LLM_NPC\Dialogue</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Dialogue\DialogueFallbackWidget.cpp">
+      <Filter>Source\LLM_NPC\Dialogue</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Dialogue\DialogueFallbackWidget.h">
+      <Filter>Source\LLM_NPC\Dialogue</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Dialogue\ElevenLabsTTSComponent.cpp">
+      <Filter>Source\LLM_NPC\Dialogue</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Dialogue\ElevenLabsTTSComponent.h">
+      <Filter>Source\LLM_NPC\Dialogue</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Dialogue\WhisperSTTComponent.cpp">
+      <Filter>Source\LLM_NPC\Dialogue</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Dialogue\WhisperSTTComponent.h">
+      <Filter>Source\LLM_NPC\Dialogue</Filter>
+    </ClInclude>
+    <Filter Include="Source\LLM_NPC\Emotion">
+      <UniqueIdentifier>{D24F3121-96F3-3D6D-A81C-6B50D5450015}</UniqueIdentifier>
+    </Filter>
+    <ClCompile Include="..\..\Source\LLM_NPC\Emotion\EmotionComponent.cpp">
+      <Filter>Source\LLM_NPC\Emotion</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Emotion\EmotionComponent.h">
+      <Filter>Source\LLM_NPC\Emotion</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Emotion\EmotionGoal.cpp">
+      <Filter>Source\LLM_NPC\Emotion</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Emotion\EmotionGoal.h">
+      <Filter>Source\LLM_NPC\Emotion</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Emotion\EmotionGraphDataAsset.cpp">
+      <Filter>Source\LLM_NPC\Emotion</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Emotion\EmotionGraphDataAsset.h">
+      <Filter>Source\LLM_NPC\Emotion</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Emotion\EmotionStateMachine.cpp">
+      <Filter>Source\LLM_NPC\Emotion</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Emotion\EmotionStateMachine.h">
+      <Filter>Source\LLM_NPC\Emotion</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Emotion\EmotionTransitionRule.cpp">
+      <Filter>Source\LLM_NPC\Emotion</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Emotion\EmotionTransitionRule.h">
+      <Filter>Source\LLM_NPC\Emotion</Filter>
+    </ClInclude>
+    <Filter Include="Source\LLM_NPC\Fallback">
+      <UniqueIdentifier>{EE10F2A9-C476-35FE-B939-6904035F2B35}</UniqueIdentifier>
+    </Filter>
+    <ClCompile Include="..\..\Source\LLM_NPC\Fallback\FallbackManagerComponent.cpp">
+      <Filter>Source\LLM_NPC\Fallback</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Fallback\FallbackManagerComponent.h">
+      <Filter>Source\LLM_NPC\Fallback</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Fallback\InputModeSubsystem.cpp">
+      <Filter>Source\LLM_NPC\Fallback</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Fallback\InputModeSubsystem.h">
+      <Filter>Source\LLM_NPC\Fallback</Filter>
+    </ClInclude>
+    <Filter Include="Source\LLM_NPC\Gesture">
+      <UniqueIdentifier>{8234639E-D76F-35F1-83A4-FC7DFF1B3C08}</UniqueIdentifier>
+    </Filter>
+    <ClCompile Include="..\..\Source\LLM_NPC\Gesture\GestureClassifier.cpp">
+      <Filter>Source\LLM_NPC\Gesture</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Gesture\GestureClassifier.h">
+      <Filter>Source\LLM_NPC\Gesture</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Gesture\GestureRecognitionComponent.cpp">
+      <Filter>Source\LLM_NPC\Gesture</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Gesture\GestureRecognitionComponent.h">
+      <Filter>Source\LLM_NPC\Gesture</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Gesture\HandLandmarkModel.cpp">
+      <Filter>Source\LLM_NPC\Gesture</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Gesture\HandLandmarkModel.h">
+      <Filter>Source\LLM_NPC\Gesture</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Gesture\InspectableItem.cpp">
+      <Filter>Source\LLM_NPC\Gesture</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Gesture\InspectableItem.h">
+      <Filter>Source\LLM_NPC\Gesture</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Gesture\ObjectInspectWidget.cpp">
+      <Filter>Source\LLM_NPC\Gesture</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Gesture\ObjectInspectWidget.h">
+      <Filter>Source\LLM_NPC\Gesture</Filter>
+    </ClInclude>
+    <Filter Include="Source\LLM_NPC\Inventory">
+      <UniqueIdentifier>{EB565FD2-5BF9-316D-A206-2C6003DE884F}</UniqueIdentifier>
+    </Filter>
+    <ClCompile Include="..\..\Source\LLM_NPC\Inventory\InventoryDataAsset.cpp">
+      <Filter>Source\LLM_NPC\Inventory</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Inventory\InventoryDataAsset.h">
+      <Filter>Source\LLM_NPC\Inventory</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\LLM_NPC\Inventory\InventoryTypes.h">
+      <Filter>Source\LLM_NPC\Inventory</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Inventory\NPCInventoryComponent.cpp">
+      <Filter>Source\LLM_NPC\Inventory</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Inventory\NPCInventoryComponent.h">
+      <Filter>Source\LLM_NPC\Inventory</Filter>
+    </ClInclude>
+    <None Include="..\..\Source\LLM_NPC\LLM_NPC.Build.cs">
+      <Filter>Source\LLM_NPC</Filter>
+    </None>
+    <ClCompile Include="..\..\Source\LLM_NPC\LLM_NPC.cpp">
+      <Filter>Source\LLM_NPC</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\LLM_NPC.h">
+      <Filter>Source\LLM_NPC</Filter>
+    </ClInclude>
+    <Filter Include="Source\LLM_NPC\Vision">
+      <UniqueIdentifier>{0F47346B-A024-3E5E-9DDE-63D49B9F794E}</UniqueIdentifier>
+    </Filter>
+    <ClCompile Include="..\..\Source\LLM_NPC\Vision\CameraManagerSubsystem.cpp">
+      <Filter>Source\LLM_NPC\Vision</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Vision\CameraManagerSubsystem.h">
+      <Filter>Source\LLM_NPC\Vision</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Vision\FaceExpressionModel.cpp">
+      <Filter>Source\LLM_NPC\Vision</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Vision\FaceExpressionModel.h">
+      <Filter>Source\LLM_NPC\Vision</Filter>
+    </ClInclude>
+    <ClCompile Include="..\..\Source\LLM_NPC\Vision\FacialRecognitionComponent.cpp">
+      <Filter>Source\LLM_NPC\Vision</Filter>
+    </ClCompile>
+    <ClInclude Include="..\..\Source\LLM_NPC\Vision\FacialRecognitionComponent.h">
+      <Filter>Source\LLM_NPC\Vision</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

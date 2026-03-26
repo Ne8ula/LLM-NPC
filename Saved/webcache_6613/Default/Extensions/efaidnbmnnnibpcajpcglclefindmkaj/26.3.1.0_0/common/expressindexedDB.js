@@ -1,0 +1,18 @@
+/*************************************************************************
+* ADOBE CONFIDENTIAL
+* ___________________
+*
+*  Copyright 2015 Adobe Systems Incorporated
+*  All Rights Reserved.
+*
+* NOTICE:  All information contained herein is, and remains
+* the property of Adobe Systems Incorporated and its suppliers,
+* if any.  The intellectual and technical concepts contained
+* herein are proprietary to Adobe Systems Incorporated and its
+* suppliers and are protected by all applicable intellectual property laws,
+* including trade secret and or copyright laws.
+* Dissemination of this information or reproduction of this material
+* is strictly forbidden unless prior written permission is obtained
+* from Adobe Systems Incorporated.
+**************************************************************************/
+import{logIdbError as e}from"./idbLogging.js";const r=new class{constructor(){this.db;this.expressAssetStoreName="expressAsset";const r=indexedDB.open("AcrobatDatabase",1);r.onupgradeneeded=e=>{this.db=e.target.result,this.db.objectStoreNames.contains(this.expressAssetStoreName)||this.db.createObjectStore(this.expressAssetStoreName)},r.onsuccess=e=>{this.db=e.target.result},r.onerror=()=>{e("express indexeddb could not be opened",r.error)}}createTransaction(){if(this.db&&this.db.transaction&&"function"==typeof this.db.transaction){const r=this.db.transaction(this.expressAssetStoreName,"readwrite");return r.onerror=r=>(e("Error in transaction",r.target.error),Promise.reject(r.target.error)),r}throw new Error("Database has not been initialized")}storeExpressAssetInfoInIndexedDB(r,t,s,o){try{const n=this.createTransaction().objectStore(this.expressAssetStoreName),i={url:t,expiry:s,clickTimeStamp:o},a=n.put(i,r.toString());return new Promise((r,t)=>{a.onsuccess=e=>{r(e.target.result)},a.onerror=r=>{e("Error in adding express asset",r.target.error),t(r.target.error)}})}catch(r){return e("Error in adding express asset",r),Promise.reject(r)}}getExpressAssetInfoFromIndexedDB(r){try{const t=this.createTransaction(),s=t.objectStore(this.expressAssetStoreName).get(r.toString());return new Promise((r,t)=>{s.onsuccess=e=>{r(e.target.result)},s.onerror=r=>{e("Error in getting express asset info",r.target.error),t(r.target.error)}})}catch(r){return e("Error in getting express asset info",r),Promise.reject(r)}}async removeExpressAssetInfoFromIndexedDB(){try{const r=this.createTransaction().objectStore(this.expressAssetStoreName),t=r.getAllKeys();return new Promise((s,o)=>{t.onsuccess=t=>{let o=[];t.target.result.forEach(t=>{const s=r.get(t);s.onsuccess=s=>{if(s.target.result.expiry<Date.now()){const s=r.delete(t);o.push(new Promise((r,t)=>{s.onsuccess=e=>{r(e.target.result)},s.onerror=r=>{e("Error in deleting express asset info",r.target.error),t(r.target.error)}}))}},s.onerror=r=>{e("Error in getting express asset info",r.target.error)}}),s(Promise.allSettled(o))},t.onerror=r=>{e("Error in getting indexeddb keys",r.target.error),o(r.target.error)}})}catch(r){return e("Error in deleting express asset info",r),Promise.reject(r)}}getExpressAssetCount(){try{const r=this.createTransaction(),t=r.objectStore(this.expressAssetStoreName).getAllKeys();return new Promise((r,s)=>{t.onsuccess=e=>{r(e.target.result.length)},t.onerror=r=>{e("Error in getting express asset count",r.target.error),s(r.target.error)}})}catch(r){return e("Error in getting express asset count",r),Promise.reject(r)}}};export{r as expressIndexedDBScript};

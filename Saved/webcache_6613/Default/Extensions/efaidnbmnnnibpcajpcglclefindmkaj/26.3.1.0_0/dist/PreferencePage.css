@@ -1,0 +1,489 @@
+/*************************************************************************
+* ADOBE CONFIDENTIAL
+* ___________________
+*
+*  Copyright 2025 Adobe Systems Incorporated
+*  All Rights Reserved.
+**************************************************************************/
+
+/* CSS Variables for box-shadow */
+:root {
+    --box-shadow-low: 0 0 0 4px rgba(20, 122, 243, 0.2);
+    --box-shadow-peak: 0 0 0 8px rgba(20, 122, 243, 0.4);
+}
+
+/* Main pulse animation for the indicator rect */
+@keyframes pulseRect {
+    0% {
+        box-shadow: var(--box-shadow-low);
+        transform: translate(-50%, -50%) scale(1, 1);
+    }
+
+    50% {
+        box-shadow: var(--box-shadow-peak);
+        transform: translate(-50%, -50%) scale(0.95, 0.95);
+    }
+
+    100% {
+        box-shadow: var(--box-shadow-low);
+        transform: translate(-50%, -50%) scale(1, 1);
+    }
+}
+
+.pulse-indicator-rect {
+    animation: pulseRect 2s cubic-bezier(0.45, 0, 0.4, 1) infinite;
+    animation-delay: 0s;
+    border: 4px solid #147af3;
+    border-radius: 10px;
+    box-sizing: border-box;
+    pointer-events: none;
+    position: absolute;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+/* Underlay (spotlight) animation */
+@keyframes underlayPulseRect {
+    0% {
+        transform: translate(-50%, -50%) scale(1, 1);
+    }
+
+    50% {
+        transform: translate(-50%, -50%) scale(0.95, 0.95);
+    }
+
+    100% {
+        transform: translate(-50%, -50%) scale(1, 1);
+    }
+}
+
+.pulse-indicator-underlay {
+    animation: underlayPulseRect 2s cubic-bezier(0.45, 0, 0.4, 1) infinite;
+    animation-delay: 0.4s;
+    transform: translate(-50%, -50%) scale(1);
+    border-radius: 10px;
+    z-index: 9999;
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --box-shadow-low: 0 0 0 4px rgba(38, 128, 235, 0.2);
+        --box-shadow-peak: 0 0 0 8px rgba(38, 128, 235, 0.4);
+    }
+
+    .pulse-indicator-rect {
+        border-color: #2680EB;
+    }
+}
+
+
+.error-screen-container {
+    display: flex;
+    height: 100vh;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    overflow: auto;
+    background: var(--spectrum-gray-50) !important;
+}
+
+.error-item-description {
+    font-size: 16px;
+    font-family: adobe-clean, "Adobe Clean", sans-serif;
+    font-weight: 400;
+    color: var(--spectrum-gray-900);
+    line-height: 24px;
+}
+
+.error-button {
+    background-color: var(--spectrum-global-color-static-black) !important;
+    border-color: var(--spectrum-gray-900) !important;
+    color: var(--spectrum-global-color-static-white) !important;
+    cursor: pointer !important;
+}
+/*************************************************************************
+* ADOBE CONFIDENTIAL
+* ___________________
+*
+*  Copyright 2025 Adobe Systems Incorporated
+*  All Rights Reserved.
+**************************************************************************/
+
+/* Reset and Base Styles */
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: adobe-clean, "Adobe Clean", sans-serif;
+    background: var(--spectrum-gray-50);
+}
+
+/* Preference Page Container */
+.preference-loading-container {
+    display: flex;
+    height: 100vh;
+    justify-content: center;
+    align-items: center;
+    overflow: auto;
+}
+
+.preference-page-container {
+    display: flex;
+    width: 100%;
+    height: 100vh;
+    flex-direction: column;
+    background: var(--spectrum-gray-50);
+    overflow: hidden;
+}
+
+/* Top Bar / Header */
+.top-bar {
+    background: var(--spectrum-gray-50);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--spectrum-global-color-static-gray-300);
+    height: 64px;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+.app-icon-container {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+.app-icon {
+    display: inline-block;
+    width: 32px;
+    height: 32px;
+    background-size: contain;
+}
+
+.app-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--spectrum-gray-900);
+    font-family: adobe-clean, "Adobe Clean", sans-serif;
+}
+
+/* Save Button */
+.options-save-button {
+    font-size: 14px;
+    font-weight: 700;
+    border-radius: 16px;
+    cursor: pointer !important;
+    height: 32px;
+    font-family: adobe-clean, "Adobe Clean", sans-serif;
+}
+
+/* Main Content */
+
+ol[class*="spectrum-ToastContainer-list"] {
+    padding-top: 64px;
+}
+
+div[class*="spectrum-Toast-content"] {
+    font-weight: 700;
+}
+
+.preference-page-content-container {
+    display: flex;
+    padding-top: 36px;
+    justify-content: center;
+    background: var(--spectrum-gray-50);
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+
+.preference-page-content {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}
+
+/* Tabs Container */
+
+/* Tab Panels */
+.preferences-tab-panels {
+    padding: 0px 12px 80px 12px;
+    border: none !important;
+    height: 100%;
+    overflow: auto;
+    display: flex;
+}
+
+.preferences-tab-panels > div {
+    width: 600px;
+}
+
+
+.preferences-tab-list {
+    margin-left: 20vw !important;
+    margin-top: 72px !important;
+    margin-right: 72px !important;
+    height: fit-content !important;
+    gap: 16px !important;
+}
+
+div.preferences-tab-list > div {
+    cursor: pointer;
+}
+
+/* Page Title */
+.preference-page-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--spectrum-gray-900);
+    font-family: adobe-clean, "Adobe Clean", sans-serif;
+    line-height: 36px;
+    margin: 0px 0px 32px 0px;
+}
+
+/* Preference Items */
+
+.preference-control {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.preference-control--checkbox-group {
+    gap: 0;
+}
+
+.preference-control--no-divider {
+    margin-bottom: 0px;
+}
+
+.preference-section-divider {
+    block-size: 1px !important;
+    background-color: var(--spectrum-global-color-static-gray-300) !important;
+}
+
+.preference-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+}
+
+.preference-item-content {
+    flex: 1;
+}
+
+.preference-item-title {
+    font-size: 16px;
+    font-weight: 700;
+    font-family: adobe-clean, "Adobe Clean", sans-serif;
+    color: var(--spectrum-gray-900);
+    line-height: 24px;
+    margin: 0px;
+}
+
+.preference-accordion-item-title {
+    font-size: 14px;
+    font-weight: 700;
+    font-family: adobe-clean, "Adobe Clean", sans-serif;
+    color: var(--spectrum-gray-900);
+    line-height: 24px;
+    margin: 0px;
+}
+
+.preference-item-description {
+    font-size: 14px;
+    font-family: adobe-clean, "Adobe Clean", sans-serif;
+    font-weight: 400;
+    color: var(--spectrum-gray-900);
+    line-height: 24px;
+}
+
+.preference-item-footer-container {
+    margin-top: 16px;
+}
+
+.preference-item-footer {
+    font-family: adobe-clean, "Adobe Clean", sans-serif;
+    font-weight: 400;
+    color: var(--spectrum-gray-600);
+    line-height: 24px;
+}
+
+.preference-item-control {
+    flex-shrink: 0;
+}
+
+.preference-banner-content {
+    width: 600px;
+    height: 140px;
+    justify-content: space-between;
+    border-radius: 4px;
+    background-color: var(--spectrum-gray-100);
+    padding: 16px;
+}
+
+.preference-banner-beta-label {
+    box-sizing: border-box;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    padding: 4px 8px;
+    width: 42px;
+    height: 24px;
+    background: var(--spectrum-gray-50);
+    border: 1px solid var(--spectrum-accent-color-800, #3B63FB);
+    border-radius: 6px;
+    color: var(--spectrum-accent-color-800, #3B63FB);
+    font-family: adobe-clean, "Adobe Clean", sans-serif;
+    font-style: normal;
+    font-size: 12px;
+    line-height: 15px;
+    vertical-align: middle;
+}
+
+.preference-banner-heading {
+    font-family: adobe-clean, "Adobe Clean", sans-serif;
+    font-weight: 700;
+    font-size: 20px;
+    line-height: 28px;
+    margin: 8px 0px 8px 0px;
+}
+
+.margin-bottom-16 {
+    margin-bottom: 16px;
+}
+
+/* Accordion Styles */
+
+.preference-accordion-container {
+    margin-top: -24px;
+}
+
+.preference-accordion-container--with-top-divider {
+    border-top: 1px dashed var(--spectrum-gray-400);
+    margin-top: 0px !important;
+}
+
+.preference-accordion-trigger {
+    border: none;
+    background: none;
+    width: 100%;
+    cursor: pointer;
+    padding-bottom: 12px;
+    padding-top: 12px;
+    margin: 0;
+    height: 54px;
+}
+
+.preference-accordion-trigger:hover,
+.preference-accordian-expanded {
+    background-color: var(--spectrum-gray-100);
+}
+
+.preference-accordion {
+    display: flex;
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.preference-accordion-content {
+    padding: 16px;
+}
+
+.preference-accordion-icon {
+    font-size: 20px;
+    color: var(--spectrum-gray-600);
+    padding-right: 12px;
+
+}
+
+/* Tag/Chip List */
+.preference-tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.preference-tag-show-more {
+    font-size: 14px;
+    cursor: pointer !important;
+}
+
+.preference-tag-item {
+    font-weight: 500;
+    font-size: 12px;
+    background-color: var(--spectrum-gray-200) !important;
+    border-radius: 8px !important;
+    height: 24px;
+}
+
+
+/* Utility Classes */
+.hidden {
+    display: none !important;
+}
+
+/* Ensure proper text wrapping */
+.preference-item-title,
+.preference-item-description {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+/* Adobe Spectrum Interactive Controls - Cursor Pointer Override */
+/* Adobe Spectrum by default does not provide cursor: pointer for interactive elements */
+
+/* Checkboxes */
+label[class*="spectrum-Checkbox"],
+label[class*="spectrum-Checkbox"] *,
+.spectrum-Checkbox,
+.spectrum-Checkbox * {
+    cursor: pointer !important;
+}
+
+/* Dropdowns/Pickers */
+button[class*="spectrum-Picker"],
+button[class*="spectrum-Picker"] *,
+.spectrum-Picker,
+.spectrum-Picker button,
+.spectrum-Picker button *,
+[class*="spectrum-FieldButton"],
+button[class*="spectrum-FieldButton"],
+button[class*="spectrum-FieldButton"] * {
+    cursor: pointer !important;
+}
+
+/* Buttons */
+button[class*="spectrum-Button"],
+.spectrum-Button {
+    cursor: pointer !important;
+}
+
+/* Links */
+a[class*="spectrum-Link"],
+.spectrum-Link {
+    cursor: pointer !important;
+}
+
+/* Action Buttons */
+button[class*="spectrum-ActionButton"],
+.spectrum-ActionButton {
+    cursor: pointer !important;
+}
+
+/* Global font override for all Spectrum components */
+[class*="spectrum-"] {
+    font-family: adobe-clean, "Adobe Clean", sans-serif !important;
+}
+
