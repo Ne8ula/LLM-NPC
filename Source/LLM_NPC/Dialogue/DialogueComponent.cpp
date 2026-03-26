@@ -2,6 +2,7 @@
 #include "ClaudeAPISubsystem.h"
 #include "LLM_NPC/Core/NPCConfigDataAsset.h"
 #include "LLM_NPC/Core/NPCCharacter.h"
+#include "LLM_NPC/Emotion/EmotionComponent.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 
@@ -153,6 +154,24 @@ void UDialogueComponent::OnClaudeResponseReceived(const FClaudeAPIResponse& Resp
 	AssistantMsg.Content = Response.ResponseText;
 	AssistantMsg.Timestamp = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
 	ConversationHistory.Add(AssistantMsg);
+
+	// Feed emotion hint into the EmotionComponent so blend shapes update
+	if (Response.NPCEmotionUpdate != EEmotionType::Neutral)
+	{
+		if (AActor* Owner = GetOwner())
+		{
+			if (UEmotionComponent* EmotionComp = Owner->FindComponentByClass<UEmotionComponent>())
+			{
+				FEmotionSignal Signal;
+				Signal.TargetEmotion = Response.NPCEmotionUpdate;
+				Signal.Strength = 0.8f;
+				Signal.Source = TEXT("ClaudeDialogueResponse");
+				EmotionComp->ProcessSignal(Signal);
+				UE_LOG(LogTemp, Log, TEXT("DialogueComponent: Sent emotion signal '%s' to EmotionComponent"),
+					*UEnum::GetValueAsString(Response.NPCEmotionUpdate));
+			}
+		}
+	}
 
 	// Fire the dialogue response delegate
 	FName ItemName = Response.ItemID.IsEmpty() ? NAME_None : FName(*Response.ItemID);
