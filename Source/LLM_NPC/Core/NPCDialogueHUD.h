@@ -4,11 +4,15 @@
 #include "GameFramework/HUD.h"
 #include "NPCDialogueHUD.generated.h"
 
-class UNPCDialogueOverlay;
+class UDialogueComponent;
+class SEditableTextBox;
+class SScrollBox;
+class STextBlock;
+class SVerticalBox;
 
 /**
- * HUD class that creates and manages the NPC dialogue overlay widget.
- * Automatically creates the text input UI when the game starts.
+ * HUD that manages the NPC dialogue chat overlay.
+ * Adds Slate widgets directly to the game viewport (no UUserWidget needed).
  */
 UCLASS()
 class LLM_NPC_API ANPCDialogueHUD : public AHUD
@@ -16,17 +20,30 @@ class LLM_NPC_API ANPCDialogueHUD : public AHUD
 	GENERATED_BODY()
 
 public:
-	/** Toggle the dialogue input box visibility. */
-	UFUNCTION(BlueprintCallable, Category = "NPC|UI")
 	void ToggleDialogueInput();
-
-	/** Get the dialogue overlay widget. */
-	UNPCDialogueOverlay* GetDialogueOverlay() const { return DialogueOverlay; }
+	bool IsDialogueVisible() const { return bDialogueVisible; }
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+	void BuildChatUI();
+	void SubmitText();
+	void AddChatMessage(const FString& Sender, const FString& Message, FLinearColor Color);
+
+	UFUNCTION()
+	void OnNPCResponse(const FString& ResponseText, EEmotionType NPCEmotionHint, bool bShouldGiveItem, FName ItemID);
+
+	TSharedPtr<SVerticalBox> ChatPanel;
+	TSharedPtr<SScrollBox> ChatLog;
+	TSharedPtr<SEditableTextBox> InputBox;
+	TSharedPtr<STextBlock> StatusText;
+	TSharedPtr<SWidget> RootWidget;
+
+	bool bDialogueVisible = true;
+	bool bUIBuilt = false;
+
 	UPROPERTY()
-	TObjectPtr<UNPCDialogueOverlay> DialogueOverlay;
+	TObjectPtr<UDialogueComponent> BoundDialogue;
 };
