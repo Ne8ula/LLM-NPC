@@ -2,22 +2,15 @@
 #include "NPCCharacter.h"
 #include "LLM_NPC/Dialogue/DialogueComponent.h"
 #include "LLM_NPC/Core/NPCTypes.h"
-#include "Engine/GameViewportClient.h"
-#include "Engine/Engine.h"
+#include "Engine/Canvas.h"
+#include "Engine/Font.h"
 #include "Kismet/GameplayStatics.h"
-#include "Widgets/SBoxPanel.h"
-#include "Widgets/Input/SEditableTextBox.h"
-#include "Widgets/Input/SButton.h"
-#include "Widgets/Text/STextBlock.h"
-#include "Widgets/Layout/SScrollBox.h"
-#include "Widgets/Layout/SBox.h"
-#include "Widgets/Layout/SBorder.h"
 
 void ANPCDialogueHUD::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Find the first NPC and bind to its dialogue
+	// Find NPC and bind
 	TArray<AActor*> NPCActors;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ANPCCharacter::StaticClass(), NPCActors);
 	for (AActor* Actor : NPCActors)
@@ -28,191 +21,159 @@ void ANPCDialogueHUD::BeginPlay()
 			{
 				BoundDialogue = NPC->DialogueComponent;
 				BoundDialogue->OnDialogueResponseReceived.AddDynamic(this, &ANPCDialogueHUD::OnNPCResponse);
-				UE_LOG(LogTemp, Log, TEXT("NPCDialogueHUD: Bound to NPC DialogueComponent"));
+				UE_LOG(LogTemp, Log, TEXT("NPCDialogueHUD: Bound to NPC"));
 				break;
 			}
 		}
 	}
 
-	BuildChatUI();
+	ChatLines.Add({TEXT("[System]: Chat ready. Type a message and press Enter to talk."), FLinearColor(0.5f, 0.5f, 0.5f)});
 }
 
-void ANPCDialogueHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
+void ANPCDialogueHUD::DrawHUD()
 {
-	if (RootWidget.IsValid() && GEngine && GEngine->GameViewport)
-	{
-		GEngine->GameViewport->RemoveViewportWidgetContent(RootWidget.ToSharedRef());
-	}
-	Super::EndPlay(EndPlayReason);
-}
+	Super::DrawHUD();
 
-void ANPCDialogueHUD::BuildChatUI()
-{
-	if (bUIBuilt || !GEngine || !GEngine->GameViewport)
+	if (!Canvas || !bDialogueVisible)
 	{
 		return;
 	}
 
-	// Build the chat panel with Slate
-	SAssignNew(RootWidget, SVerticalBox)
+	const float ScreenW = Canvas->SizeX;
+	const float ScreenH = Canvas->SizeY;
+	const float Padding = 20.0f;
+	const float LineHeight = 22.0f;
+	const float InputBoxHeight = 30.0f;
+	const float ChatAreaHeight = FMath::Min(250.0f, ScreenH * 0.4f);
 
-	// Spacer pushes chat to bottom
-	+ SVerticalBox::Slot()
-	.FillHeight(1.0f)
+	UFont* Font = GEngine->GetSmallFont();
+	if (!Font)
+	{
+		return;
+	}
 
-	// Chat log
-	+ SVerticalBox::Slot()
-	.AutoHeight()
-	.MaxHeight(250.0f)
-	.Padding(20.0f, 0.0f)
-	[
-		SNew(SBorder)
-		.BorderBackgroundColor(FLinearColor(0.0f, 0.0f, 0.0f, 0.7f))
-		.Padding(8.0f)
-		[
-			SAssignNew(ChatLog, SScrollBox)
-		]
-	]
-
-	// Status text
-	+ SVerticalBox::Slot()
-	.AutoHeight()
-	.Padding(20.0f, 4.0f)
-	[
-		SAssignNew(StatusText, STextBlock)
-		.ColorAndOpacity(FSlateColor(FLinearColor(0.7f, 0.7f, 0.7f)))
-		.Text(FText::FromString(TEXT("Press T to toggle chat. Type a message and press Enter.")))
-	]
-
-	// Input row
-	+ SVerticalBox::Slot()
-	.AutoHeight()
-	.Padding(20.0f, 0.0f, 20.0f, 20.0f)
-	[
-		SNew(SHorizontalBox)
-
-		+ SHorizontalBox::Slot()
-		.FillWidth(1.0f)
-		[
-			SAssignNew(InputBox, SEditableTextBox)
-			.HintText(FText::FromString(TEXT("Type a message to the NPC...")))
-			.OnTextCommitted_Lambda([this](const FText& Text, ETextCommit::Type CommitType)
-			{
-				if (CommitType == ETextCommit::OnEnter)
-				{
-					SubmitText();
-				}
-			})
-		]
-
-		+ SHorizontalBox::Slot()
-		.AutoWidth()
-		.Padding(8.0f, 0.0f, 0.0f, 0.0f)
-		[
-			SNew(SButton)
-			.Text(FText::FromString(TEXT("Send")))
-			.OnClicked_Lambda([this]() -> FReply
-			{
-				SubmitText();
-				return FReply::Handled();
-			})
-		]
-	];
-
-	// Add directly to the game viewport
-	GEngine->GameViewport->AddViewportWidgetContent(
-		SNew(SWeakWidget).PossiblyNullContent(RootWidget),
-		10  // Z-order
+	// ---- Draw chat background ----
+	const float ChatTop = ScreenH - ChatAreaHeight - InputBoxHeight - Padding * 3;
+	FCanvasTileItem BG(
+		FVector2D(Padding, ChatTop),
+		FVector2D(ScreenW - Padding * 2, ChatAreaHeight + InputBoxHeight + Padding * 2),
+		FLinearColor(0.0f, 0.0f, 0.0f, 0.7f)
 	);
+	BG.BlendMode = SE_BLEND_Translucent;
+	Canvas->DrawItem(BG);
 
-	bUIBuilt = true;
+	// ---- Draw chat lines ----
+	float Y = ChatTop + 10.0f;
+	int32 StartLine = FMath::Max(0, ChatLines.Num() - (int32)(ChatAreaHeight / LineHeight));
+	for (int32 i = StartLine; i < ChatLines.Num(); ++i)
+	{
+		FCanvasTextItem TextItem(
+			FVector2D(Padding + 10.0f, Y),
+			FText::FromString(ChatLines[i].Text),
+			Font,
+			ChatLines[i].Color
+		);
+		TextItem.Scale = FVector2D(1.2f, 1.2f);
+		Canvas->DrawItem(TextItem);
+		Y += LineHeight;
 
-	// Add welcome message
-	AddChatMessage(TEXT("System"), TEXT("Chat ready. Type a message and press Enter to talk to the NPC."), FLinearColor(0.5f, 0.5f, 0.5f));
+		if (Y > ChatTop + ChatAreaHeight)
+		{
+			break;
+		}
+	}
 
-	UE_LOG(LogTemp, Log, TEXT("NPCDialogueHUD: Chat UI built and added to viewport"));
+	// ---- Draw status text ----
+	float StatusY = ChatTop + ChatAreaHeight + 5.0f;
+	{
+		FCanvasTextItem StatusItem(
+			FVector2D(Padding + 10.0f, StatusY),
+			FText::FromString(StatusMessage),
+			Font,
+			FLinearColor(0.6f, 0.6f, 0.6f)
+		);
+		StatusItem.Scale = FVector2D(1.0f, 1.0f);
+		Canvas->DrawItem(StatusItem);
+	}
+
+	// ---- Draw input box ----
+	float InputY = StatusY + LineHeight + 5.0f;
+	{
+		// Input background
+		FCanvasTileItem InputBG(
+			FVector2D(Padding + 10.0f, InputY),
+			FVector2D(ScreenW - Padding * 2 - 20.0f, InputBoxHeight),
+			FLinearColor(0.15f, 0.15f, 0.15f, 0.9f)
+		);
+		InputBG.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(InputBG);
+
+		// Input text with cursor
+		FString DisplayText = InputBuffer.IsEmpty()
+			? TEXT("Type here...")
+			: InputBuffer + TEXT("|");
+
+		FCanvasTextItem InputItem(
+			FVector2D(Padding + 15.0f, InputY + 5.0f),
+			FText::FromString(DisplayText),
+			Font,
+			InputBuffer.IsEmpty() ? FLinearColor(0.4f, 0.4f, 0.4f) : FLinearColor::White
+		);
+		InputItem.Scale = FVector2D(1.2f, 1.2f);
+		Canvas->DrawItem(InputItem);
+	}
 }
 
 void ANPCDialogueHUD::ToggleDialogueInput()
 {
 	bDialogueVisible = !bDialogueVisible;
+}
 
-	if (RootWidget.IsValid())
-	{
-		RootWidget->SetVisibility(bDialogueVisible ? EVisibility::Visible : EVisibility::Collapsed);
-	}
+void ANPCDialogueHUD::AppendToInput(const FString& Char)
+{
+	InputBuffer += Char;
+}
 
-	if (bDialogueVisible && InputBox.IsValid())
+void ANPCDialogueHUD::BackspaceInput()
+{
+	if (InputBuffer.Len() > 0)
 	{
-		FSlateApplication::Get().SetKeyboardFocus(InputBox);
+		InputBuffer = InputBuffer.Left(InputBuffer.Len() - 1);
 	}
 }
 
-void ANPCDialogueHUD::SubmitText()
+void ANPCDialogueHUD::SubmitChatMessage(const FString& Message)
 {
-	if (!InputBox.IsValid())
+	if (Message.IsEmpty())
 	{
 		return;
 	}
 
-	FString UserText = InputBox->GetText().ToString().TrimStartAndEnd();
-	if (UserText.IsEmpty())
-	{
-		return;
-	}
-
-	InputBox->SetText(FText::GetEmpty());
-	AddChatMessage(TEXT("You"), UserText, FLinearColor(0.4f, 0.8f, 1.0f));
+	ChatLines.Add({FString::Printf(TEXT("[You]: %s"), *Message), FLinearColor(0.4f, 0.8f, 1.0f)});
+	InputBuffer.Empty();
+	StatusMessage = TEXT("Waiting for NPC response...");
 
 	if (BoundDialogue)
 	{
 		FDetectedUserEmotion DefaultEmotion;
 		DefaultEmotion.Emotion = EEmotionType::Neutral;
 		DefaultEmotion.Confidence = 0.0f;
-		BoundDialogue->SendUserMessage(UserText, DefaultEmotion);
-
-		if (StatusText.IsValid())
-		{
-			StatusText->SetText(FText::FromString(TEXT("Waiting for NPC response...")));
-		}
+		BoundDialogue->SendUserMessage(Message, DefaultEmotion);
 	}
 	else
 	{
-		AddChatMessage(TEXT("System"), TEXT("No NPC found. Make sure BP_NPC_Test is in the level with NPC Config assigned."), FLinearColor(1.0f, 0.3f, 0.3f));
+		ChatLines.Add({TEXT("[System]: No NPC found. Place BP_NPC_Test with NPC Config assigned."), FLinearColor(1.0f, 0.3f, 0.3f)});
 	}
-}
-
-void ANPCDialogueHUD::AddChatMessage(const FString& Sender, const FString& Message, FLinearColor Color)
-{
-	if (!ChatLog.IsValid())
-	{
-		return;
-	}
-
-	ChatLog->AddSlot()
-	.Padding(2.0f)
-	[
-		SNew(STextBlock)
-		.Text(FText::FromString(FString::Printf(TEXT("[%s]: %s"), *Sender, *Message)))
-		.ColorAndOpacity(FSlateColor(Color))
-		.AutoWrapText(true)
-	];
-
-	ChatLog->ScrollToEnd();
 }
 
 void ANPCDialogueHUD::OnNPCResponse(const FString& ResponseText, EEmotionType NPCEmotionHint,
 	bool bShouldGiveItem, FName ItemID)
 {
-	AddChatMessage(TEXT("NPC"), ResponseText, FLinearColor(0.2f, 1.0f, 0.4f));
-
-	if (StatusText.IsValid())
-	{
-		StatusText->SetText(FText::FromString(TEXT("Press T to toggle chat. Type a message and press Enter.")));
-	}
+	ChatLines.Add({FString::Printf(TEXT("[NPC]: %s"), *ResponseText), FLinearColor(0.2f, 1.0f, 0.4f)});
+	StatusMessage = TEXT("Type a message and press Enter.");
 
 	if (bShouldGiveItem)
 	{
-		AddChatMessage(TEXT("System"), FString::Printf(TEXT("* NPC gives you: %s *"), *ItemID.ToString()), FLinearColor(1.0f, 0.8f, 0.2f));
+		ChatLines.Add({FString::Printf(TEXT("[System]: * NPC gives you: %s *"), *ItemID.ToString()), FLinearColor(1.0f, 0.8f, 0.2f)});
 	}
 }

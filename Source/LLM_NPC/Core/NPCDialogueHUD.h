@@ -5,14 +5,10 @@
 #include "NPCDialogueHUD.generated.h"
 
 class UDialogueComponent;
-class SEditableTextBox;
-class SScrollBox;
-class STextBlock;
-class SVerticalBox;
 
 /**
- * HUD that manages the NPC dialogue chat overlay.
- * Adds Slate widgets directly to the game viewport (no UUserWidget needed).
+ * HUD that draws NPC dialogue chat using canvas DrawText.
+ * This approach uses AHUD::DrawHUD which is guaranteed visible.
  */
 UCLASS()
 class LLM_NPC_API ANPCDialogueHUD : public AHUD
@@ -23,26 +19,33 @@ public:
 	void ToggleDialogueInput();
 	bool IsDialogueVisible() const { return bDialogueVisible; }
 
+	/** Called from player controller when user submits text. */
+	void SubmitChatMessage(const FString& Message);
+
+	/** Get the current input text buffer. */
+	FString GetInputBuffer() const { return InputBuffer; }
+	void SetInputBuffer(const FString& Text) { InputBuffer = Text; }
+	void AppendToInput(const FString& Char);
+	void BackspaceInput();
+
 protected:
 	virtual void BeginPlay() override;
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void DrawHUD() override;
 
 private:
-	void BuildChatUI();
-	void SubmitText();
-	void AddChatMessage(const FString& Sender, const FString& Message, FLinearColor Color);
-
 	UFUNCTION()
 	void OnNPCResponse(const FString& ResponseText, EEmotionType NPCEmotionHint, bool bShouldGiveItem, FName ItemID);
 
-	TSharedPtr<SVerticalBox> ChatPanel;
-	TSharedPtr<SScrollBox> ChatLog;
-	TSharedPtr<SEditableTextBox> InputBox;
-	TSharedPtr<STextBlock> StatusText;
-	TSharedPtr<SWidget> RootWidget;
+	struct FChatLine
+	{
+		FString Text;
+		FLinearColor Color;
+	};
 
+	TArray<FChatLine> ChatLines;
+	FString InputBuffer;
+	FString StatusMessage = TEXT("Type a message and press Enter.");
 	bool bDialogueVisible = true;
-	bool bUIBuilt = false;
 
 	UPROPERTY()
 	TObjectPtr<UDialogueComponent> BoundDialogue;
