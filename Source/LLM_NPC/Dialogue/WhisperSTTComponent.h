@@ -2,12 +2,11 @@
 
 #include "CoreMinimal.h"
 #include "LLM_NPC/Core/NPCSubsystemComponent.h"
-#include "AudioMixerTypes.h"
 #include "HAL/CriticalSection.h"
 #include "WhisperSTTComponent.generated.h"
 
 class UAudioCaptureComponent;
-class USoundSubmix;
+class FWhisperSubmixListener;
 
 /** Delegate fired when a transcript is ready from speech-to-text. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTranscriptReady, const FString&, Transcript);
@@ -19,16 +18,17 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRecordingStateChanged, bool, bIsR
  * Speech-to-text component using OpenAI Whisper API (cloud).
  *
  * Hold V key to record, release to transcribe.
- * Uses UAudioCaptureComponent + ISubmixBufferListener to capture raw mic samples,
- * encodes as WAV, sends to OpenAI /v1/audio/transcriptions.
+ * Uses UAudioCaptureComponent to drive mic input, with a submix buffer listener
+ * to capture raw PCM samples. Encodes as WAV and sends to OpenAI Whisper API.
  */
 UCLASS(ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
-class LLM_NPC_API UWhisperSTTComponent : public UNPCSubsystemComponent, public ISubmixBufferListener
+class LLM_NPC_API UWhisperSTTComponent : public UNPCSubsystemComponent
 {
 	GENERATED_BODY()
 
 public:
 	UWhisperSTTComponent();
+	~UWhisperSTTComponent();
 
 	virtual void InitializeSubsystem() override;
 	virtual void ShutdownSubsystem() override;
@@ -58,9 +58,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "NPC|STT")
 	bool IsAPIKeyConfigured() const { return !OpenAIAPIKey.IsEmpty(); }
 
-	// ISubmixBufferListener interface
-	virtual void OnNewSubmixBuffer(const USoundSubmix* OwningSubmix, float* AudioData, int32 NumSamples, int32 NumChannels, const int32 InSampleRate, double AudioClock) override;
-
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -75,13 +72,16 @@ private:
 	/** Handle HTTP response from OpenAI. */
 	void OnWhisperResponseReceived(bool bWasSuccessful, int32 ResponseCode, const FString& ResponseBody);
 
-	/** Register/unregister this listener on the master submix. */
+	/** Register/unregister the submix listener on the audio device. */
 	void RegisterSubmixListener();
 	void UnregisterSubmixListener();
 
 	/** Audio capture component (drives mic input through the audio engine). */
 	UPROPERTY()
 	TObjectPtr<UAudioCaptureComponent> AudioCapture;
+
+	/** Submix buffer listener (non-UObject, defined in .cpp). */
+	TSharedPtr<FWhisperSubmixListener> SubmixListener;
 
 	/** Recorded audio samples — written from audio thread, read from game thread. */
 	TArray<float> RecordedSamples;
@@ -96,9 +96,9 @@ private:
 	/** OpenAI API key. */
 	FString OpenAIAPIKey;
 
-	/** Sample rate for recording. */
+	/** Sample rate for recording (Whisper target). */
 	int32 SampleRate = 16000;
 
-	/** Actual sample rate from the submix callback. */
+	/** Actual sample rate from the audio device. */
 	int32 DeviceSampleRate = 0;
 };

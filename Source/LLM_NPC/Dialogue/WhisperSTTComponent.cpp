@@ -1,7 +1,6 @@
 #include "WhisperSTTComponent.h"
 #include "AudioCaptureComponent.h"
 #include "AudioDevice.h"
-#include "AudioMixerDevice.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
@@ -9,10 +8,59 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
+/**
+ * Standalone submix buffer listener (non-UObject).
+ * Lives entirely in the .cpp so we can include AudioDevice.h without header bloat.
+ */
+class FWhisperSubmixListener : public ISubmixBufferListener
+{
+public:
+	TArray<float>* SamplesPtr = nullptr;
+	FCriticalSection* LockPtr = nullptr;
+	bool bRecording = false;
+	int32 CapturedSampleRate = 0;
+
+	virtual void OnNewSubmixBuffer(const USoundSubmix* OwningSubmix, float* AudioData, int32 NumSamples, int32 NumChannels, const int32 InSampleRate, double AudioClock) override
+	{
+		if (!bRecording || !SamplesPtr || !LockPtr || NumChannels <= 0 || NumSamples <= 0)
+		{
+			return;
+		}
+
+		if (CapturedSampleRate == 0)
+		{
+			CapturedSampleRate = InSampleRate;
+			UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Submix sample rate: %d Hz, channels: %d"), InSampleRate, NumChannels);
+		}
+
+		FScopeLock Lock(LockPtr);
+
+		// Mix down to mono and append
+		int32 NumFrames = NumSamples / NumChannels;
+		for (int32 Frame = 0; Frame < NumFrames; ++Frame)
+		{
+			float Sample = 0.0f;
+			for (int32 Ch = 0; Ch < NumChannels; ++Ch)
+			{
+				Sample += AudioData[Frame * NumChannels + Ch];
+			}
+			Sample /= NumChannels;
+			SamplesPtr->Add(Sample);
+		}
+	}
+};
+
+// ----------------------------------------------------------------------------
+
 UWhisperSTTComponent::UWhisperSTTComponent()
 {
 	PrimaryComponentTick.bCanEverTick = false;
 	SubsystemName = TEXT("VoiceInput");
+}
+
+UWhisperSTTComponent::~UWhisperSTTComponent()
+{
+	UnregisterSubmixListener();
 }
 
 void UWhisperSTTComponent::BeginPlay()
@@ -25,10 +73,8 @@ void UWhisperSTTComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (bIsRecording)
 	{
 		bIsRecording = false;
-		if (AudioCapture)
-		{
-			AudioCapture->Stop();
-		}
+		if (SubmixListener) SubmixListener->bRecording = false;
+		if (AudioCapture) AudioCapture->Stop();
 		UnregisterSubmixListener();
 	}
 	Super::EndPlay(EndPlayReason);
@@ -57,10 +103,8 @@ void UWhisperSTTComponent::ShutdownSubsystem()
 	if (bIsRecording)
 	{
 		bIsRecording = false;
-		if (AudioCapture)
-		{
-			AudioCapture->Stop();
-		}
+		if (SubmixListener) SubmixListener->bRecording = false;
+		if (AudioCapture) AudioCapture->Stop();
 		UnregisterSubmixListener();
 	}
 	RecordedSamples.Empty();
@@ -79,60 +123,37 @@ void UWhisperSTTComponent::RegisterSubmixListener()
 		return;
 	}
 
+	if (!SubmixListener.IsValid())
+	{
+		SubmixListener = MakeShared<FWhisperSubmixListener>();
+		SubmixListener->SamplesPtr = &RecordedSamples;
+		SubmixListener->LockPtr = &SamplesLock;
+	}
+
 	if (FAudioDevice* AudioDevice = GEngine->GetMainAudioDeviceRaw())
 	{
-		AudioDevice->RegisterSubmixBufferListener(this);
+		AudioDevice->RegisterSubmixBufferListener(SubmixListener.Get());
 		bListenerRegistered = true;
 		UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Registered submix buffer listener."));
 	}
 	else
 	{
-		UE_LOG(LogTemp, Error, TEXT("WhisperSTT: No audio device available for submix listener."));
+		UE_LOG(LogTemp, Error, TEXT("WhisperSTT: No audio device available."));
 	}
 }
 
 void UWhisperSTTComponent::UnregisterSubmixListener()
 {
-	if (!bListenerRegistered)
+	if (!bListenerRegistered || !SubmixListener.IsValid())
 	{
 		return;
 	}
 
 	if (FAudioDevice* AudioDevice = GEngine->GetMainAudioDeviceRaw())
 	{
-		AudioDevice->UnregisterSubmixBufferListener(this);
+		AudioDevice->UnregisterSubmixBufferListener(SubmixListener.Get());
 	}
 	bListenerRegistered = false;
-}
-
-void UWhisperSTTComponent::OnNewSubmixBuffer(const USoundSubmix* OwningSubmix, float* AudioData, int32 NumSamples, int32 NumChannels, const int32 InSampleRate, double AudioClock)
-{
-	if (!bIsRecording || NumChannels <= 0 || NumSamples <= 0)
-	{
-		return;
-	}
-
-	// Capture actual sample rate on first callback
-	if (DeviceSampleRate == 0)
-	{
-		DeviceSampleRate = InSampleRate;
-		UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Submix sample rate: %d Hz, channels: %d"), InSampleRate, NumChannels);
-	}
-
-	FScopeLock Lock(&SamplesLock);
-
-	// Mix down to mono and append
-	int32 NumFrames = NumSamples / NumChannels;
-	for (int32 Frame = 0; Frame < NumFrames; ++Frame)
-	{
-		float Sample = 0.0f;
-		for (int32 Ch = 0; Ch < NumChannels; ++Ch)
-		{
-			Sample += AudioData[Frame * NumChannels + Ch];
-		}
-		Sample /= NumChannels;
-		RecordedSamples.Add(Sample);
-	}
 }
 
 void UWhisperSTTComponent::StartRecording()
@@ -147,7 +168,6 @@ void UWhisperSTTComponent::StartRecording()
 		RecordedSamples.Empty();
 		RecordedSamples.Reserve(48000 * 30); // Pre-allocate for up to 30 seconds at 48kHz
 	}
-	DeviceSampleRate = 0;
 
 	// Create audio capture component if not exists
 	if (!AudioCapture && GetOwner())
@@ -166,8 +186,13 @@ void UWhisperSTTComponent::StartRecording()
 		return;
 	}
 
-	// Register submix listener to capture raw audio data
+	// Register submix listener to intercept raw audio samples
 	RegisterSubmixListener();
+	if (SubmixListener)
+	{
+		SubmixListener->bRecording = true;
+		SubmixListener->CapturedSampleRate = 0;
+	}
 
 	// Start the audio capture — this routes mic audio through the engine
 	AudioCapture->Start();
@@ -185,6 +210,7 @@ void UWhisperSTTComponent::StopRecordingAndTranscribe()
 	}
 
 	bIsRecording = false;
+	if (SubmixListener) SubmixListener->bRecording = false;
 	OnRecordingStateChanged.Broadcast(false);
 
 	if (AudioCapture)
@@ -193,6 +219,13 @@ void UWhisperSTTComponent::StopRecordingAndTranscribe()
 	}
 	UnregisterSubmixListener();
 
+	// Get captured sample rate
+	int32 CaptureRate = 48000;
+	if (SubmixListener && SubmixListener->CapturedSampleRate > 0)
+	{
+		CaptureRate = SubmixListener->CapturedSampleRate;
+	}
+
 	// Copy samples under lock
 	TArray<float> CapturedSamples;
 	{
@@ -200,8 +233,6 @@ void UWhisperSTTComponent::StopRecordingAndTranscribe()
 		CapturedSamples = MoveTemp(RecordedSamples);
 		RecordedSamples.Empty();
 	}
-
-	int32 CaptureRate = DeviceSampleRate > 0 ? DeviceSampleRate : 48000;
 
 	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Recording stopped. Captured %d samples (%.1f seconds at %d Hz)."),
 		CapturedSamples.Num(),
