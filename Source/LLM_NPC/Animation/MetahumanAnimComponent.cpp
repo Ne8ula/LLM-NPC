@@ -118,18 +118,20 @@ void UMetahumanAnimComponent::InitializeSubsystem()
 				UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Face mesh '%s' has %d total morph targets available"),
 					*CachedSkeletalMesh->GetName(), MorphTargets.Num());
 
-				// Log first 20 morph target names for debugging
-				for (int32 i = 0; i < FMath::Min(MorphTargets.Num(), 20); ++i)
+				// Log morph targets containing key facial feature keywords
+				TArray<FString> Keywords = {TEXT("smile"), TEXT("frown"), TEXT("mouth"), TEXT("eye_s"), TEXT("eye_w"), TEXT("jaw"), TEXT("nose"), TEXT("cheek"), TEXT("pucker")};
+				for (const UMorphTarget* MT : MorphTargets)
 				{
-					if (MorphTargets[i])
+					if (!MT) continue;
+					FString Name = MT->GetName();
+					for (const FString& Keyword : Keywords)
 					{
-						UE_LOG(LogTemp, Log, TEXT("  MorphTarget[%d]: %s"), i, *MorphTargets[i]->GetName());
+						if (Name.Contains(Keyword, ESearchCase::IgnoreCase))
+						{
+							UE_LOG(LogTemp, Log, TEXT("  FacialMorph: %s"), *Name);
+							break;
+						}
 					}
-				}
-
-				if (MorphTargets.Num() > 20)
-				{
-					UE_LOG(LogTemp, Log, TEXT("  ... and %d more morph targets"), MorphTargets.Num() - 20);
 				}
 			}
 			else
