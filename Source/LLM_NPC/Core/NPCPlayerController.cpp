@@ -1,6 +1,9 @@
 #include "NPCPlayerController.h"
 #include "NPCDialogueHUD.h"
+#include "NPCCharacter.h"
+#include "LLM_NPC/Dialogue/WhisperSTTComponent.h"
 #include "GameFramework/PlayerInput.h"
+#include "Kismet/GameplayStatics.h"
 
 ANPCPlayerController::ANPCPlayerController()
 {
@@ -54,6 +57,40 @@ void ANPCPlayerController::Tick(float DeltaTime)
 		HUD->ToggleDialogueInput();
 		if (GetPawn()) GetPawn()->EnableInput(this);
 	}
+
+	// V key push-to-talk: hold to record, release to transcribe
+	bool bVDown = IsInputKeyDown(EKeys::V);
+	if (bVDown && !bVKeyWasDown)
+	{
+		// V pressed — start recording
+		TArray<AActor*> NPCActors;
+		UGameplayStatics::GetAllActorsOfClass(GetWorld(), ANPCCharacter::StaticClass(), NPCActors);
+		for (AActor* Actor : NPCActors)
+		{
+			if (UWhisperSTTComponent* STT = Actor->FindComponentByClass<UWhisperSTTComponent>())
+			{
+				STT->StartRecording();
+				HUD->SetStatus(TEXT("Recording... release V to send."));
+				break;
+			}
+		}
+	}
+	else if (!bVDown && bVKeyWasDown)
+	{
+		// V released — stop recording and transcribe
+		TArray<AActor*> NPCActors;
+		UGameplayStatics::GetAllActorsOfClass(GetWorld(), ANPCCharacter::StaticClass(), NPCActors);
+		for (AActor* Actor : NPCActors)
+		{
+			if (UWhisperSTTComponent* STT = Actor->FindComponentByClass<UWhisperSTTComponent>())
+			{
+				STT->StopRecordingAndTranscribe();
+				HUD->SetStatus(TEXT("Transcribing..."));
+				break;
+			}
+		}
+	}
+	bVKeyWasDown = bVDown;
 
 	// When dialogue is visible, disable pawn and capture keyboard for typing
 	if (HUD->IsDialogueVisible())

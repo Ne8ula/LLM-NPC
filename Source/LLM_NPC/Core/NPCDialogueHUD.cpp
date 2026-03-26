@@ -1,6 +1,7 @@
 #include "NPCDialogueHUD.h"
 #include "NPCCharacter.h"
 #include "LLM_NPC/Dialogue/DialogueComponent.h"
+#include "LLM_NPC/Dialogue/WhisperSTTComponent.h"
 #include "LLM_NPC/Core/NPCTypes.h"
 #include "Engine/Canvas.h"
 #include "Engine/Font.h"
@@ -21,13 +22,20 @@ void ANPCDialogueHUD::BeginPlay()
 			{
 				BoundDialogue = NPC->DialogueComponent;
 				BoundDialogue->OnDialogueResponseReceived.AddDynamic(this, &ANPCDialogueHUD::OnNPCResponse);
-				UE_LOG(LogTemp, Log, TEXT("NPCDialogueHUD: Bound to NPC"));
+				UE_LOG(LogTemp, Log, TEXT("NPCDialogueHUD: Bound to NPC DialogueComponent"));
+
+				// Also bind to voice input
+				if (UWhisperSTTComponent* STT = NPC->FindComponentByClass<UWhisperSTTComponent>())
+				{
+					STT->OnTranscriptReady.AddDynamic(this, &ANPCDialogueHUD::OnVoiceTranscript);
+					UE_LOG(LogTemp, Log, TEXT("NPCDialogueHUD: Bound to WhisperSTT for voice input"));
+				}
 				break;
 			}
 		}
 	}
 
-	ChatLines.Add({TEXT("[System]: Chat ready. Type a message and press Enter to talk."), FLinearColor(0.5f, 0.5f, 0.5f)});
+	ChatLines.Add({TEXT("[System]: Chat ready. Type or hold V to speak."), FLinearColor(0.5f, 0.5f, 0.5f)});
 }
 
 void ANPCDialogueHUD::DrawHUD()
@@ -170,10 +178,17 @@ void ANPCDialogueHUD::OnNPCResponse(const FString& ResponseText, EEmotionType NP
 	bool bShouldGiveItem, FName ItemID)
 {
 	ChatLines.Add({FString::Printf(TEXT("[NPC]: %s"), *ResponseText), FLinearColor(0.2f, 1.0f, 0.4f)});
-	StatusMessage = TEXT("Type a message and press Enter.");
+	StatusMessage = TEXT("Type or hold V to speak.");
 
 	if (bShouldGiveItem)
 	{
 		ChatLines.Add({FString::Printf(TEXT("[System]: * NPC gives you: %s *"), *ItemID.ToString()), FLinearColor(1.0f, 0.8f, 0.2f)});
 	}
+}
+
+void ANPCDialogueHUD::OnVoiceTranscript(const FString& Transcript)
+{
+	// Voice transcript received — submit it as a chat message
+	UE_LOG(LogTemp, Log, TEXT("NPCDialogueHUD: Voice transcript: %s"), *Transcript);
+	SubmitChatMessage(Transcript);
 }

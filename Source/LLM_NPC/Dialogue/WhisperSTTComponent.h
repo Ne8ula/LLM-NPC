@@ -2,8 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "LLM_NPC/Core/NPCSubsystemComponent.h"
-#include "HAL/Runnable.h"
-#include "HAL/RunnableThread.h"
 #include "WhisperSTTComponent.generated.h"
 
 class UAudioCaptureComponent;
@@ -11,71 +9,14 @@ class UAudioCaptureComponent;
 /** Delegate fired when a transcript is ready from speech-to-text. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTranscriptReady, const FString&, Transcript);
 
-/** Delegate fired when voice activity is detected (started/stopped speaking). */
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnVoiceActivityChanged, bool, bIsSpeaking);
+/** Delegate fired when recording state changes. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRecordingStateChanged, bool, bIsRecording);
 
 /**
- * Background worker thread for whisper.cpp inference.
- * Runs STT on captured audio buffers without blocking the game thread.
- */
-class LLM_NPC_API FWhisperInferenceWorker : public FRunnable
-{
-public:
-	FWhisperInferenceWorker();
-	virtual ~FWhisperInferenceWorker();
-
-	// --- FRunnable Interface ---
-	virtual bool Init() override;
-	virtual uint32 Run() override;
-	virtual void Stop() override;
-	virtual void Exit() override;
-
-	/** Load the whisper model from disk. Returns true on success. */
-	bool LoadModel(const FString& ModelPath, const FString& Language);
-
-	/** Queue an audio buffer for transcription. */
-	void QueueAudioBuffer(TArray<float>&& AudioData, int32 SampleRate);
-
-	/** Check if a transcript result is available. Thread-safe. */
-	bool HasResult() const;
-
-	/** Retrieve and clear the latest transcript result. Thread-safe. */
-	FString ConsumeResult();
-
-	/** Whether the worker is currently processing audio. */
-	bool IsProcessing() const;
-
-private:
-	/** Opaque pointer to whisper context. */
-	void* WhisperContext = nullptr;
-
-	/** Queued audio data for processing. */
-	TArray<float> PendingAudioBuffer;
-	int32 PendingSampleRate = 16000;
-
-	/** Result string from latest transcription. */
-	FString TranscriptResult;
-
-	/** Synchronization. */
-	mutable FCriticalSection DataMutex;
-	FEvent* WorkAvailableEvent = nullptr;
-
-	/** Thread control. */
-	TAtomic<bool> bShouldStop{false};
-	TAtomic<bool> bHasPendingWork{false};
-	TAtomic<bool> bHasResult{false};
-	TAtomic<bool> bIsProcessing{false};
-
-	/** Model configuration. */
-	FString ModelLanguage;
-};
-
-/**
- * Speech-to-text component using whisper.cpp for local inference.
+ * Speech-to-text component using OpenAI Whisper API (cloud).
  *
- * Captures microphone audio via UAudioCaptureComponent, performs energy-based
- * Voice Activity Detection (VAD), and sends detected speech segments to a
- * background worker thread for transcription.
+ * Hold V key to record, release to transcribe.
+ * Captures microphone audio, encodes as WAV, sends to OpenAI /v1/audio/transcriptions.
  */
 UCLASS(ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
 class LLM_NPC_API UWhisperSTTComponent : public UNPCSubsystemComponent
@@ -85,104 +26,63 @@ class LLM_NPC_API UWhisperSTTComponent : public UNPCSubsystemComponent
 public:
 	UWhisperSTTComponent();
 
-	// --- UNPCSubsystemComponent Interface ---
 	virtual void InitializeSubsystem() override;
 	virtual void ShutdownSubsystem() override;
 	virtual bool IsSubsystemAvailable() const override;
-
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
-	/** Start listening for speech input. */
+	/** Start recording from microphone. */
 	UFUNCTION(BlueprintCallable, Category = "NPC|STT")
-	void StartListening();
+	void StartRecording();
 
-	/** Stop listening for speech input. */
+	/** Stop recording and send to OpenAI Whisper API for transcription. */
 	UFUNCTION(BlueprintCallable, Category = "NPC|STT")
-	void StopListening();
+	void StopRecordingAndTranscribe();
 
-	/** Whether the component is actively listening. */
+	/** Whether currently recording. */
 	UFUNCTION(BlueprintCallable, Category = "NPC|STT")
-	bool IsListening() const { return bIsListening; }
+	bool IsRecording() const { return bIsRecording; }
 
-	/** Fired when a transcription is complete. */
+	/** Fired when transcription is complete. */
 	UPROPERTY(BlueprintAssignable, Category = "NPC|STT")
 	FOnTranscriptReady OnTranscriptReady;
 
-	/** Fired when voice activity changes (started/stopped speaking). */
+	/** Fired when recording state changes. */
 	UPROPERTY(BlueprintAssignable, Category = "NPC|STT")
-	FOnVoiceActivityChanged OnVoiceActivityChanged;
+	FOnRecordingStateChanged OnRecordingStateChanged;
 
-	// --- Configuration ---
-
-	/** Path to the whisper.cpp model file (relative to Content directory). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|STT|Config")
-	FString WhisperModelPath = TEXT("Models/ggml-base.en.bin");
-
-	/** Language code for transcription (e.g., "en" for English). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|STT|Config")
-	FString Language = TEXT("en");
-
-	/** Audio sample rate in Hz. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|STT|Config")
-	int32 SampleRate = 16000;
-
-	/** Energy threshold for Voice Activity Detection. Audio below this is considered silence. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|STT|Config", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float VADEnergyThreshold = 0.01f;
-
-	/** Duration of silence (seconds) required to trigger end-of-speech. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|STT|Config", meta = (ClampMin = "0.1", ClampMax = "5.0"))
-	float SilenceDuration = 1.5f;
-
-	/** Minimum speech duration (seconds) to avoid processing noise bursts. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|STT|Config", meta = (ClampMin = "0.1", ClampMax = "5.0"))
-	float MinSpeechDuration = 0.3f;
+	/** OpenAI API key — loaded from OPENAI_API_KEY environment variable. */
+	UFUNCTION(BlueprintCallable, Category = "NPC|STT")
+	bool IsAPIKeyConfigured() const { return !OpenAIAPIKey.IsEmpty(); }
 
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
-	/** Callback for audio capture data. */
-	void OnAudioGenerate(const float* InAudio, int32 NumSamples);
+	/** Encode recorded audio as WAV bytes for upload. */
+	TArray<uint8> EncodeAsWAV(const TArray<float>& AudioData, int32 InSampleRate, int32 NumChannels) const;
 
-	/** Process VAD on accumulated audio samples. */
-	void ProcessVAD();
+	/** Send WAV data to OpenAI Whisper API. */
+	void SendToWhisperAPI(const TArray<uint8>& WAVData);
 
-	/** Calculate RMS energy of an audio buffer. */
-	float CalculateRMSEnergy(const TArray<float>& AudioBuffer) const;
+	/** Handle HTTP response from OpenAI. */
+	void OnWhisperResponseReceived(bool bWasSuccessful, int32 ResponseCode, const FString& ResponseBody);
 
-	/** Send accumulated speech buffer to the inference worker. */
-	void SubmitSpeechForTranscription();
-
-	/** Audio capture component for microphone input. */
+	/** Audio capture component. */
 	UPROPERTY()
-	TObjectPtr<UAudioCaptureComponent> AudioCaptureComponent;
+	TObjectPtr<UAudioCaptureComponent> AudioCapture;
 
-	/** Background inference worker. */
-	TUniquePtr<FWhisperInferenceWorker> InferenceWorker;
+	/** Recorded audio samples. */
+	TArray<float> RecordedSamples;
 
-	/** Thread running the inference worker. */
-	TUniquePtr<FRunnableThread> InferenceThread;
+	/** Recording state. */
+	bool bIsRecording = false;
+	bool bMicAvailable = false;
 
-	/** Accumulated audio samples for current speech segment. */
-	TArray<float> SpeechBuffer;
+	/** OpenAI API key. */
+	FString OpenAIAPIKey;
 
-	/** Small rolling buffer for VAD energy calculation. */
-	TArray<float> VADBuffer;
-
-	/** Whether we are currently listening. */
-	bool bIsListening = false;
-
-	/** Whether voice activity is currently detected. */
-	bool bIsSpeaking = false;
-
-	/** Accumulator for silence duration. */
-	float SilenceAccumulator = 0.0f;
-
-	/** Accumulator for speech duration. */
-	float SpeechAccumulator = 0.0f;
-
-	/** Whether the microphone was successfully initialized. */
-	bool bMicrophoneAvailable = false;
+	/** Sample rate for recording. */
+	int32 SampleRate = 16000;
 };

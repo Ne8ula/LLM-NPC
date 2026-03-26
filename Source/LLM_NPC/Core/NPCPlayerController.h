@@ -22,4 +22,5 @@ private:
 
 	bool bTKeyWasDown = false;
 	bool bDialogueVisible = false;
+	bool bVKeyWasDown = false;
 };

@@ -1,211 +1,16 @@
 #include "WhisperSTTComponent.h"
 #include "AudioCaptureComponent.h"
-#include "Components/AudioComponent.h"
-#include "Engine/World.h"
-
-#if WITH_WHISPER
-#include "whisper.h"
-#endif
-
-// =============================================================================
-// FWhisperInferenceWorker
-// =============================================================================
-
-FWhisperInferenceWorker::FWhisperInferenceWorker()
-{
-	WorkAvailableEvent = FPlatformProcess::GetSynchEventFromPool(false);
-}
-
-FWhisperInferenceWorker::~FWhisperInferenceWorker()
-{
-#if WITH_WHISPER
-	if (WhisperContext)
-	{
-		whisper_free(static_cast<whisper_context*>(WhisperContext));
-		WhisperContext = nullptr;
-	}
-#endif
-
-	if (WorkAvailableEvent)
-	{
-		FPlatformProcess::ReturnSynchEventToPool(WorkAvailableEvent);
-		WorkAvailableEvent = nullptr;
-	}
-}
-
-bool FWhisperInferenceWorker::Init()
-{
-	return WhisperContext != nullptr;
-}
-
-uint32 FWhisperInferenceWorker::Run()
-{
-	while (!bShouldStop)
-	{
-		// Wait for work to become available
-		WorkAvailableEvent->Wait();
-
-		if (bShouldStop)
-		{
-			break;
-		}
-
-		if (!bHasPendingWork)
-		{
-			continue;
-		}
-
-		bIsProcessing = true;
-
-		// Grab the audio data
-		TArray<float> AudioData;
-		int32 CurrentSampleRate;
-		{
-			FScopeLock Lock(&DataMutex);
-			AudioData = MoveTemp(PendingAudioBuffer);
-			CurrentSampleRate = PendingSampleRate;
-			bHasPendingWork = false;
-		}
-
-		if (AudioData.Num() == 0)
-		{
-			bIsProcessing = false;
-			continue;
-		}
-
-#if WITH_WHISPER
-		// Configure whisper parameters
-		whisper_full_params Params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
-		Params.language = TCHAR_TO_UTF8(*ModelLanguage);
-		Params.n_threads = FMath::Max(1, FPlatformMisc::NumberOfCoresIncludingHyperthreads() / 2);
-		Params.print_realtime = false;
-		Params.print_progress = false;
-		Params.print_timestamps = false;
-		Params.single_segment = false;
-		Params.no_context = true;
-
-		// Run inference
-		int Result = whisper_full(
-			static_cast<whisper_context*>(WhisperContext),
-			Params,
-			AudioData.GetData(),
-			AudioData.Num()
-		);
-
-		if (Result == 0)
-		{
-			FString FullTranscript;
-			int32 NumSegments = whisper_full_n_segments(static_cast<whisper_context*>(WhisperContext));
-			for (int32 i = 0; i < NumSegments; ++i)
-			{
-				const char* SegmentText = whisper_full_get_segment_text(static_cast<whisper_context*>(WhisperContext), i);
-				if (SegmentText)
-				{
-					FullTranscript += UTF8_TO_TCHAR(SegmentText);
-				}
-			}
-
-			FullTranscript.TrimStartAndEndInline();
-
-			if (!FullTranscript.IsEmpty())
-			{
-				FScopeLock Lock(&DataMutex);
-				TranscriptResult = FullTranscript;
-				bHasResult = true;
-			}
-		}
-		else
-		{
-			UE_LOG(LogTemp, Error, TEXT("WhisperInferenceWorker: Transcription failed with code %d"), Result);
-		}
-#else
-		UE_LOG(LogTemp, Warning, TEXT("WhisperInferenceWorker: whisper.cpp not available (WITH_WHISPER=0)."));
-#endif
-
-		bIsProcessing = false;
-	}
-
-	return 0;
-}
-
-void FWhisperInferenceWorker::Stop()
-{
-	bShouldStop = true;
-	if (WorkAvailableEvent)
-	{
-		WorkAvailableEvent->Trigger();
-	}
-}
-
-void FWhisperInferenceWorker::Exit()
-{
-}
-
-bool FWhisperInferenceWorker::LoadModel(const FString& ModelPath, const FString& InLanguage)
-{
-#if WITH_WHISPER
-	ModelLanguage = InLanguage;
-
-	FString FullPath = FPaths::Combine(FPaths::ProjectContentDir(), ModelPath);
-	if (!FPaths::FileExists(FullPath))
-	{
-		UE_LOG(LogTemp, Error, TEXT("WhisperInferenceWorker: Model file not found: %s"), *FullPath);
-		return false;
-	}
-
-	whisper_context_params ContextParams = whisper_context_default_params();
-	WhisperContext = whisper_init_from_file_with_params(TCHAR_TO_UTF8(*FullPath), ContextParams);
-
-	if (!WhisperContext)
-	{
-		UE_LOG(LogTemp, Error, TEXT("WhisperInferenceWorker: Failed to load whisper model from: %s"), *FullPath);
-		return false;
-	}
-
-	UE_LOG(LogTemp, Log, TEXT("WhisperInferenceWorker: Model loaded successfully from: %s"), *FullPath);
-	return true;
-#else
-	UE_LOG(LogTemp, Warning, TEXT("WhisperInferenceWorker: whisper.cpp not available (WITH_WHISPER=0)."));
-	return false;
-#endif
-}
-
-void FWhisperInferenceWorker::QueueAudioBuffer(TArray<float>&& AudioData, int32 InSampleRate)
-{
-	FScopeLock Lock(&DataMutex);
-	PendingAudioBuffer = MoveTemp(AudioData);
-	PendingSampleRate = InSampleRate;
-	bHasPendingWork = true;
-	WorkAvailableEvent->Trigger();
-}
-
-bool FWhisperInferenceWorker::HasResult() const
-{
-	return bHasResult;
-}
-
-FString FWhisperInferenceWorker::ConsumeResult()
-{
-	FScopeLock Lock(&DataMutex);
-	FString Result = MoveTemp(TranscriptResult);
-	bHasResult = false;
-	return Result;
-}
-
-bool FWhisperInferenceWorker::IsProcessing() const
-{
-	return bIsProcessing;
-}
-
-// =============================================================================
-// UWhisperSTTComponent
-// =============================================================================
+#include "HttpModule.h"
+#include "Interfaces/IHttpRequest.h"
+#include "Interfaces/IHttpResponse.h"
+#include "Dom/JsonObject.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 
 UWhisperSTTComponent::UWhisperSTTComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
-	PrimaryComponentTick.bStartWithTickEnabled = false;
-	SubsystemName = TEXT("WhisperSTT");
+	SubsystemName = TEXT("VoiceInput");
 }
 
 void UWhisperSTTComponent::BeginPlay()
@@ -215,8 +20,10 @@ void UWhisperSTTComponent::BeginPlay()
 
 void UWhisperSTTComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	StopListening();
-	ShutdownSubsystem();
+	if (bIsRecording)
+	{
+		bIsRecording = false;
+	}
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -224,287 +31,232 @@ void UWhisperSTTComponent::InitializeSubsystem()
 {
 	Super::InitializeSubsystem();
 
-	// Create the audio capture component
-	AActor* Owner = GetOwner();
-	if (!Owner)
+	// Load OpenAI API key from environment
+	OpenAIAPIKey = FPlatformMisc::GetEnvironmentVariable(TEXT("OPENAI_API_KEY"));
+	if (OpenAIAPIKey.IsEmpty())
 	{
-		UE_LOG(LogTemp, Error, TEXT("WhisperSTTComponent: No owner actor."));
+		UE_LOG(LogTemp, Warning, TEXT("WhisperSTT: No OPENAI_API_KEY environment variable found. Voice input disabled."));
 		bIsAvailable = false;
 		return;
 	}
 
-	AudioCaptureComponent = NewObject<UAudioCaptureComponent>(Owner);
-	if (AudioCaptureComponent)
-	{
-		AudioCaptureComponent->RegisterComponent();
-		bMicrophoneAvailable = true;
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("WhisperSTTComponent: Failed to create AudioCaptureComponent. Microphone not available."));
-		bMicrophoneAvailable = false;
-		bIsAvailable = false;
-		return;
-	}
-
-	// Initialize the inference worker and load the model
-	InferenceWorker = MakeUnique<FWhisperInferenceWorker>();
-	bool bModelLoaded = InferenceWorker->LoadModel(WhisperModelPath, Language);
-
-	if (!bModelLoaded)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("WhisperSTTComponent: Failed to load whisper model. STT will not be available."));
-		bIsAvailable = false;
-		return;
-	}
-
-	// Start the inference thread
-	InferenceThread = TUniquePtr<FRunnableThread>(
-		FRunnableThread::Create(
-			InferenceWorker.Get(),
-			TEXT("WhisperInferenceThread"),
-			0,
-			TPri_BelowNormal
-		)
-	);
-
-	if (!InferenceThread)
-	{
-		UE_LOG(LogTemp, Error, TEXT("WhisperSTTComponent: Failed to create inference thread."));
-		bIsAvailable = false;
-		return;
-	}
-
+	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: OpenAI API key loaded. Voice input available."));
+	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Hold V to record, release to transcribe."));
 	bIsAvailable = true;
-	bIsInitialized = true;
-	UE_LOG(LogTemp, Log, TEXT("WhisperSTTComponent: Initialized successfully."));
+	bMicAvailable = true;
 }
 
 void UWhisperSTTComponent::ShutdownSubsystem()
 {
-	StopListening();
-
-	// Shut down the inference thread
-	if (InferenceWorker)
-	{
-		InferenceWorker->Stop();
-	}
-
-	if (InferenceThread)
-	{
-		InferenceThread->WaitForCompletion();
-		InferenceThread.Reset();
-	}
-
-	InferenceWorker.Reset();
-
-	if (AudioCaptureComponent)
-	{
-		AudioCaptureComponent->DestroyComponent();
-		AudioCaptureComponent = nullptr;
-	}
-
-	bMicrophoneAvailable = false;
-	bIsAvailable = false;
-	bIsInitialized = false;
-
+	bIsRecording = false;
+	RecordedSamples.Empty();
 	Super::ShutdownSubsystem();
 }
 
 bool UWhisperSTTComponent::IsSubsystemAvailable() const
 {
-	return bIsAvailable && bMicrophoneAvailable && InferenceWorker.IsValid();
-}
-
-void UWhisperSTTComponent::StartListening()
-{
-	if (!IsSubsystemAvailable())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("WhisperSTTComponent: Cannot start listening - subsystem not available."));
-		return;
-	}
-
-	if (bIsListening)
-	{
-		return;
-	}
-
-	// Start audio capture
-	if (AudioCaptureComponent)
-	{
-		AudioCaptureComponent->Start();
-	}
-
-	SpeechBuffer.Empty();
-	VADBuffer.Empty();
-	SilenceAccumulator = 0.0f;
-	SpeechAccumulator = 0.0f;
-	bIsSpeaking = false;
-	bIsListening = true;
-
-	SetComponentTickEnabled(true);
-
-	UE_LOG(LogTemp, Log, TEXT("WhisperSTTComponent: Started listening."));
-}
-
-void UWhisperSTTComponent::StopListening()
-{
-	if (!bIsListening)
-	{
-		return;
-	}
-
-	// If we were speaking, submit whatever we have
-	if (bIsSpeaking && SpeechBuffer.Num() > 0)
-	{
-		SubmitSpeechForTranscription();
-	}
-
-	if (AudioCaptureComponent)
-	{
-		AudioCaptureComponent->Stop();
-	}
-
-	bIsListening = false;
-	bIsSpeaking = false;
-	SetComponentTickEnabled(false);
-
-	UE_LOG(LogTemp, Log, TEXT("WhisperSTTComponent: Stopped listening."));
+	return bIsAvailable && !OpenAIAPIKey.IsEmpty();
 }
 
 void UWhisperSTTComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+}
 
-	if (!bIsListening)
+void UWhisperSTTComponent::StartRecording()
+{
+	if (bIsRecording || !bIsAvailable)
 	{
 		return;
 	}
 
-	// Check for completed transcription results
-	if (InferenceWorker && InferenceWorker->HasResult())
+	RecordedSamples.Empty();
+	bIsRecording = true;
+	OnRecordingStateChanged.Broadcast(true);
+
+	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Recording started..."));
+
+	// Create audio capture if not exists
+	if (!AudioCapture && GetOwner())
 	{
-		FString Transcript = InferenceWorker->ConsumeResult();
+		AudioCapture = NewObject<UAudioCaptureComponent>(GetOwner());
+		if (AudioCapture)
+		{
+			AudioCapture->RegisterComponent();
+		}
+	}
+
+	if (AudioCapture)
+	{
+		AudioCapture->Start();
+	}
+}
+
+void UWhisperSTTComponent::StopRecordingAndTranscribe()
+{
+	if (!bIsRecording)
+	{
+		return;
+	}
+
+	bIsRecording = false;
+	OnRecordingStateChanged.Broadcast(false);
+
+	if (AudioCapture)
+	{
+		AudioCapture->Stop();
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Recording stopped. Captured %d samples."), RecordedSamples.Num());
+
+	if (RecordedSamples.Num() < SampleRate / 2)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WhisperSTT: Recording too short, ignoring."));
+		return;
+	}
+
+	// Encode as WAV and send to API
+	TArray<uint8> WAVData = EncodeAsWAV(RecordedSamples, SampleRate, 1);
+	SendToWhisperAPI(WAVData);
+}
+
+TArray<uint8> UWhisperSTTComponent::EncodeAsWAV(const TArray<float>& AudioData, int32 InSampleRate, int32 NumChannels) const
+{
+	TArray<uint8> WAVBytes;
+
+	const int32 BitsPerSample = 16;
+	const int32 BytesPerSample = BitsPerSample / 8;
+	const int32 DataSize = AudioData.Num() * BytesPerSample;
+	const int32 FileSize = 44 + DataSize;
+
+	WAVBytes.SetNumUninitialized(FileSize);
+	uint8* Ptr = WAVBytes.GetData();
+
+	// RIFF header
+	FMemory::Memcpy(Ptr, "RIFF", 4); Ptr += 4;
+	int32 ChunkSize = FileSize - 8;
+	FMemory::Memcpy(Ptr, &ChunkSize, 4); Ptr += 4;
+	FMemory::Memcpy(Ptr, "WAVE", 4); Ptr += 4;
+
+	// fmt sub-chunk
+	FMemory::Memcpy(Ptr, "fmt ", 4); Ptr += 4;
+	int32 SubChunk1Size = 16;
+	FMemory::Memcpy(Ptr, &SubChunk1Size, 4); Ptr += 4;
+	int16 AudioFormat = 1;
+	FMemory::Memcpy(Ptr, &AudioFormat, 2); Ptr += 2;
+	int16 Channels = (int16)NumChannels;
+	FMemory::Memcpy(Ptr, &Channels, 2); Ptr += 2;
+	FMemory::Memcpy(Ptr, &InSampleRate, 4); Ptr += 4;
+	int32 ByteRate = InSampleRate * NumChannels * BytesPerSample;
+	FMemory::Memcpy(Ptr, &ByteRate, 4); Ptr += 4;
+	int16 BlockAlign = NumChannels * BytesPerSample;
+	FMemory::Memcpy(Ptr, &BlockAlign, 2); Ptr += 2;
+	int16 BPS = BitsPerSample;
+	FMemory::Memcpy(Ptr, &BPS, 2); Ptr += 2;
+
+	// data sub-chunk
+	FMemory::Memcpy(Ptr, "data", 4); Ptr += 4;
+	FMemory::Memcpy(Ptr, &DataSize, 4); Ptr += 4;
+
+	// Convert float to 16-bit PCM
+	for (int32 i = 0; i < AudioData.Num(); ++i)
+	{
+		float Sample = FMath::Clamp(AudioData[i], -1.0f, 1.0f);
+		int16 PCMSample = (int16)(Sample * 32767.0f);
+		FMemory::Memcpy(Ptr, &PCMSample, 2);
+		Ptr += 2;
+	}
+
+	return WAVBytes;
+}
+
+void UWhisperSTTComponent::SendToWhisperAPI(const TArray<uint8>& WAVData)
+{
+	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Sending %d bytes to OpenAI Whisper API..."), WAVData.Num());
+
+	TSharedRef<IHttpRequest, ESPMode::ThreadSafe> Request = FHttpModule::Get().CreateRequest();
+	Request->SetURL(TEXT("https://api.openai.com/v1/audio/transcriptions"));
+	Request->SetVerb(TEXT("POST"));
+	Request->SetHeader(TEXT("Authorization"), FString::Printf(TEXT("Bearer %s"), *OpenAIAPIKey));
+
+	// Build multipart form data
+	FString Boundary = TEXT("----UE5WhisperBoundary");
+	Request->SetHeader(TEXT("Content-Type"), FString::Printf(TEXT("multipart/form-data; boundary=%s"), *Boundary));
+
+	TArray<uint8> PostData;
+
+	auto AppendString = [&PostData](const FString& Str)
+	{
+		FTCHARToUTF8 UTF8(*Str);
+		PostData.Append((const uint8*)UTF8.Get(), UTF8.Length());
+	};
+
+	// File field
+	AppendString(FString::Printf(TEXT("--%s\r\n"), *Boundary));
+	AppendString(TEXT("Content-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\n"));
+	AppendString(TEXT("Content-Type: audio/wav\r\n\r\n"));
+	PostData.Append(WAVData);
+	AppendString(TEXT("\r\n"));
+
+	// Model field
+	AppendString(FString::Printf(TEXT("--%s\r\n"), *Boundary));
+	AppendString(TEXT("Content-Disposition: form-data; name=\"model\"\r\n\r\n"));
+	AppendString(TEXT("whisper-1\r\n"));
+
+	// Language field
+	AppendString(FString::Printf(TEXT("--%s\r\n"), *Boundary));
+	AppendString(TEXT("Content-Disposition: form-data; name=\"language\"\r\n\r\n"));
+	AppendString(TEXT("en\r\n"));
+
+	// Closing boundary
+	AppendString(FString::Printf(TEXT("--%s--\r\n"), *Boundary));
+
+	Request->SetContent(PostData);
+
+	Request->OnProcessRequestComplete().BindLambda(
+		[this](FHttpRequestPtr Req, FHttpResponsePtr Resp, bool bSuccess)
+		{
+			if (!bSuccess || !Resp.IsValid())
+			{
+				UE_LOG(LogTemp, Error, TEXT("WhisperSTT: HTTP request failed."));
+				return;
+			}
+			OnWhisperResponseReceived(bSuccess, Resp->GetResponseCode(), Resp->GetContentAsString());
+		}
+	);
+
+	Request->ProcessRequest();
+}
+
+void UWhisperSTTComponent::OnWhisperResponseReceived(bool bWasSuccessful, int32 ResponseCode, const FString& ResponseBody)
+{
+	if (ResponseCode != 200)
+	{
+		UE_LOG(LogTemp, Error, TEXT("WhisperSTT: API error %d: %s"), ResponseCode, *ResponseBody);
+		return;
+	}
+
+	TSharedPtr<FJsonObject> JsonObject;
+	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ResponseBody);
+
+	if (!FJsonSerializer::Deserialize(Reader, JsonObject) || !JsonObject.IsValid())
+	{
+		UE_LOG(LogTemp, Error, TEXT("WhisperSTT: Failed to parse response JSON."));
+		return;
+	}
+
+	FString Transcript;
+	if (JsonObject->TryGetStringField(TEXT("text"), Transcript))
+	{
+		Transcript = Transcript.TrimStartAndEnd();
 		if (!Transcript.IsEmpty())
 		{
+			UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Transcript: \"%s\""), *Transcript);
 			OnTranscriptReady.Broadcast(Transcript);
 		}
-	}
-
-	// Process VAD on accumulated audio
-	ProcessVAD();
-}
-
-void UWhisperSTTComponent::OnAudioGenerate(const float* InAudio, int32 NumSamples)
-{
-	if (!bIsListening || InAudio == nullptr || NumSamples <= 0)
-	{
-		return;
-	}
-
-	// Append to VAD buffer for energy calculation
-	int32 OldSize = VADBuffer.Num();
-	VADBuffer.SetNum(OldSize + NumSamples);
-	FMemory::Memcpy(VADBuffer.GetData() + OldSize, InAudio, NumSamples * sizeof(float));
-
-	// If speaking, also accumulate into speech buffer
-	if (bIsSpeaking)
-	{
-		OldSize = SpeechBuffer.Num();
-		SpeechBuffer.SetNum(OldSize + NumSamples);
-		FMemory::Memcpy(SpeechBuffer.GetData() + OldSize, InAudio, NumSamples * sizeof(float));
-	}
-}
-
-void UWhisperSTTComponent::ProcessVAD()
-{
-	if (VADBuffer.Num() == 0)
-	{
-		return;
-	}
-
-	float Energy = CalculateRMSEnergy(VADBuffer);
-	VADBuffer.Empty();
-
-	float DeltaTime = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f;
-
-	if (Energy > VADEnergyThreshold)
-	{
-		// Voice activity detected
-		SilenceAccumulator = 0.0f;
-
-		if (!bIsSpeaking)
+		else
 		{
-			bIsSpeaking = true;
-			SpeechAccumulator = 0.0f;
-			SpeechBuffer.Empty();
-			OnVoiceActivityChanged.Broadcast(true);
-		}
-
-		SpeechAccumulator += DeltaTime;
-	}
-	else
-	{
-		// Silence
-		if (bIsSpeaking)
-		{
-			SilenceAccumulator += DeltaTime;
-
-			if (SilenceAccumulator >= SilenceDuration)
-			{
-				// End of speech detected
-				bIsSpeaking = false;
-				OnVoiceActivityChanged.Broadcast(false);
-
-				// Only transcribe if speech was long enough
-				if (SpeechAccumulator >= MinSpeechDuration && SpeechBuffer.Num() > 0)
-				{
-					SubmitSpeechForTranscription();
-				}
-				else
-				{
-					SpeechBuffer.Empty();
-				}
-
-				SilenceAccumulator = 0.0f;
-				SpeechAccumulator = 0.0f;
-			}
+			UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Empty transcript (silence)."));
 		}
 	}
-}
-
-float UWhisperSTTComponent::CalculateRMSEnergy(const TArray<float>& AudioBuffer) const
-{
-	if (AudioBuffer.Num() == 0)
-	{
-		return 0.0f;
-	}
-
-	float SumSquares = 0.0f;
-	for (float Sample : AudioBuffer)
-	{
-		SumSquares += Sample * Sample;
-	}
-
-	return FMath::Sqrt(SumSquares / static_cast<float>(AudioBuffer.Num()));
-}
-
-void UWhisperSTTComponent::SubmitSpeechForTranscription()
-{
-	if (!InferenceWorker || SpeechBuffer.Num() == 0)
-	{
-		return;
-	}
-
-	// Don't queue if the worker is already processing
-	if (InferenceWorker->IsProcessing())
-	{
-		UE_LOG(LogTemp, Verbose, TEXT("WhisperSTTComponent: Inference worker busy, dropping audio segment."));
-		SpeechBuffer.Empty();
-		return;
-	}
-
-	UE_LOG(LogTemp, Verbose, TEXT("WhisperSTTComponent: Submitting %d samples for transcription."), SpeechBuffer.Num());
-	InferenceWorker->QueueAudioBuffer(MoveTemp(SpeechBuffer), SampleRate);
-	SpeechBuffer.Empty();
 }

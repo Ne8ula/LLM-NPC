@@ -21,6 +21,7 @@ public:
 
 	/** Called from player controller when user submits text. */
 	void SubmitChatMessage(const FString& Message);
+	void SetStatus(const FString& Status) { StatusMessage = Status; }
 
 	/** Get the current input text buffer. */
 	FString GetInputBuffer() const { return InputBuffer; }
@@ -49,4 +50,10 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UDialogueComponent> BoundDialogue;
+
+	/** Callback when voice transcript arrives. */
+	UFUNCTION()
+	void OnVoiceTranscript(const FString& Transcript);
+
+	bool bIsVoiceRecording = false;
 };
