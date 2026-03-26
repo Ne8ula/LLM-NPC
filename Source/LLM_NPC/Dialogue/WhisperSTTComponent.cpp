@@ -1,5 +1,5 @@
 #include "WhisperSTTComponent.h"
-#include "AudioCaptureComponent.h"
+#include "AudioCapture.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
@@ -9,8 +9,21 @@
 
 UWhisperSTTComponent::UWhisperSTTComponent()
 {
-	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bCanEverTick = false;
 	SubsystemName = TEXT("VoiceInput");
+}
+
+UWhisperSTTComponent::~UWhisperSTTComponent()
+{
+	// Ensure capture stream is closed before destruction
+	if (AudioCapture)
+	{
+		if (AudioCapture->IsStreamOpen())
+		{
+			AudioCapture->StopStream();
+			AudioCapture->CloseStream();
+		}
+	}
 }
 
 void UWhisperSTTComponent::BeginPlay()
@@ -20,8 +33,10 @@ void UWhisperSTTComponent::BeginPlay()
 
 void UWhisperSTTComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	if (bIsRecording)
+	if (bIsRecording && AudioCapture)
 	{
+		AudioCapture->StopStream();
+		AudioCapture->CloseStream();
 		bIsRecording = false;
 	}
 	Super::EndPlay(EndPlayReason);
@@ -40,14 +55,60 @@ void UWhisperSTTComponent::InitializeSubsystem()
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: OpenAI API key loaded. Voice input available."));
-	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Hold V to record, release to transcribe."));
+	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: OpenAI API key loaded."));
+
+	// Probe for audio capture devices
+	bDeviceAvailable = ProbeAudioDevices();
+
+	if (!bDeviceAvailable)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WhisperSTT: No audio capture devices found. Voice input disabled."));
+		UE_LOG(LogTemp, Warning, TEXT("WhisperSTT: Ensure a microphone is connected and the AudioCapture plugin is enabled."));
+		bIsAvailable = false;
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Voice input available. Hold V to record, release to transcribe."));
 	bIsAvailable = true;
-	bMicAvailable = true;
+}
+
+bool UWhisperSTTComponent::ProbeAudioDevices()
+{
+	AudioCapture = MakeUnique<Audio::FAudioCapture>();
+
+	TArray<Audio::FCaptureDeviceInfo> Devices;
+	AudioCapture->GetCaptureDevicesAvailable(Devices);
+
+	if (Devices.Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WhisperSTT: GetCaptureDevicesAvailable returned 0 devices."));
+		return false;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Found %d audio capture device(s):"), Devices.Num());
+	for (int32 i = 0; i < Devices.Num(); ++i)
+	{
+		UE_LOG(LogTemp, Log, TEXT("  [%d] %s (Channels: %d, SampleRate: %d)"),
+			i, *Devices[i].DeviceName, Devices[i].InputChannels, Devices[i].PreferredSampleRate);
+	}
+
+	// Use the default device's sample rate
+	DeviceSampleRate = Devices[0].PreferredSampleRate;
+	if (DeviceSampleRate <= 0)
+	{
+		DeviceSampleRate = 44100; // Reasonable fallback
+	}
+
+	return true;
 }
 
 void UWhisperSTTComponent::ShutdownSubsystem()
 {
+	if (AudioCapture && AudioCapture->IsStreamOpen())
+	{
+		AudioCapture->StopStream();
+		AudioCapture->CloseStream();
+	}
 	bIsRecording = false;
 	RecordedSamples.Empty();
 	Super::ShutdownSubsystem();
@@ -55,12 +116,7 @@ void UWhisperSTTComponent::ShutdownSubsystem()
 
 bool UWhisperSTTComponent::IsSubsystemAvailable() const
 {
-	return bIsAvailable && !OpenAIAPIKey.IsEmpty();
-}
-
-void UWhisperSTTComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
-{
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	return bIsAvailable && !OpenAIAPIKey.IsEmpty() && bDeviceAvailable;
 }
 
 void UWhisperSTTComponent::StartRecording()
@@ -70,26 +126,76 @@ void UWhisperSTTComponent::StartRecording()
 		return;
 	}
 
-	RecordedSamples.Empty();
+	if (!AudioCapture)
+	{
+		UE_LOG(LogTemp, Error, TEXT("WhisperSTT: AudioCapture not initialized."));
+		return;
+	}
+
+	// Close any previous stream
+	if (AudioCapture->IsStreamOpen())
+	{
+		AudioCapture->StopStream();
+		AudioCapture->CloseStream();
+	}
+
+	{
+		FScopeLock Lock(&SamplesLock);
+		RecordedSamples.Empty();
+		RecordedSamples.Reserve(DeviceSampleRate * 30); // Pre-allocate for up to 30 seconds
+	}
+
+	// Open capture stream with sample callback
+	Audio::FAudioCaptureDeviceParams Params;
+	// Params default to device index 0 (default mic)
+
+	Audio::FOnAudioCaptureFunction OnCapture = [this](const float* InAudio, int32 NumFrames, int32 InNumChannels, int32 InSampleRate, double StreamTime, bool bOverflow)
+	{
+		if (!bIsRecording)
+		{
+			return;
+		}
+
+		// Capture actual device sample rate on first callback
+		if (DeviceSampleRate != InSampleRate && InSampleRate > 0)
+		{
+			DeviceSampleRate = InSampleRate;
+		}
+
+		FScopeLock Lock(&SamplesLock);
+
+		// Mix down to mono and append
+		for (int32 Frame = 0; Frame < NumFrames; ++Frame)
+		{
+			float Sample = 0.0f;
+			for (int32 Ch = 0; Ch < InNumChannels; ++Ch)
+			{
+				Sample += InAudio[Frame * InNumChannels + Ch];
+			}
+			Sample /= FMath::Max(InNumChannels, 1);
+			RecordedSamples.Add(Sample);
+		}
+	};
+
+	// Third param is NumFramesDesired per callback (buffer size), not sample rate
+	bool bOpened = AudioCapture->OpenCaptureStream(Params, MoveTemp(OnCapture), 1024);
+	if (!bOpened)
+	{
+		UE_LOG(LogTemp, Error, TEXT("WhisperSTT: Failed to open audio capture stream."));
+		return;
+	}
+
+	bool bStarted = AudioCapture->StartStream();
+	if (!bStarted)
+	{
+		UE_LOG(LogTemp, Error, TEXT("WhisperSTT: Failed to start audio capture stream."));
+		AudioCapture->CloseStream();
+		return;
+	}
+
 	bIsRecording = true;
 	OnRecordingStateChanged.Broadcast(true);
-
-	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Recording started..."));
-
-	// Create audio capture if not exists
-	if (!AudioCapture && GetOwner())
-	{
-		AudioCapture = NewObject<UAudioCaptureComponent>(GetOwner());
-		if (AudioCapture)
-		{
-			AudioCapture->RegisterComponent();
-		}
-	}
-
-	if (AudioCapture)
-	{
-		AudioCapture->Start();
-	}
+	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Recording started (device sample rate: %d Hz)..."), DeviceSampleRate);
 }
 
 void UWhisperSTTComponent::StopRecordingAndTranscribe()
@@ -102,21 +208,61 @@ void UWhisperSTTComponent::StopRecordingAndTranscribe()
 	bIsRecording = false;
 	OnRecordingStateChanged.Broadcast(false);
 
-	if (AudioCapture)
+	if (AudioCapture && AudioCapture->IsStreamOpen())
 	{
-		AudioCapture->Stop();
+		AudioCapture->StopStream();
+		AudioCapture->CloseStream();
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Recording stopped. Captured %d samples."), RecordedSamples.Num());
-
-	if (RecordedSamples.Num() < SampleRate / 2)
+	// Copy samples under lock
+	TArray<float> CapturedSamples;
 	{
-		UE_LOG(LogTemp, Warning, TEXT("WhisperSTT: Recording too short, ignoring."));
+		FScopeLock Lock(&SamplesLock);
+		CapturedSamples = MoveTemp(RecordedSamples);
+		RecordedSamples.Empty();
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Recording stopped. Captured %d samples (%.1f seconds at %d Hz)."),
+		CapturedSamples.Num(),
+		CapturedSamples.Num() > 0 ? (float)CapturedSamples.Num() / DeviceSampleRate : 0.0f,
+		DeviceSampleRate);
+
+	// Need at least ~0.5 seconds of audio
+	int32 MinSamples = DeviceSampleRate / 2;
+	if (CapturedSamples.Num() < MinSamples)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WhisperSTT: Recording too short (%d samples, need %d), ignoring."),
+			CapturedSamples.Num(), MinSamples);
 		return;
 	}
 
+	// Resample to 16kHz if device captures at a different rate (Whisper expects 16kHz)
+	TArray<float> FinalSamples;
+	if (DeviceSampleRate != SampleRate && DeviceSampleRate > 0)
+	{
+		float Ratio = (float)SampleRate / (float)DeviceSampleRate;
+		int32 OutputLen = FMath::CeilToInt(CapturedSamples.Num() * Ratio);
+		FinalSamples.SetNumUninitialized(OutputLen);
+
+		for (int32 i = 0; i < OutputLen; ++i)
+		{
+			float SrcIndex = (float)i / Ratio;
+			int32 Idx0 = FMath::FloorToInt(SrcIndex);
+			int32 Idx1 = FMath::Min(Idx0 + 1, CapturedSamples.Num() - 1);
+			float Frac = SrcIndex - (float)Idx0;
+			FinalSamples[i] = FMath::Lerp(CapturedSamples[Idx0], CapturedSamples[Idx1], Frac);
+		}
+
+		UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Resampled %d -> %d samples (%d Hz -> %d Hz)."),
+			CapturedSamples.Num(), FinalSamples.Num(), DeviceSampleRate, SampleRate);
+	}
+	else
+	{
+		FinalSamples = MoveTemp(CapturedSamples);
+	}
+
 	// Encode as WAV and send to API
-	TArray<uint8> WAVData = EncodeAsWAV(RecordedSamples, SampleRate, 1);
+	TArray<uint8> WAVData = EncodeAsWAV(FinalSamples, SampleRate, 1);
 	SendToWhisperAPI(WAVData);
 }
 

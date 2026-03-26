@@ -2,9 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "LLM_NPC/Core/NPCSubsystemComponent.h"
+#include "HAL/CriticalSection.h"
 #include "WhisperSTTComponent.generated.h"
 
-class UAudioCaptureComponent;
+namespace Audio { class FAudioCapture; struct FCaptureDeviceInfo; }
 
 /** Delegate fired when a transcript is ready from speech-to-text. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTranscriptReady, const FString&, Transcript);
@@ -16,7 +17,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRecordingStateChanged, bool, bIsR
  * Speech-to-text component using OpenAI Whisper API (cloud).
  *
  * Hold V key to record, release to transcribe.
- * Captures microphone audio, encodes as WAV, sends to OpenAI /v1/audio/transcriptions.
+ * Uses Audio::FAudioCapture (low-level) to capture microphone samples directly,
+ * encodes as WAV, sends to OpenAI /v1/audio/transcriptions.
  */
 UCLASS(ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
 class LLM_NPC_API UWhisperSTTComponent : public UNPCSubsystemComponent
@@ -25,11 +27,11 @@ class LLM_NPC_API UWhisperSTTComponent : public UNPCSubsystemComponent
 
 public:
 	UWhisperSTTComponent();
+	~UWhisperSTTComponent();
 
 	virtual void InitializeSubsystem() override;
 	virtual void ShutdownSubsystem() override;
 	virtual bool IsSubsystemAvailable() const override;
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	/** Start recording from microphone. */
 	UFUNCTION(BlueprintCallable, Category = "NPC|STT")
@@ -60,6 +62,9 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+	/** Probe for available capture devices and log them. Returns true if at least one found. */
+	bool ProbeAudioDevices();
+
 	/** Encode recorded audio as WAV bytes for upload. */
 	TArray<uint8> EncodeAsWAV(const TArray<float>& AudioData, int32 InSampleRate, int32 NumChannels) const;
 
@@ -69,20 +74,25 @@ private:
 	/** Handle HTTP response from OpenAI. */
 	void OnWhisperResponseReceived(bool bWasSuccessful, int32 ResponseCode, const FString& ResponseBody);
 
-	/** Audio capture component. */
-	UPROPERTY()
-	TObjectPtr<UAudioCaptureComponent> AudioCapture;
+	/** Low-level audio capture handle. */
+	TUniquePtr<Audio::FAudioCapture> AudioCapture;
 
-	/** Recorded audio samples. */
+	/** Recorded audio samples — written from audio thread, read from game thread. */
 	TArray<float> RecordedSamples;
+
+	/** Lock for thread-safe access to RecordedSamples. */
+	FCriticalSection SamplesLock;
 
 	/** Recording state. */
 	bool bIsRecording = false;
-	bool bMicAvailable = false;
+	bool bDeviceAvailable = false;
 
 	/** OpenAI API key. */
 	FString OpenAIAPIKey;
 
 	/** Sample rate for recording. */
 	int32 SampleRate = 16000;
+
+	/** Actual sample rate of the capture device (may differ from target). */
+	int32 DeviceSampleRate = 0;
 };

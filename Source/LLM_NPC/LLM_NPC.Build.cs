@@ -18,6 +18,7 @@ public class LLM_NPC : ModuleRules
 			"Json",
 			"JsonUtilities",
 			"AudioCapture",
+			"AudioCaptureCore",
 			"AudioMixer",
 			"UMG",
 			"SlateCore",
