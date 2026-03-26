@@ -15,7 +15,7 @@ class UAudioComponent;
  * solution in production.
  */
 UCLASS(ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
-class FLLM_NPC_API UNPCLipSyncComponent : public UNPCSubsystemComponent
+class LLM_NPC_API UNPCLipSyncComponent : public UNPCSubsystemComponent
 {
 	GENERATED_BODY()
 

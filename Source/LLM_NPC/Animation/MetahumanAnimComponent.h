@@ -14,7 +14,7 @@
  * and smoothly interpolates the skeletal mesh's morph targets toward those values.
  */
 UCLASS(ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
-class FLLM_NPC_API UMetahumanAnimComponent : public UNPCSubsystemComponent
+class LLM_NPC_API UMetahumanAnimComponent : public UNPCSubsystemComponent
 {
 	GENERATED_BODY()
 

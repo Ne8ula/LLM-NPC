@@ -14,7 +14,7 @@
  * at runtime, fields can be populated from templates and personality parameters.
  */
 UCLASS(BlueprintType)
-class FLLM_NPC_API UNPCConfigDataAsset : public UPrimaryDataAsset
+class LLM_NPC_API UNPCConfigDataAsset : public UPrimaryDataAsset
 {
 	GENERATED_BODY()
 

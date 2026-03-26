@@ -10,7 +10,7 @@
  * Designers author one of these per NPC to configure which items can be unlocked.
  */
 UCLASS(BlueprintType)
-class FLLM_NPC_API UInventoryDataAsset : public UDataAsset
+class LLM_NPC_API UInventoryDataAsset : public UDataAsset
 {
 	GENERATED_BODY()
 

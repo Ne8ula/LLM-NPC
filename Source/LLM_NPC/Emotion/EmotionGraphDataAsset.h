@@ -12,7 +12,7 @@ class UEmotionStateMachine;
  * Each node represents one emotion type with optional overrides.
  */
 USTRUCT(BlueprintType)
-struct FLLM_NPC_API FEmotionNodeConfig
+struct LLM_NPC_API FEmotionNodeConfig
 {
 	GENERATED_BODY()
 
@@ -38,7 +38,7 @@ struct FLLM_NPC_API FEmotionNodeConfig
  * Connects a source emotion to a target emotion with conditions and cost.
  */
 USTRUCT(BlueprintType)
-struct FLLM_NPC_API FEmotionEdgeConfig
+struct LLM_NPC_API FEmotionEdgeConfig
 {
 	GENERATED_BODY()
 
@@ -76,7 +76,7 @@ struct FLLM_NPC_API FEmotionEdgeConfig
  * At runtime, instantiates an EmotionStateMachine.
  */
 UCLASS(BlueprintType)
-class FLLM_NPC_API UEmotionGraphDataAsset : public UDataAsset
+class LLM_NPC_API UEmotionGraphDataAsset : public UDataAsset
 {
 	GENERATED_BODY()
 

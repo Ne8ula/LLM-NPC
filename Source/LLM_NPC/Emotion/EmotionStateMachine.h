@@ -24,7 +24,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnEmotionStateChanged, FEmotionSta
  * to the nearest canonical PAD point.
  */
 UCLASS(BlueprintType)
-class FLLM_NPC_API UEmotionStateMachine : public UObject
+class LLM_NPC_API UEmotionStateMachine : public UObject
 {
 	GENERATED_BODY()
 

@@ -20,7 +20,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTextSubmitted, const FString&, Su
  * interacting NPC.
  */
 UCLASS()
-class FLLM_NPC_API UDialogueFallbackWidget : public UUserWidget
+class LLM_NPC_API UDialogueFallbackWidget : public UUserWidget
 {
 	GENERATED_BODY()
 

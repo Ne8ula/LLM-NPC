@@ -23,7 +23,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTTSAudioDataReceived, const TArr
  * and plays it through a UAudioComponent. Audio data is also broadcast for lip sync.
  */
 UCLASS(ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
-class FLLM_NPC_API UElevenLabsTTSComponent : public UNPCSubsystemComponent
+class LLM_NPC_API UElevenLabsTTSComponent : public UNPCSubsystemComponent
 {
 	GENERATED_BODY()
 

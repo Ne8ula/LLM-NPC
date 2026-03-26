@@ -14,7 +14,7 @@ class ANPCCharacter;
  *   User input → assemble context → Claude API → process response → animate
  */
 UCLASS()
-class FLLM_NPC_API ANPCAIController : public AAIController
+class LLM_NPC_API ANPCAIController : public AAIController
 {
 	GENERATED_BODY()
 

@@ -18,7 +18,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnVoiceActivityChanged, bool, bIsSp
  * Background worker thread for whisper.cpp inference.
  * Runs STT on captured audio buffers without blocking the game thread.
  */
-class FLLM_NPC_API FWhisperInferenceWorker : public FRunnable
+class LLM_NPC_API FWhisperInferenceWorker : public FRunnable
 {
 public:
 	FWhisperInferenceWorker();
@@ -78,7 +78,7 @@ private:
  * background worker thread for transcription.
  */
 UCLASS(ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
-class FLLM_NPC_API UWhisperSTTComponent : public UNPCSubsystemComponent
+class LLM_NPC_API UWhisperSTTComponent : public UNPCSubsystemComponent
 {
 	GENERATED_BODY()
 

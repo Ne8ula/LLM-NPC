@@ -13,7 +13,7 @@
  * A new dominant emotion is only reported after persisting for 0.5 seconds.
  */
 UCLASS(BlueprintType)
-class FLLM_NPC_API UFaceExpressionModel : public UObject
+class LLM_NPC_API UFaceExpressionModel : public UObject
 {
 	GENERATED_BODY()
 

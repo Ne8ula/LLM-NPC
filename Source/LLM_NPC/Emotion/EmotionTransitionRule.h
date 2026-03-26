@@ -15,7 +15,7 @@
  * lowest-cost path to a goal emotion.
  */
 UCLASS(BlueprintType, EditInlineNew, DefaultToInstanced)
-class FLLM_NPC_API UEmotionTransitionRule : public UObject
+class LLM_NPC_API UEmotionTransitionRule : public UObject
 {
 	GENERATED_BODY()
 

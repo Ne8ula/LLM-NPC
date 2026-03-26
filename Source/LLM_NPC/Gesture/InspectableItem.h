@@ -10,7 +10,7 @@
  * Transforms are not applied directly but interpolated each tick toward target values.
  */
 UCLASS(BlueprintType)
-class FLLM_NPC_API AInspectableItem : public AActor
+class LLM_NPC_API AInspectableItem : public AActor
 {
 	GENERATED_BODY()
 

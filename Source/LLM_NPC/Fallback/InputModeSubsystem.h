@@ -16,7 +16,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnManipulationInputModeChanged);
  * unavailable.  UI and gameplay systems read from it to adapt their behaviour.
  */
 UCLASS()
-class FLLM_NPC_API UInputModeSubsystem : public UGameInstanceSubsystem
+class LLM_NPC_API UInputModeSubsystem : public UGameInstanceSubsystem
 {
 	GENERATED_BODY()
 

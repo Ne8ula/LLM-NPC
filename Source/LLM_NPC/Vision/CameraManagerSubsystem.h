@@ -14,7 +14,7 @@
  * through a thread-safe interface.
  */
 UCLASS()
-class FLLM_NPC_API UCameraManagerSubsystem : public UGameInstanceSubsystem
+class LLM_NPC_API UCameraManagerSubsystem : public UGameInstanceSubsystem
 {
 	GENERATED_BODY()
 

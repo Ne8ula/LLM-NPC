@@ -13,7 +13,7 @@
  * that can be attached to any Metahuman actor, enabling procedural NPC generation.
  */
 UCLASS(Abstract, ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
-class FLLM_NPC_API UNPCSubsystemComponent : public UActorComponent
+class LLM_NPC_API UNPCSubsystemComponent : public UActorComponent
 {
 	GENERATED_BODY()
 

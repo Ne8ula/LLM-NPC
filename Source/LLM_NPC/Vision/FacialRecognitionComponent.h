@@ -17,7 +17,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnUserEmotionDetected, FDetectedUse
  * the game thread.
  */
 UCLASS(ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
-class FLLM_NPC_API UFacialRecognitionComponent : public UNPCSubsystemComponent
+class LLM_NPC_API UFacialRecognitionComponent : public UNPCSubsystemComponent
 {
 	GENERATED_BODY()
 

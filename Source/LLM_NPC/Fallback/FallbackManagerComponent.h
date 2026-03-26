@@ -32,7 +32,7 @@ enum class EDegradationLevel : uint8
  *   G = switch to Gesture manipulation, K = switch to Keyboard/Mouse manipulation.
  */
 UCLASS(ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
-class FLLM_NPC_API UFallbackManagerComponent : public UNPCSubsystemComponent
+class LLM_NPC_API UFallbackManagerComponent : public UNPCSubsystemComponent
 {
 	GENERATED_BODY()
 

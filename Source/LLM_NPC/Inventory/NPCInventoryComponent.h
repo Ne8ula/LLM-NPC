@@ -20,7 +20,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnItemGiven, FName, ItemID);
  * to the player.
  */
 UCLASS(ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
-class FLLM_NPC_API UNPCInventoryComponent : public UNPCSubsystemComponent
+class LLM_NPC_API UNPCInventoryComponent : public UNPCSubsystemComponent
 {
 	GENERATED_BODY()
 
