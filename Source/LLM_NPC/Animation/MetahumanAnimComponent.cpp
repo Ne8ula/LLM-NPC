@@ -74,13 +74,9 @@ void UMetahumanAnimComponent::InitializeSubsystem()
 		}
 		else
 		{
-			// Log available morph targets for debugging
-			if (CachedSkeletalMesh->GetSkeletalMeshAsset())
-			{
-				TArray<FString> MorphNames;
-				CachedSkeletalMesh->GetSkeletalMeshAsset()->GetMorphTargetNames(MorphNames);
-				UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found %d morph targets on face mesh"), MorphNames.Num());
-			}
+			// Log morph target count for debugging
+			TMap<FName, float> MorphMap = CachedSkeletalMesh->GetMorphTargetCurves();
+			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Skeletal mesh found with %d active morph targets"), MorphMap.Num());
 		}
 	}
 }
