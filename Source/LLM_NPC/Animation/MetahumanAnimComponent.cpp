@@ -55,12 +55,17 @@ void UMetahumanAnimComponent::InitializeSubsystem()
 				CachedSkeletalMesh->GetSkeletalMeshAsset() ?
 					CachedSkeletalMesh->GetSkeletalMeshAsset()->GetMorphTargets().Num() : 0);
 
-			// Disable the Face mesh's AnimBP/RigLogic so our SetMorphTarget calls aren't overwritten.
-			// Metahuman uses RigLogic DNA deformation which recalculates ALL morph targets every frame.
-			// By switching to "No Animation" mode, we take full control of the face.
-			CachedSkeletalMesh->SetAnimationMode(EAnimationMode::AnimationCustomMode);
+			// Completely disable the Face mesh's animation system.
+			// Metahuman uses RigLogic which recalculates ALL morph targets every frame.
+			// We must remove the AnimBP entirely to take control.
+			CachedSkeletalMesh->SetAnimInstanceClass(nullptr);
+			CachedSkeletalMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
 			CachedSkeletalMesh->Stop();
-			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Disabled Face AnimBP/RigLogic for code-driven morph targets"));
+
+			// Also disable any post-process AnimBP
+			CachedSkeletalMesh->SetPostProcessAnimBlueprintClass(nullptr);
+
+			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Cleared AnimBP and post-process on Face mesh for code-driven morph targets"));
 
 			// Set a neutral baseline — reset all morph targets to 0
 			if (USkeletalMesh* SkelMesh = CachedSkeletalMesh->GetSkeletalMeshAsset())
@@ -365,8 +370,16 @@ void UMetahumanAnimComponent::UpdateBlendShapes(float DeltaTime)
 			LipSyncInterpolationSpeed : InterpolationSpeed;
 		CurrentValue = FMath::FInterpTo(CurrentValue, TargetValue, DeltaTime, InterpSpeed);
 
-		// Apply morph target — we tick in TG_PostUpdateWork so this happens AFTER the AnimBP
+		// Apply morph target
 		CachedSkeletalMesh->SetMorphTarget(MorphName, CurrentValue);
+
+		// Debug: log once when we start applying non-zero values
+		static bool bLoggedOnce = false;
+		if (!bLoggedOnce && CurrentValue > 0.05f)
+		{
+			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: First morph target applied: '%s' = %.2f"), *MorphName.ToString(), CurrentValue);
+			bLoggedOnce = true;
+		}
 	}
 
 	// Force render update
