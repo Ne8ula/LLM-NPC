@@ -47,39 +47,42 @@ void UBlendShapeMappingDataAsset::PopulateDefaultMetahumanMappings()
 	// Neutral — relaxed face (no blend shapes active)
 	AddMapping(EEmotionType::Neutral, {});
 
-	// Joy — smile, cheeks up, eyes slightly narrowed
-	// Metahuman morph targets use "head_lod0_mesh__" prefix
+	// Joy — smile (corner pull), cheeks up, eyes slightly narrowed
 	AddMapping(EEmotionType::Joy, {
-		{FName("head_lod0_mesh__smile_L"), 0.8f},
-		{FName("head_lod0_mesh__smile_R"), 0.8f},
-		{FName("head_lod0_mesh__cheek_raiseL"), 0.5f},
-		{FName("head_lod0_mesh__cheek_raiseR"), 0.5f},
-		{FName("head_lod0_mesh__eye_squint_L"), 0.3f},
-		{FName("head_lod0_mesh__eye_squint_R"), 0.3f},
+		{FName("head_lod0_mesh__mouth_cornerPull_left"), 0.8f},
+		{FName("head_lod0_mesh__mouth_cornerPull_right"), 0.8f},
+		{FName("head_lod0_mesh__eye_cheekRaise_L"), 0.5f},
+		{FName("head_lod0_mesh__eye_cheekRaise_R"), 0.5f},
+		{FName("head_lod0_mesh__eye_squintInner_L"), 0.3f},
+		{FName("head_lod0_mesh__eye_squintInner_R"), 0.3f},
+		{FName("head_lod0_mesh__mouth_dimple_left"), 0.3f},
+		{FName("head_lod0_mesh__mouth_dimple_right"), 0.3f},
 	});
 
-	// Sadness — inner brow up, frown, mouth down
+	// Sadness — inner brow up, frown (corner depress), mouth down
 	AddMapping(EEmotionType::Sadness, {
 		{FName("head_lod0_mesh__brow_raiseIn_L"), 0.7f},
 		{FName("head_lod0_mesh__brow_raiseIn_R"), 0.7f},
 		{FName("head_lod0_mesh__brow_down_L"), 0.3f},
 		{FName("head_lod0_mesh__brow_down_R"), 0.3f},
-		{FName("head_lod0_mesh__mouth_frown_L"), 0.6f},
-		{FName("head_lod0_mesh__mouth_frown_R"), 0.6f},
-		{FName("head_lod0_mesh__mouth_pucker"), 0.2f},
+		{FName("head_lod0_mesh__mouth_cornerDepress_L"), 0.6f},
+		{FName("head_lod0_mesh__mouth_cornerDepress_R"), 0.6f},
+		{FName("head_lod0_mesh__mouth_stretch_left"), 0.2f},
+		{FName("head_lod0_mesh__mouth_stretch_right"), 0.2f},
 	});
 
-	// Anger — brows down, jaw clench, nose flare
+	// Anger — brows down, jaw forward, nose wrinkle
 	AddMapping(EEmotionType::Anger, {
 		{FName("head_lod0_mesh__brow_down_L"), 0.8f},
 		{FName("head_lod0_mesh__brow_down_R"), 0.8f},
-		{FName("head_lod0_mesh__jaw_fwd"), 0.3f},
-		{FName("head_lod0_mesh__mouth_frown_L"), 0.4f},
-		{FName("head_lod0_mesh__mouth_frown_R"), 0.4f},
-		{FName("head_lod0_mesh__nose_sneer_L"), 0.5f},
-		{FName("head_lod0_mesh__nose_sneer_R"), 0.5f},
-		{FName("head_lod0_mesh__eye_squint_L"), 0.4f},
-		{FName("head_lod0_mesh__eye_squint_R"), 0.4f},
+		{FName("head_lod0_mesh__mouth_cornerDepress_L"), 0.4f},
+		{FName("head_lod0_mesh__mouth_cornerDepress_R"), 0.4f},
+		{FName("head_lod0_mesh__nose_wrinkle_left"), 0.5f},
+		{FName("head_lod0_mesh__nose_wrinkle_right"), 0.5f},
+		{FName("head_lod0_mesh__eye_squintInner_L"), 0.4f},
+		{FName("head_lod0_mesh__eye_squintInner_R"), 0.4f},
+		{FName("head_lod0_mesh__mouth_lipsTighten_UL"), 0.3f},
+		{FName("head_lod0_mesh__mouth_lipsTighten_UR"), 0.3f},
 	});
 
 	// Fear — wide eyes, raised brows, open mouth
@@ -90,7 +93,8 @@ void UBlendShapeMappingDataAsset::PopulateDefaultMetahumanMappings()
 		{FName("head_lod0_mesh__brow_raiseOuter_right"), 0.6f},
 		{FName("head_lod0_mesh__eye_widen_L"), 0.7f},
 		{FName("head_lod0_mesh__eye_widen_R"), 0.7f},
-		{FName("head_lod0_mesh__jaw_open"), 0.3f},
+		{FName("head_lod0_mesh__mouth_stretch_left"), 0.4f},
+		{FName("head_lod0_mesh__mouth_stretch_right"), 0.4f},
 	});
 
 	// Surprise — raised brows, wide eyes, open mouth
@@ -101,25 +105,26 @@ void UBlendShapeMappingDataAsset::PopulateDefaultMetahumanMappings()
 		{FName("head_lod0_mesh__brow_raiseOuter_right"), 0.8f},
 		{FName("head_lod0_mesh__eye_widen_L"), 0.8f},
 		{FName("head_lod0_mesh__eye_widen_R"), 0.8f},
-		{FName("head_lod0_mesh__jaw_open"), 0.5f},
+		{FName("head_lod0_mesh__mouth_lowerLipDepress_left"), 0.5f},
+		{FName("head_lod0_mesh__mouth_lowerLipDepress_right"), 0.5f},
 	});
 
-	// Disgust — nose wrinkle, upper lip raise, squint
+	// Disgust — nose wrinkle, upper lip raise
 	AddMapping(EEmotionType::Disgust, {
-		{FName("head_lod0_mesh__nose_sneer_L"), 0.8f},
-		{FName("head_lod0_mesh__nose_sneer_R"), 0.8f},
-		{FName("head_lod0_mesh__mouth_upperLipUp_L"), 0.5f},
-		{FName("head_lod0_mesh__mouth_upperLipUp_R"), 0.5f},
+		{FName("head_lod0_mesh__nose_wrinkle_left"), 0.8f},
+		{FName("head_lod0_mesh__nose_wrinkle_right"), 0.8f},
+		{FName("head_lod0_mesh__mouth_upperLipRaise_left"), 0.5f},
+		{FName("head_lod0_mesh__mouth_upperLipRaise_right"), 0.5f},
 		{FName("head_lod0_mesh__brow_down_L"), 0.4f},
 		{FName("head_lod0_mesh__brow_down_R"), 0.4f},
 	});
 
 	// Trust — gentle smile, relaxed brows
 	AddMapping(EEmotionType::Trust, {
-		{FName("head_lod0_mesh__smile_L"), 0.5f},
-		{FName("head_lod0_mesh__smile_R"), 0.5f},
-		{FName("head_lod0_mesh__cheek_raiseL"), 0.3f},
-		{FName("head_lod0_mesh__cheek_raiseR"), 0.3f},
+		{FName("head_lod0_mesh__mouth_cornerPull_left"), 0.5f},
+		{FName("head_lod0_mesh__mouth_cornerPull_right"), 0.5f},
+		{FName("head_lod0_mesh__eye_cheekRaise_L"), 0.3f},
+		{FName("head_lod0_mesh__eye_cheekRaise_R"), 0.3f},
 		{FName("head_lod0_mesh__brow_raiseIn_L"), 0.2f},
 		{FName("head_lod0_mesh__brow_raiseIn_R"), 0.2f},
 	});
@@ -132,8 +137,8 @@ void UBlendShapeMappingDataAsset::PopulateDefaultMetahumanMappings()
 		{FName("head_lod0_mesh__brow_raiseOuter_right"), 0.3f},
 		{FName("head_lod0_mesh__eye_widen_L"), 0.2f},
 		{FName("head_lod0_mesh__eye_widen_R"), 0.2f},
-		{FName("head_lod0_mesh__smile_L"), 0.2f},
-		{FName("head_lod0_mesh__smile_R"), 0.2f},
+		{FName("head_lod0_mesh__mouth_cornerPull_left"), 0.2f},
+		{FName("head_lod0_mesh__mouth_cornerPull_right"), 0.2f},
 	});
 
 	UE_LOG(LogTemp, Log, TEXT("BlendShapeMapping: Populated %d default Metahuman mappings"), Mappings.Num());
