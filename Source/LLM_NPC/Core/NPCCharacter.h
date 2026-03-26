@@ -83,4 +83,16 @@ private:
 
 	/** Returns a stability modifier for the given emotion. Lower = more expressive voice. */
 	float GetEmotionStabilityModifier(EEmotionType Emotion) const;
+
+	/** Get the jaw open amount for a character (viseme estimation). */
+	float GetVisemeJawOpen(TCHAR Char) const;
+
+	/** Text currently being spoken by TTS. */
+	FString CurrentSpeechText;
+
+	/** Time when current speech started. */
+	float SpeechStartTime = 0.0f;
+
+	/** Whether TTS is currently speaking. */
+	bool bIsSpeaking = false;
 };
