@@ -42,37 +42,64 @@ void UMetahumanAnimComponent::InitializeSubsystem()
 			CachedFaceAnimInstance = CachedSkeletalMesh->GetAnimInstance();
 			if (CachedFaceAnimInstance)
 			{
-				// Verify "Jaw Open Alpha" property exists via reflection
-				FProperty* JawProp = CachedFaceAnimInstance->GetClass()->FindPropertyByName(FName("Jaw Open Alpha"));
-				if (JawProp)
+				UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: AnimInstance class: %s"), *CachedFaceAnimInstance->GetClass()->GetName());
+
+				// Dump all float properties to find the exact names
+				UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Dumping float properties on AnimInstance:"));
+				for (TFieldIterator<FFloatProperty> It(CachedFaceAnimInstance->GetClass()); It; ++It)
 				{
-					UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found 'Jaw Open Alpha' property on Face AnimInstance"));
-				}
-				else
-				{
-					// Try without space
-					JawProp = CachedFaceAnimInstance->GetClass()->FindPropertyByName(FName("JawOpenAlpha"));
-					if (JawProp)
+					FString PropName = It->GetName();
+					if (PropName.Contains(TEXT("Jaw")) || PropName.Contains(TEXT("jaw")) ||
+						PropName.Contains(TEXT("Alpha")) || PropName.Contains(TEXT("Teeth")) ||
+						PropName.Contains(TEXT("Open")))
 					{
-						UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found 'JawOpenAlpha' property on Face AnimInstance"));
-					}
-					else
-					{
-						UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: Could not find Jaw Open Alpha property"));
+						float Value = It->GetPropertyValue_InContainer(CachedFaceAnimInstance);
+						UE_LOG(LogTemp, Log, TEXT("  Property: '%s' = %.2f"), *PropName, Value);
 					}
 				}
 
-				// Find the "Set Control" function
-				CachedSetControlFunc = CachedFaceAnimInstance->FindFunction(FName("Set Control"));
+				// Dump all functions to find Set Control
+				UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Dumping functions on AnimInstance:"));
+				for (TFieldIterator<UFunction> It(CachedFaceAnimInstance->GetClass()); It; ++It)
+				{
+					FString FuncName = It->GetName();
+					if (FuncName.Contains(TEXT("Control")) || FuncName.Contains(TEXT("Set")) ||
+						FuncName.Contains(TEXT("Custom")) || FuncName.Contains(TEXT("Reset")))
+					{
+						UE_LOG(LogTemp, Log, TEXT("  Function: '%s'"), *FuncName);
+					}
+				}
+
+				// Try to find Jaw Open Alpha with various names
+				TArray<FString> JawNames = {
+					TEXT("Jaw Open Alpha"), TEXT("JawOpenAlpha"), TEXT("Jaw_Open_Alpha"),
+					TEXT("jawOpenAlpha"), TEXT("Jaw open Alpha")
+				};
+				for (const FString& Name : JawNames)
+				{
+					FProperty* JawProp = CachedFaceAnimInstance->GetClass()->FindPropertyByName(FName(*Name));
+					if (JawProp)
+					{
+						UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found jaw property as '%s'"), *Name);
+						break;
+					}
+				}
+
+				// Find the "Set Control" function with various names
+				TArray<FString> FuncNames = {
+					TEXT("Set Control"), TEXT("SetControl"), TEXT("Set_Control"),
+					TEXT("setControl"), TEXT("Set control")
+				};
+				for (const FString& Name : FuncNames)
+				{
+					CachedSetControlFunc = CachedFaceAnimInstance->FindFunction(FName(*Name));
+					if (CachedSetControlFunc)
+					{
+						UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found Set Control function as '%s'"), *Name);
+						break;
+					}
+				}
 				if (!CachedSetControlFunc)
-				{
-					CachedSetControlFunc = CachedFaceAnimInstance->FindFunction(FName("SetControl"));
-				}
-				if (CachedSetControlFunc)
-				{
-					UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found 'Set Control' function on Face AnimInstance"));
-				}
-				else
 				{
 					UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: Could not find Set Control function"));
 				}
