@@ -1,0 +1,14 @@
+{
+	"Targets": [
+		{
+			"Name": "LLM_NPC",
+			"Path": "..\\Source\\LLM_NPC.Target.cs",
+			"Type": "Game"
+		},
+		{
+			"Name": "LLM_NPCEditor",
+			"Path": "..\\Source\\LLM_NPCEditor.Target.cs",
+			"Type": "Editor"
+		}
+	]
+}

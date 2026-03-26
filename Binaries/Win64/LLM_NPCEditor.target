@@ -1,0 +1,27 @@
+{
+	"TargetName": "LLM_NPCEditor",
+	"Platform": "Win64",
+	"Configuration": "Development",
+	"BuildSettingsVersion": "V5",
+	"TargetBuildEnvironment": "Shared",
+	"TargetType": "Editor",
+	"IsTestTarget": false,
+	"Architecture": "x64",
+	"Project": "../../LLM_NPC.uproject",
+	"Version": 
+	{
+		"MajorVersion": 5,
+		"MinorVersion": 7,
+		"PatchVersion": 2,
+		"Changelist": 49658320,
+		"CompatibleChangelist": 47537391,
+		"IsLicenseeVersion": 0,
+		"IsPromotedBuild": 0,
+		"BranchName": "++UE5+Release-5.7",
+		"BuildId": "47537391"
+	},
+	"BuildProducts": [
+	],
+	"RuntimeDependencies": [
+	]
+}
