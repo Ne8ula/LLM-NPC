@@ -1,4 +1,5 @@
 #include "MetahumanAnimComponent.h"
+#include "LLM_NPC/Emotion/EmotionComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 
 UMetahumanAnimComponent::UMetahumanAnimComponent()
@@ -35,14 +36,51 @@ void UMetahumanAnimComponent::InitializeSubsystem()
 		UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: No BlendShapeMappingDataAsset assigned"));
 	}
 
-	// Cache the skeletal mesh component from the owner
+	// Cache the EmotionComponent
 	if (AActor* Owner = GetOwner())
 	{
-		CachedSkeletalMesh = Owner->FindComponentByClass<USkeletalMeshComponent>();
+		CachedEmotionComp = Owner->FindComponentByClass<UEmotionComponent>();
+		if (!CachedEmotionComp)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: No EmotionComponent found on owner"));
+		}
+
+		// Find the Face skeletal mesh (Metahumans have separate Face and Body meshes)
+		// Look for a component with "Face" in its name, or fall back to first skeletal mesh
+		TArray<USkeletalMeshComponent*> SkeletalMeshes;
+		Owner->GetComponents<USkeletalMeshComponent>(SkeletalMeshes);
+
+		for (USkeletalMeshComponent* SMC : SkeletalMeshes)
+		{
+			if (SMC && SMC->GetName().Contains(TEXT("Face")))
+			{
+				CachedSkeletalMesh = SMC;
+				UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found Face mesh: %s"), *SMC->GetName());
+				break;
+			}
+		}
+
+		// Fallback to first skeletal mesh if no Face mesh found
+		if (!CachedSkeletalMesh && SkeletalMeshes.Num() > 0)
+		{
+			CachedSkeletalMesh = SkeletalMeshes[0];
+			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Using fallback mesh: %s"), *CachedSkeletalMesh->GetName());
+		}
+
 		if (!CachedSkeletalMesh)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: No USkeletalMeshComponent found on owner '%s'"),
+			UE_LOG(LogTemp, Warning, TEXT("MetahumanAnim: No skeletal mesh found on owner '%s'"),
 				*Owner->GetName());
+		}
+		else
+		{
+			// Log available morph targets for debugging
+			if (CachedSkeletalMesh->GetSkeletalMeshAsset())
+			{
+				TArray<FString> MorphNames;
+				CachedSkeletalMesh->GetSkeletalMeshAsset()->GetMorphTargetNames(MorphNames);
+				UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Found %d morph targets on face mesh"), MorphNames.Num());
+			}
 		}
 	}
 }
@@ -74,29 +112,11 @@ void UMetahumanAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType
 		return;
 	}
 
-	// Read the current emotion state from the Emotion subsystem on the same actor
+	// Read the current emotion state directly from EmotionComponent
 	FEmotionState CurrentState;
-	if (AActor* Owner = GetOwner())
+	if (CachedEmotionComp)
 	{
-		TArray<UActorComponent*> Components;
-		Owner->GetComponents(UNPCSubsystemComponent::StaticClass(), Components);
-		for (UActorComponent* Comp : Components)
-		{
-			if (Comp && Comp->GetClass()->GetName().Contains(TEXT("Emotion")))
-			{
-				// Read the CurrentEmotionState property via reflection
-				if (FStructProperty* StateProp = CastField<FStructProperty>(
-					Comp->GetClass()->FindPropertyByName(TEXT("CurrentEmotionState"))))
-				{
-					const FEmotionState* StatePtr = StateProp->ContainerPtrToValuePtr<FEmotionState>(Comp);
-					if (StatePtr)
-					{
-						CurrentState = *StatePtr;
-					}
-				}
-				break;
-			}
-		}
+		CurrentState = CachedEmotionComp->GetCurrentEmotionState();
 	}
 
 	// Look up blend shape targets for the current emotion state

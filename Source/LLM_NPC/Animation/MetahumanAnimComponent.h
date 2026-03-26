@@ -51,6 +51,10 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
+	/** Cached reference to the Emotion component. */
+	UPROPERTY()
+	TObjectPtr<class UEmotionComponent> CachedEmotionComp;
+
 	/** Cached reference to the owner's skeletal mesh component (face mesh). */
 	UPROPERTY()
 	TObjectPtr<USkeletalMeshComponent> CachedSkeletalMesh;
