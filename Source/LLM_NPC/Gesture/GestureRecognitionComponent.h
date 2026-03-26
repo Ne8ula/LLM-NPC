@@ -17,7 +17,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGestureDetected, FGestureInput, D
  * Processes at ~15 FPS using a timer (not tick-based).
  */
 UCLASS(ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
-class FLLM_NPC_API UGestureRecognitionComponent : public UNPCSubsystemComponent
+class LLM_NPC_API UGestureRecognitionComponent : public UNPCSubsystemComponent
 {
 	GENERATED_BODY()
 

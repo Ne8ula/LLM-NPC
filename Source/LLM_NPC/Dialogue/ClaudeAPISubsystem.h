@@ -14,7 +14,7 @@ class IHttpResponse;
  * Includes the NPC's dialogue text plus structured metadata for emotion and item triggers.
  */
 USTRUCT(BlueprintType)
-struct FLLM_NPC_API FClaudeAPIResponse
+struct LLM_NPC_API FClaudeAPIResponse
 {
 	GENERATED_BODY()
 
@@ -56,7 +56,7 @@ DECLARE_DYNAMIC_DELEGATE_OneParam(FOnClaudeRequestComplete, const FClaudeAPIResp
  * and parsing of structured JSON responses. All NPC dialogue routes through this subsystem.
  */
 UCLASS()
-class FLLM_NPC_API UClaudeAPISubsystem : public UGameInstanceSubsystem
+class LLM_NPC_API UClaudeAPISubsystem : public UGameInstanceSubsystem
 {
 	GENERATED_BODY()
 

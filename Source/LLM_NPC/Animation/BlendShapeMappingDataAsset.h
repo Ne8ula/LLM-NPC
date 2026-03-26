@@ -10,7 +10,7 @@
  * should be driven toward (0-1).
  */
 USTRUCT(BlueprintType)
-struct FLLM_NPC_API FEmotionBlendShapeTarget
+struct LLM_NPC_API FEmotionBlendShapeTarget
 {
 	GENERATED_BODY()
 
@@ -29,7 +29,7 @@ struct FLLM_NPC_API FEmotionBlendShapeTarget
  * Multiple mappings can exist for the same emotion at different intensity bands.
  */
 USTRUCT(BlueprintType)
-struct FLLM_NPC_API FEmotionBlendShapeMapping
+struct LLM_NPC_API FEmotionBlendShapeMapping
 {
 	GENERATED_BODY()
 
@@ -57,7 +57,7 @@ struct FLLM_NPC_API FEmotionBlendShapeMapping
  * Designers configure one per character or share across archetypes with similar rigs.
  */
 UCLASS(BlueprintType)
-class FLLM_NPC_API UBlendShapeMappingDataAsset : public UDataAsset
+class LLM_NPC_API UBlendShapeMappingDataAsset : public UDataAsset
 {
 	GENERATED_BODY()
 

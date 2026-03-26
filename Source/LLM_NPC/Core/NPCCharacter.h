@@ -23,7 +23,7 @@ class UFallbackManagerComponent;
  * For procedural generation, spawn this actor and configure components at runtime.
  */
 UCLASS(BlueprintType, Blueprintable)
-class FLLM_NPC_API ANPCCharacter : public ACharacter
+class LLM_NPC_API ANPCCharacter : public ACharacter
 {
 	GENERATED_BODY()
 

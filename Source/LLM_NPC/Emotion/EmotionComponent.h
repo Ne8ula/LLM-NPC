@@ -23,7 +23,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnEmotionChanged, FEmotionState, O
  * SubsystemName = "EmotionEngine"
  */
 UCLASS(ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
-class FLLM_NPC_API UEmotionComponent : public UNPCSubsystemComponent
+class LLM_NPC_API UEmotionComponent : public UNPCSubsystemComponent
 {
 	GENERATED_BODY()
 

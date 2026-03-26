@@ -9,7 +9,7 @@
  * Detects 21 hand landmarks and returns them as normalized (0-1) x,y coordinates.
  */
 UCLASS(BlueprintType)
-class FLLM_NPC_API UHandLandmarkModel : public UObject
+class LLM_NPC_API UHandLandmarkModel : public UObject
 {
 	GENERATED_BODY()
 

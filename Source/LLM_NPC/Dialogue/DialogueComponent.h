@@ -29,7 +29,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDialogueHistoryCleared);
  * DialogueComponent instance.
  */
 UCLASS(ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
-class FLLM_NPC_API UDialogueComponent : public UNPCSubsystemComponent
+class LLM_NPC_API UDialogueComponent : public UNPCSubsystemComponent
 {
 	GENERATED_BODY()
 

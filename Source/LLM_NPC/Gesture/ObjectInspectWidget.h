@@ -14,7 +14,7 @@ class AInspectableItem;
  * for manipulating the inspected object.
  */
 UCLASS()
-class FLLM_NPC_API UObjectInspectWidget : public UUserWidget
+class LLM_NPC_API UObjectInspectWidget : public UUserWidget
 {
 	GENERATED_BODY()
 

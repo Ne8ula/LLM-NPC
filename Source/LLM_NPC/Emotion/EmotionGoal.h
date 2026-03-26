@@ -16,7 +16,7 @@
  * enabling A*-like planning through the emotion graph.
  */
 UCLASS(BlueprintType, EditInlineNew, DefaultToInstanced)
-class FLLM_NPC_API UEmotionGoal : public UObject
+class LLM_NPC_API UEmotionGoal : public UObject
 {
 	GENERATED_BODY()
 

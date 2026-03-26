@@ -44,7 +44,7 @@ enum class EManipulationInputMode : uint8
  * Each axis ranges from -1.0 to +1.0.
  */
 USTRUCT(BlueprintType)
-struct FLLM_NPC_API FPADVector
+struct LLM_NPC_API FPADVector
 {
 	GENERATED_BODY()
 
@@ -121,7 +121,7 @@ namespace EmotionPADDefaults
  * Combines Plutchik discrete label with PAD continuous vector.
  */
 USTRUCT(BlueprintType)
-struct FLLM_NPC_API FEmotionState
+struct LLM_NPC_API FEmotionState
 {
 	GENERATED_BODY()
 
@@ -150,7 +150,7 @@ struct FLLM_NPC_API FEmotionState
 
 /** A single dialogue message in conversation history. */
 USTRUCT(BlueprintType)
-struct FLLM_NPC_API FNPCMessage
+struct LLM_NPC_API FNPCMessage
 {
 	GENERATED_BODY()
 
@@ -177,7 +177,7 @@ struct FLLM_NPC_API FNPCMessage
 
 /** Detected user emotion from facial recognition. */
 USTRUCT(BlueprintType)
-struct FLLM_NPC_API FDetectedUserEmotion
+struct LLM_NPC_API FDetectedUserEmotion
 {
 	GENERATED_BODY()
 
@@ -207,7 +207,7 @@ enum class EGestureType : uint8
 };
 
 USTRUCT(BlueprintType)
-struct FLLM_NPC_API FGestureInput
+struct LLM_NPC_API FGestureInput
 {
 	GENERATED_BODY()
 
@@ -229,7 +229,7 @@ struct FLLM_NPC_API FGestureInput
 
 /** Signal sent to the Emotion Engine to influence NPC emotional state. */
 USTRUCT(BlueprintType)
-struct FLLM_NPC_API FEmotionSignal
+struct LLM_NPC_API FEmotionSignal
 {
 	GENERATED_BODY()
 

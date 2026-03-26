@@ -17,7 +17,7 @@
  *   the lack of haptic feedback in vision-based tracking.
  */
 UCLASS(BlueprintType)
-class FLLM_NPC_API UGestureClassifier : public UObject
+class LLM_NPC_API UGestureClassifier : public UObject
 {
 	GENERATED_BODY()
 

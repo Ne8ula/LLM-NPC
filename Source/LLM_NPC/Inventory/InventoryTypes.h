@@ -9,7 +9,7 @@
  * before an inventory item becomes unlocked.
  */
 USTRUCT(BlueprintType)
-struct FLLM_NPC_API FEmotionUnlockCondition
+struct LLM_NPC_API FEmotionUnlockCondition
 {
 	GENERATED_BODY()
 
@@ -40,7 +40,7 @@ struct FLLM_NPC_API FEmotionUnlockCondition
  * A single item an NPC can give to the player when unlock conditions are met.
  */
 USTRUCT(BlueprintType)
-struct FLLM_NPC_API FInventoryItem
+struct LLM_NPC_API FInventoryItem
 {
 	GENERATED_BODY()
 
