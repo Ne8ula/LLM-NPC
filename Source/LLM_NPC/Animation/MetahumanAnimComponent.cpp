@@ -62,10 +62,7 @@ void UMetahumanAnimComponent::InitializeSubsystem()
 			CachedSkeletalMesh->SetAnimationMode(EAnimationMode::AnimationSingleNode);
 			CachedSkeletalMesh->Stop();
 
-			// Also disable any post-process AnimBP
-			CachedSkeletalMesh->SetPostProcessAnimBlueprintClass(nullptr);
-
-			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Cleared AnimBP and post-process on Face mesh for code-driven morph targets"));
+			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Cleared AnimBP on Face mesh for code-driven morph targets"));
 
 			// Set a neutral baseline — reset all morph targets to 0
 			if (USkeletalMesh* SkelMesh = CachedSkeletalMesh->GetSkeletalMeshAsset())
