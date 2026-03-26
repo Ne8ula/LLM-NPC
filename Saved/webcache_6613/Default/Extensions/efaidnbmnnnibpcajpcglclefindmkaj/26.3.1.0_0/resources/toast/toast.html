@@ -1,0 +1,108 @@
+<!--
+/*************************************************************************
+* ADOBE CONFIDENTIAL
+* ___________________
+*
+*  Copyright 2026 Adobe Systems Incorporated
+*  All Rights Reserved.
+*
+* NOTICE:  All information contained herein is, and remains
+* the property of Adobe Systems Incorporated and its suppliers,
+* if any.  The intellectual and technical concepts contained
+* herein are proprietary to Adobe Systems Incorporated and its
+* suppliers and may be covered by U.S. and Foreign Patents,
+* patents in process, and are protected by trade secret or copyright law.
+* Dissemination of this information or reproduction of this material
+* is strictly forbidden unless prior written permission is obtained
+* from Adobe Systems Incorporated.
+**************************************************************************/
+-->
+
+<style>
+    .acrobat-toast {
+        --toast-bg: #292929;
+        --toast-close-hover-bg: #505050;
+        position: fixed;
+        bottom: 24px;
+        left: 30px;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        min-width: 330px;
+        height: 52px;
+        padding: 5px 9px 5px 25px;
+        background-color: var(--toast-bg);
+        border-radius: 4px;
+        box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.08),
+                    0 1px 4px 0 rgba(0, 0, 0, 0.04),
+                    0 0 1px 0 rgba(0, 0, 0, 0.08);
+        box-sizing: border-box;
+        z-index: 1000000;
+    }
+
+    .acrobat-toast-message {
+        height: 20px;
+        font-family: "Google Sans", "Roboto", sans-serif;
+        font-size: 14px;
+        font-weight: 400;
+        line-height: 140%;
+        font-variant-numeric: lining-nums tabular-nums;
+        color: #FFFFFF;
+        margin-right: 20px;
+    }
+
+    .acrobat-toast-action-button {
+        flex-shrink: 0;
+        font-family: "Roboto", sans-serif;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 100%;
+        color: #FFFFFF;
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        text-decoration: none;
+        margin-right: 8px;
+    }
+
+    .acrobat-toast-action-button:hover {
+        text-decoration: underline;
+    }
+
+    .acrobat-toast-close {
+        display: flex;
+        width: 42px;
+        height: 42px;
+        padding: 10px;
+        gap: 10px;
+        background: none;
+        border: none;
+        cursor: pointer;
+    }
+
+    .acrobat-toast-close-icon {
+        width: 22px;
+        height: 22px;
+        display: block;
+        background-color: var(--toast-close-icon-color);
+        -webkit-mask: var(--toast-close-icon-url) no-repeat center;
+        mask: var(--toast-close-icon-url) no-repeat center;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+    }
+
+    .acrobat-toast-close:hover {
+        background-color: var(--toast-close-hover-bg);
+        border-radius: 100px;
+    }
+</style>
+
+<div class="acrobat-toast">
+    <div id="acrobat-toast-message" class="acrobat-toast-message"></div>
+    <button id="acrobat-toast-action-button" class="acrobat-toast-action-button" style="display: none;"></button>
+    <button id="acrobat-toast-close" class="acrobat-toast-close" aria-label="Close">
+        <span class="acrobat-toast-close-icon" id="acrobat-toast-close-icon" role="img" aria-label="Close"></span>
+    </button>
+</div>

@@ -1,0 +1,1270 @@
+{
+  "version": "1.0.0",
+  "metadata": {
+    "name": "Adobe Acrobat Preferences",
+    "description": "Adobe Acrobat Preferences Configuration",
+    "lastUpdated": "2025-11-25",
+    "author": "Adobe Acrobat Team"
+  },
+  "tabs": [
+    {
+      "id": "general",
+      "label": "General",
+      "labelKey": "preferenceGeneralTabLabel",
+      "visible": true,
+      "order": 1,
+      "sections": [
+        {
+          "id": "pdf-viewer-section",
+          "controls": [
+            {
+              "id": "acrobat-integrations-default-viewership-group",
+              "type": "checkbox-group",
+              "title": "Open PDFs in Acrobat from your browser",
+              "titleKey": "preferenceBrowserDefaultViewershipTitle",
+              "description": "Set Acrobat as your default viewer to open PDFs from online links, Gmail, and Google Drive.",
+              "descriptionKey": "preferenceBrowserDefaultViewershipDescription",
+              "descriptionKeyFunction": "getDefaultViewershipDescriptionKey",
+              "hasParent": false,
+              "itemsPerRow": 3,
+              "visibilityCondition": {
+                "type": "custom",
+                "function": "isOpenPdfsInAcrobatEnabled"
+              },
+              "children": [
+                {
+                  "id": "pdfOwnershipExploreOptionsTitle",
+                  "type": "checkbox",
+                  "title": "Online PDFs",
+                  "titleKey": "preferenceOnlinePDFsTitle",
+                  "storageKey": "pdfViewer",
+                  "defaultValue": false,
+                  "requiresReload": true,
+                  "saveCallback": "onPDFViewerPreferenceChange",
+                  "analytics": {
+                    "disabled": "USE_ACROBAT_IN_CHROME_DISABLED",
+                    "enabled": "USE_ACROBAT_IN_CHROME_ENABLED"
+                  }
+                },
+                {
+                  "id": "gmail-default-viewership",
+                  "type": "checkbox",
+                  "title": "Gmail",
+                  "titleKey": "surfaceNameGmail",
+                  "storageKey": "gmail-pdf-default-viewership",
+                  "defaultValue": false,
+                  "requiresReload": true,
+                  "visibilityCondition": {
+                    "type": "custom",
+                    "function": "checkIsGmailDefaultViewershipFeatureEnabled"
+                  },
+                  "saveCallback": {
+                    "function": "onAcrobatDefaultViewershipPreferenceChange",
+                    "args": [
+                      "gmail"
+                    ]
+                  }
+                },
+                {
+                  "id": "google-drive-default-viewership",
+                  "type": "checkbox",
+                  "title": "Google Drive",
+                  "titleKey": "surfaceNameGdrive",
+                  "storageKey": "gdrive-pdf-default-viewership",
+                  "defaultValue": false,
+                  "requiresReload": true,
+                  "visibilityCondition": {
+                    "type": "custom",
+                    "function": "checkIsGoogleDriveDefaultViewershipFeatureEnabled"
+                  },
+                  "saveCallback": {
+                    "function": "onAcrobatDefaultViewershipPreferenceChange",
+                    "args": [
+                      "gdrive"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "id": "localFileOptionTitle",
+              "type": "button",
+              "title": "Open local files in Acrobat",
+              "titleKey": "preferenceOpenLocalFilesTitle",
+              "description": "This option is managed by the Chrome browser. Turn on “Allow access to file URLs” to open PDFs in Acrobat.",
+              "descriptionKey": "preferenceOpenLocalFilesDescription",
+              "action": "openLocalFileSettingsPrompt",
+              "buttonLabel": "Turn off",
+              "buttonLabelKey": "preferenceOpenLocalFilesTurnOffButtonLabel",
+              "visible": true,
+              "visibilityCondition": {
+                "type": "custom",
+                "function": "showTurnOffLocalFilePermissionSetting"
+              }
+            },
+            {
+              "id": "localFileOptionTitle",
+              "type": "button",
+              "title": "Open local files in Acrobat",
+              "titleKey": "preferenceOpenLocalFilesTitle",
+              "description": "This option is managed by the Chrome browser. Turn on “Allow access to file URLs” to open PDFs in Acrobat.",
+              "descriptionKey": "preferenceOpenLocalFilesDescription",
+              "action": "openLocalFileSettingsPrompt",
+              "buttonLabel": "Turn on",
+              "buttonLabelKey": "preferenceOpenLocalFilesTurnOnButtonLabel",
+              "visible": true,
+              "visibilityCondition": {
+                "type": "custom",
+                "function": "showTurnOnLocalFilePermissionSetting"
+              }
+            }
+          ]
+        },
+        {
+          "id": "appearance-section",
+          "controls": [
+            {
+              "id": "appearancePrefTitle",
+              "type": "dropdown",
+              "title": "Set display theme",
+              "titleKey": "preferenceDisplayThemeTitle",
+              "description": "Select dark mode or light mode.",
+              "descriptionKey": "preferenceDisplayThemeDescription",
+              "storageKey": "theme",
+              "defaultValue": "auto",
+              "options": [
+                {
+                  "label": "Use system setting",
+                  "labelKey": "appearancePrefOp1",
+                  "value": "auto"
+                },
+                {
+                  "label": "Dark",
+                  "labelKey": "appearancePrefOp2",
+                  "value": "dark"
+                },
+                {
+                  "label": "Light",
+                  "labelKey": "appearancePrefOp3",
+                  "value": "light"
+                }
+              ],
+              "saveCallback": "onSaveThemePreference"
+            }
+          ]
+        },
+        {
+          "id": "language-section",
+          "controls": [
+            {
+              "id": "userLocale",
+              "type": "dropdown",
+              "title": "Set language",
+              "titleKey": "preferenceLanguageTitle",
+              "description": "Select your preferred language.",
+              "descriptionKey": "preferenceLanguageDescription",
+              "storageKey": "appLocale",
+              "defaultValue": {
+                "function": "getLocalePreference"
+              },
+              "options": [
+                {
+                  "label": "Dansk",
+                  "value": "da-DK"
+                },
+                {
+                  "label": "Deutsch",
+                  "value": "de-DE"
+                },
+                {
+                  "label": "English: US",
+                  "value": "en-US"
+                },
+                {
+                  "label": "English: UK",
+                  "value": "en-GB"
+                },
+                {
+                  "label": "Español",
+                  "value": "es-ES"
+                },
+                {
+                  "label": "Français",
+                  "value": "fr-FR"
+                },
+                {
+                  "label": "Italiano",
+                  "value": "it-IT"
+                },
+                {
+                  "label": "Nederlands",
+                  "value": "nl-NL"
+                },
+                {
+                  "label": "Norsk: bokmål",
+                  "value": "nb-NO"
+                },
+                {
+                  "label": "Português: Brasil",
+                  "value": "pt-BR"
+                },
+                {
+                  "label": "Suomi",
+                  "value": "fi-FI"
+                },
+                {
+                  "label": "日本語",
+                  "value": "ja-JP"
+                },
+                {
+                  "label": "Svenska",
+                  "value": "sv-SE"
+                },
+                {
+                  "label": "한국어",
+                  "value": "ko-KR"
+                },
+                {
+                  "label": "简体中文",
+                  "value": "zh-CN"
+                },
+                {
+                  "label": "繁体中文",
+                  "value": "zh-TW"
+                },
+                {
+                  "label": "Čeština",
+                  "value": "cs-CZ"
+                },
+                {
+                  "label": "Polski",
+                  "value": "pl-PL"
+                },
+                {
+                  "label": "Русский",
+                  "value": "ru-RU"
+                },
+                {
+                  "label": "Türkçe",
+                  "value": "tr-TR"
+                }
+              ],
+              "saveCallback": "onLocaleChangePreference",
+              "analytics": {
+                "change": "OPTIONS_LANGUAGE_CHANGED"
+              }
+            }
+          ]
+        },
+        {
+          "id": "save-location-section",
+          "controls": [
+            {
+              "id": "saveLocationPreferenceTitle",
+              "type": "dropdown",
+              "title": "Set location for saving files",
+              "titleKey": "preferenceSaveLocationTitle",
+              "description": "Save your files to Adobe cloud storage, save to your computer, or be asked where to save every time.",
+              "descriptionKey": "preferenceSaveLocationDescription",
+              "storageKey": "saveLocation",
+              "defaultValue": "ask",
+              "options": [
+                {
+                  "label": "Ask me every time",
+                  "labelKey": "saveLocationOp1",
+                  "value": "ask"
+                },
+                {
+                  "label": "Cloud",
+                  "labelKey": "saveLocationOp2",
+                  "value": "cloud"
+                },
+                {
+                  "label": "This computer",
+                  "labelKey": "saveLocationOp3",
+                  "value": "local"
+                }
+              ],
+              "saveCallback": "onSaveSaveLocationPreference",
+              "visible": true,
+              "visibilityCondition": {
+                "type": "and",
+                "conditions": [
+                  {
+                    "storageKey": "isSaveLocationPrefEnabled",
+                    "value": true
+                  }
+                ]
+              },
+              "analytics": {
+                "change": "SAVE_LOCATION_PREFERENCE_CHANGED"
+              }
+            }
+          ]
+        },
+        {
+          "id": "updates-section",
+          "controls": [
+            {
+              "id": "showFeatureGuidancePreferenceTitle",
+              "type": "checkbox",
+              "title": "Show feature guidance",
+              "titleKey": "preferenceShowFeatureGuidanceTitle",
+              "description": "Let the Acrobat extension show guidance about updates, how to use features, and more.",
+              "descriptionKey": "preferenceShowFeatureGuidanceDescription",
+              "storageKey": "showFeatureGuidance",
+              "defaultValue": true,
+              "visible": true,
+              "visibilityCondition": {
+                "type": "custom",
+                "function": "checkShowFeatureGuidanceFeatureFlag"
+              },
+              "analytics": {
+                "disabled": "OPTIONS_DISABLE_FEATURE_GUIDANCE",
+                "enabled": "OPTIONS_ENABLE_FEATURE_GUIDANCE"
+              }
+            },
+            {
+              "id": "whatsNewAutoOpenTitle",
+              "type": "checkbox",
+              "title": "Enable auto-open for update",
+              "titleKey": "preferenceWhatsNewAutoOpenTitle",
+              "description": "Allow Acrobat to automatically open a webpage when new updates are available.",
+              "descriptionKey": "whatsNewAutoOpenDescription",
+              "storageKey": "whatsNewAutoOpen",
+              "defaultValue": true,
+              "visible": true,
+              "visibilityCondition": {
+                "type": "custom",
+                "function": "checkShowWhatsNewAutoOpenPreference"
+              },
+              "analytics": {
+                "disabled": "OPTIONS_DISABLE_WHATS_NEW_AUTO_OPEN",
+                "enabled": "OPTIONS_ENABLE_WHATS_NEW_AUTO_OPEN"
+              }
+            }
+          ]
+        },
+        {
+          "id": "webpage-conversion-section",
+          "controls": [
+            {
+              "id": "webpagePDFConversion",
+              "type": "button",
+              "title": "Modify web page conversion settings",
+              "titleKey": "preferenceWebpageConversionTitle",
+              "description": "Make updates to settings for saving webpages as PDFs, including margins, fonts, and other layout options.",
+              "descriptionKey": "preferenceWebpageConversionDescription",
+              "action": "showConversionSettingsDialog",
+              "buttonLabel": "Edit",
+              "buttonLabelKey": "editMegaVerbText",
+              "visible": true,
+              "visibilityCondition": {
+                "type": "custom",
+                "function": "showWebpageConversionSettings"
+              },
+              "analytics": {
+                "click": "TREFOIL_HTML_PREFERENCES_CLICK"
+              }
+            },
+            {
+              "id": "web2pdfOpenConvertedPDFTitle",
+              "type": "checkbox",
+              "title": "Auto-open converted PDFs in Acrobat",
+              "titleKey": "web2pdfOpenConvertedPDFTitle",
+              "description": "After converting a webpage to PDF using the Acrobat extension, automatically open the converted PDF in Acrobat.",
+              "descriptionKey": "preferenceAutoOpenConvertedPDFDescription",
+              "storageKey": "ViewResultsPref",
+              "defaultValue": true,
+              "visibilityCondition": {
+                "type": "custom",
+                "function": "checkAutoOpenConvertedPDFPreference"
+              },
+              "analytics": {
+                "disabled": "TREFOIL_HTML_OPENPDF_PREF_OFF",
+                "enabled": "TREFOIL_HTML_OPENPDF_PREF_ON"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "connected-apps",
+      "label": "Connected apps",
+      "labelKey": "preferenceConnectedAppsTabLabel",
+      "visible": true,
+      "order": 2,
+      "sections": [
+        {
+          "id": "acrobat-integrations-section",
+          "controls": [
+            {
+              "id": "acrobatGsuiteTouchPointPreferenceTitle",
+              "type": "checkbox-group",
+              "title": "Show Acrobat options in other websites",
+              "titleKey": "acrobatTouchPointInOtherSitesPreferenceTitle",
+              "description": "Integrate Acrobat with websites, including Gmail and Google Drive, for easy access to PDF tools.",
+              "descriptionKey": "acrobatTouchPointInOtherSitesPreferenceDescription",
+              "storageKey": "show-acrobat-shortcuts-master-switch",
+              "defaultValue": true,
+              "requiresReload": true,
+              "saveCallback": "syncMasterSwitchToOldTouchPointSetting",
+              "hasParent": true,
+              "hasAccordion": true,
+              "accordionId": "acrobatIntegrationsTouchPointAdvancedSettings",
+              "accordionTitle": "Advanced settings",
+              "accordionTitleKey": "preferenceGroupAccordionTitle",
+              "showAccordionTopDivider": true,
+              "itemsPerRow": 2,
+              "checkboxGroupFooter": "The Acrobat shortcut won't appear if it's already set as your default viewer for that app.",
+              "checkboxGroupFooterKey": "preferenceShowOpenInAcrobatShortcutCheckboxGroupFooter",
+              "checkboxGroupFooterLink": {
+                "text": "set as your default viewer",
+                "textKey": "preferenceShowOpenInAcrobatShortcutCheckboxGroupFooterLinkText",
+                "onClick": "openDefaultViewershipSettings"
+              },
+              "children": [
+                {
+                  "id": "acrobatEmbeddedPDFTouchPointPreferenceTitle",
+                  "type": "checkbox",
+                  "title": "Embedded PDFs",
+                  "titleKey": "preferenceEmbeddedPDFsTitle",
+                  "storageKey": "acrobat-touch-point-in-embedded-pdf",
+                  "defaultValue": true,
+                  "requiresReload": true,
+                  "visibilityCondition": {
+                    "type": "and",
+                    "conditions": [
+                      {
+                        "flag": "dc-cv-embedded-pdf-touch-point",
+                        "value": true
+                      }
+                    ]
+                  },
+                  "analytics": {
+                    "disabled": "OPTIONS_ACROBAT_EMBEDDED_TOUCH_POINT_DISABLED",
+                    "enabled": "OPTIONS_ACROBAT_EMBEDDED_TOUCH_POINT_ENABLED"
+                  }
+                },
+                {
+                  "id": "gmail-shortcut",
+                  "type": "checkbox",
+                  "title": "Gmail",
+                  "titleKey": "surfaceNameGmail",
+                  "storageKey": "acrobat-touch-point-in-gmail",
+                  "defaultValue": true,
+                  "requiresReload": true,
+                  "saveCallback": {
+                    "function": "onAcrobatShortcutPreferenceChange",
+                    "args": [
+                      "gmail",
+                      "https://mail.google.com/*"
+                    ]
+                  },
+                  "disabledCondition": {
+                    "type": "custom",
+                    "function": "isGmailShortcutDisabled"
+                  },
+                  "visibilityCondition": {
+                    "type": "and",
+                    "conditions": [
+                      {
+                        "flag": "dc-cv-gmail-acrobat-touch-point",
+                        "value": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "googleDocsShortcut",
+                  "type": "checkbox",
+                  "title": "Google Docs",
+                  "titleKey": "surfaceNameGoogleDocs",
+                  "storageKey": "acrobat-touch-point-in-google-docs",
+                  "defaultValue": true,
+                  "requiresReload": true,
+                  "visibilityCondition": {
+                    "type": "and",
+                    "conditions": [
+                      {
+                        "flag": "dc-cv-google-docs-convert-to-pdf-touch-point",
+                        "value": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "googleDriveShortcut",
+                  "type": "checkbox",
+                  "title": "Google Drive",
+                  "titleKey": "surfaceNameGdrive",
+                  "storageKey": "acrobat-touch-point-in-gdrive",
+                  "defaultValue": true,
+                  "requiresReload": true,
+                  "saveCallback": {
+                    "function": "onAcrobatShortcutPreferenceChange",
+                    "args": [
+                      "gdrive",
+                      "https://drive.google.com/*"
+                    ]
+                  },
+                  "disabledCondition": {
+                    "type": "custom",
+                    "function": "isGoogleDriveShortcutDisabled"
+                  },
+                  "visibilityCondition": {
+                    "type": "and",
+                    "conditions": [
+                      {
+                        "flag": "dc-cv-gdrive-open-in-extension",
+                        "value": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "linkedinShortcut",
+                  "type": "checkbox",
+                  "title": "LinkedIn",
+                  "titleKey": "preferenceLinkedInTitle",
+                  "storageKey": "acrobat-touch-point-in-linkedin",
+                  "defaultValue": true,
+                  "requiresReload": true,
+                  "saveCallback": {
+                    "function": "onAcrobatShortcutPreferenceChange",
+                    "args": [
+                      "linkedin",
+                      "https://www.linkedin.com/*"
+                    ]
+                  },
+                  "visibilityCondition": {
+                    "type": "or",
+                    "conditions": [
+                      {
+                        "flag": "dc-cv-linkedin-pdf-touch-point",
+                        "value": true
+                      },
+                      {
+                        "flag": "dc-cv-linkedin-chat-pdf-touch-point",
+                        "value": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "outlookShortcut",
+                  "type": "checkbox",
+                  "title": "Outlook",
+                  "titleKey": "preferenceOutlookTitle",
+                  "storageKey": "acrobat-touch-point-in-outlook",
+                  "defaultValue": true,
+                  "requiresReload": true,
+                  "saveCallback": {
+                    "function": "onAcrobatShortcutPreferenceChange",
+                    "args": [
+                      "outlook",
+                      "https://outlook.office365.com/*",
+                      "https://outlook.office.com/*",
+                      "https://outlook.live.com/*"
+                    ]
+                  },
+                  "visibilityCondition": {
+                    "type": "and",
+                    "conditions": [
+                      {
+                        "flag": "dc-cv-outlook-pdf-touch-point",
+                        "value": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "googleSlidesShortcut",
+                  "type": "checkbox",
+                  "title": "Google Slides",
+                  "titleKey": "surfaceNameGoogleSlides",
+                  "storageKey": "acrobat-touch-point-in-google-slides",
+                  "defaultValue": true,
+                  "requiresReload": true,
+                  "visibilityCondition": {
+                    "type": "and",
+                    "conditions": [
+                      {
+                        "flag": "dc-cv-google-slides-convert-to-pdf-touch-point",
+                        "value": true
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "googleSheetsShortcut",
+                  "type": "checkbox",
+                  "title": "Google Sheets",
+                  "titleKey": "surfaceNameGoogleSheets",
+                  "storageKey": "acrobat-touch-point-in-google-sheets",
+                  "defaultValue": true,
+                  "requiresReload": true,
+                  "visibilityCondition": {
+                    "type": "and",
+                    "conditions": [
+                      {
+                        "flag": "dc-cv-google-sheets-convert-to-pdf-touch-point",
+                        "value": true
+                      }
+                    ]
+                  }
+                }
+              ],
+              "visibilityCondition": {
+                "type": "or",
+                "conditions": [
+                  {
+                    "flag": "dc-cv-gmail-acrobat-touch-point",
+                    "value": true
+                  },
+                  {
+                    "flag": "dc-cv-gdrive-open-in-extension",
+                    "value": true
+                  },
+                  {
+                    "flag": "dc-cv-embedded-pdf-touch-point",
+                    "value": true
+                  },
+                  {
+                    "flag": "dc-cv-outlook-pdf-touch-point",
+                    "value": true
+                  },
+                  {
+                    "flag": "dc-cv-linkedin-pdf-touch-point",
+                    "value": true
+                  },
+                  {
+                    "flag": "dc-cv-linkedin-chat-pdf-touch-point",
+                    "value": true
+                  },
+                  {
+                    "flag": "dc-cv-google-docs-convert-to-pdf-touch-point",
+                    "value": true
+                  },
+                  {
+                    "flag": "dc-cv-google-slides-convert-to-pdf-touch-point",
+                    "value": true
+                  },
+                  {
+                    "flag": "dc-cv-google-sheets-convert-to-pdf-touch-point",
+                    "value": true
+                  }
+                ]
+              },
+              "analytics": {
+                "disabled": "OPTIONS_ACROBAT_TOUCH_POINT_DISABLED",
+                "enabled": "OPTIONS_ACROBAT_TOUCH_POINT_ENABLED"
+              }
+            }
+          ]
+        },
+        {
+          "id": "google-search-section",
+          "controls": [
+            {
+              "id": "web2pdfShowPDFTools",
+              "type": "checkbox",
+              "title": "Show Acrobat tools with Google search results",
+              "titleKey": "preferenceGoogleSearchToolsTitle",
+              "description": "Allow Acrobat to recommend PDF tools to use in your browser based on your searches, which will not be sent to Adobe.",
+              "descriptionKey": "preferenceGoogleSearchToolsDescription",
+              "storageKey": "always-show-pdftools",
+              "defaultValue": true,
+              "visible": true,
+              "visibilityCondition": {
+                "type": "and",
+                "conditions": [
+                  {
+                    "settingsKey": "FRICTIONLESS_ENABLED",
+                    "value": true
+                  }
+                ]
+              },
+              "analytics": {
+                "disabled": "FRICTIONLESS_AUTO_SUGGESTION_DISABLED",
+                "enabled": "FRICTIONLESS_AUTO_SUGGESTION_ENABLED"
+              }
+            }
+          ]
+        },
+        {
+          "id": "adobe-express-section",
+          "controls": [
+            {
+              "id": "expressTouchpointPreferenceTitle",
+              "type": "checkbox",
+              "title": "Enable Adobe Express in Acrobat",
+              "titleKey": "preferenceAdobeExpressTitle",
+              "description": "Edit images with Adobe Express from the Adobe Acrobat extension.",
+              "descriptionKey": "preferenceAdobeExpressDescription",
+              "storageKey": "express-touch-points",
+              "defaultValue": true,
+              "requiresReload": true,
+              "saveCallback": "onAdobeExpressPreferenceChange",
+              "visible": true,
+              "visibilityCondition": {
+                "type": "custom",
+                "function": "checkShowExpressTouchpointsPreference"
+              },
+              "analytics": {
+                "disabled": "OPTIONS_EXPRESS_TOUCHPOINT_DISABLED",
+                "enabled": "OPTIONS_EXPRESS_TOUCHPOINT_ENABLED"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "generative-ai",
+      "label": "Generative AI",
+      "labelKey": "preferenceGenerativeAITabLabel",
+      "visible": true,
+      "visibilityCondition": {
+        "type": "or",
+        "conditions": [
+          {
+            "storageKey": "genAIEligible",
+            "value": "true"
+          },
+          {
+            "storageKey": "sidePanelRegistered",
+            "value": true
+          }
+        ]
+      },
+      "order": 3,
+      "sections": [
+        {
+          "id": "genai-features-section",
+          "controls": [
+            {
+              "id": "enableGenAIFeaturesTitle",
+              "type": "checkbox",
+              "title": "Turn on generative AI features in Acrobat",
+              "titleKey": "preferenceTurnOnAIFeaturesTitle",
+              "description": "Allow your files to be processed in the cloud to use generative AI features. Note: Turning this feature off disables generative AI features by preventing your files from being processed in the cloud; you can turn it back on anytime.",
+              "descriptionKey": "preferenceTurnOnAIFeaturesDescription",
+              "storageKey": "egaf",
+              "defaultValue": true,
+              "visibilityCondition": {
+                "type": "and",
+                "conditions": [
+                  {
+                    "flag": "dc-cv-genai-disable-pref",
+                    "value": true
+                  },
+                  {
+                    "storageKey": "genAIEligible",
+                    "value": "true"
+                  }
+                ]
+              },
+              "saveCallback": "onGenAIFeaturesPreferenceChange",
+              "analytics": {
+                "disabled": "OPTIONS_DISABLE_GENAI_FEATURES",
+                "enabled": "OPTIONS_ENABLE_GENAI_FEATURES"
+              }
+            },
+            {
+              "id": "enableGenAIAutoSummarizeTitle",
+              "type": "checkbox",
+              "title": "Auto-summarize all documents opened in Acrobat",
+              "titleKey": "enableGenAIAutoSummarizeTitle",
+              "description": "When you use the AI Assistant or generative summary, your documents will be processed in the cloud. If you disable this feature, your documents will not be processed through these capabilities.",
+              "descriptionKey": "enableGenAIAutoSummarizeDescription",
+              "storageKey": "autoSum",
+              "defaultValue": true,
+              "visibilityCondition": {
+                "type": "and",
+                "conditions": [
+                  {
+                    "flag": "dc-cv-genai-disable-pref",
+                    "value": true
+                  },
+                  {
+                    "storageKey": "genAIEligible",
+                    "value": "true"
+                  },
+                  {
+                    "storageKey": "autoSummaryEligible",
+                    "value": true
+                  }
+                ]
+              },
+              "analytics": {
+                "disabled": "OPTIONS_DISABLE_GENAI_AUTO_SUMMARIZE",
+                "enabled": "OPTIONS_ENABLE_GENAI_AUTO_SUMMARIZE"
+              }
+            }
+          ]
+        },
+        {
+          "id": "fab-section",
+          "controls": [
+            {
+              "id": "askAssistantBannerTitle",
+              "type": "banner",
+              "title": "AI Assistant for web pages",
+              "titleKey": "preferenceAssistantWebPageTitle",
+              "content": "Get fast summaries and key insights with AI Assistant on webpages.",
+              "contentKey": "preferenceAssistantWebPageContent",
+              "badge": {
+                "text": "Beta",
+                "textKey": "preferenceAssistantWebPageBadgeText",
+                "style": "informative"
+              },
+              "cssClass": "preference-banner",
+              "hideDivider": true,
+              "visibilityCondition": {
+                "type": "and",
+                "conditions": [
+                  {
+                    "storageKey": "sidePanelRegistered",
+                    "value": true
+                  }
+                ]
+              }
+            },
+            {
+              "id": "assistant-web-page-img",
+              "type": "image",
+              "src": "../images/ai_assistant_web_page.svg",
+              "alt": "AI Assistant for web pages",
+              "altKey": "preferenceAssistantWebPageTitle",
+              "width": "580px",
+              "height": "144px",
+              "cssClass": "margin-bottom-16",
+              "hideDivider": true,
+              "visibilityCondition": {
+                "type": "and",
+                "conditions": [
+                  {
+                    "storageKey": "sidePanelRegistered",
+                    "value": true
+                  }
+                ]
+              }
+            },
+            {
+              "id": "genAIFabPreferenceTitle",
+              "type": "checkbox",
+              "title": "Show AI Assistant button",
+              "titleKey": "preferenceShowAIAssistantButtonTitle",
+              "description": "Always display the AI Assistant button at the edge of your browser window.",
+              "descriptionKey": "preferenceShowAIAssistantButtonDescription",
+              "storageKey": "enableGenAIFab",
+              "defaultValue": false,
+              "hideDivider": true,
+              "visibilityCondition": {
+                "type": "and",
+                "conditions": [
+                  {
+                    "storageKey": "sidePanelRegistered",
+                    "value": true
+                  }
+                ]
+              },
+              "analytics": {
+                "disabled": "OPTIONS_DISABLE_GEN_AI_FAB",
+                "enabled": "OPTIONS_ENABLE_GEN_AI_FAB"
+              }
+            }
+          ]
+        },
+        {
+          "id": "fab-domain-list-section",
+          "controls": [
+            {
+              "id": "domainPreferenceTitle",
+              "type": "taglist",
+              "title": "Websites where AI Assistant is disabled",
+              "titleKey": "preferenceHideFabDomainListTitle",
+              "storageKey": "hideFabDomainList",
+              "defaultValue": [],
+              "maxVisibleTags": 9,
+              "showMoreText": "Show more",
+              "showMoreTextKey": "preferenceShowMoreText",
+              "showLessText": "Show less",
+              "showLessTextKey": "preferenceShowLessText",
+              "visibilityCondition": {
+                "type": "and",
+                "conditions": [
+                  {
+                    "storageKey": "sidePanelRegistered",
+                    "value": true
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "genai-markers-section",
+          "visible": true,
+          "controls": [
+            {
+              "id": "summarize-banner",
+              "type": "image",
+              "src": "../images/SummarizeBanner.svg",
+              "alt": "AI summarization feature banner",
+              "altKey": "preferenceSummarizeBannerAlt",
+              "width": "580px",
+              "height": "144px",
+              "cssClass": "margin-bottom-16",
+              "hideDivider": true,
+              "visibilityCondition": {
+                "type": "and",
+                "conditions": [
+                  {
+                    "flag": "dc-cv-genai-markers",
+                    "value": true
+                  },
+                  {
+                    "flag": "dc-cv-genai-disable-pref",
+                    "value": true
+                  },
+                  {
+                    "storageKey": "genAIEligible",
+                    "value": "true"
+                  }
+                ]
+              }
+            },
+            {
+              "id": "aiMarkerTouchpointPreferenceTitle",
+              "type": "checkbox",
+              "title": "Show Summarize PDF option",
+              "titleKey": "preferenceAIMarkerWebpagesTitle",
+              "description": "Always display the Summarize PDF option when hovering over PDFs on web pages.",
+              "descriptionKey": "preferenceAIMarkerWebpagesDescription",
+              "storageKey": "aiMarkers",
+              "defaultValue": true,
+              "visibilityCondition": {
+                "type": "and",
+                "conditions": [
+                  {
+                    "flag": "dc-cv-genai-markers",
+                    "value": true
+                  },
+                  {
+                    "flag": "dc-cv-genai-disable-pref",
+                    "value": true
+                  },
+                  {
+                    "storageKey": "genAIEligible",
+                    "value": "true"
+                  }
+                ]
+              },
+              "analytics": {
+                "disabled": "OPTIONS_DISABLE_AI_MARKERS",
+                "enabled": "OPTIONS_ENABLE_AI_MARKERS"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "privacy",
+      "label": "Privacy",
+      "labelKey": "preferencePrivacyTabLabel",
+      "visible": true,
+      "order": 4,
+      "sections": [
+        {
+          "id": "analytics-section",
+          "controls": [
+            {
+              "id": "analyticsOptinTitle",
+              "type": "checkbox",
+              "title": "Send usage data",
+              "titleKey": "analyticsOptinTitle",
+              "description": "Send Adobe information about how you use the Acrobat extension to improve product features. ",
+              "descriptionKey": "preferenceOptinDescription",
+              "storageKey": "logAnalytics",
+              "backgroundPreferencesKey": "analytics_on",
+              "defaultValue": true,
+              "visibilityCondition": {
+                "type": "or",
+                "conditions": [
+                  {
+                    "storageKey": "ANALYTICS_OPT_IN_ADMIN",
+                    "value": "true"
+                  },
+                  {
+                    "storageKey": "ANALYTICS_OPT_IN_ADMIN",
+                    "value": null
+                  },
+                  {
+                    "storageKey": "ANALYTICS_OPT_IN_ADMIN",
+                    "value": "undefined"
+                  },
+                  {
+                    "storageKey": "ANALYTICS_OPT_IN_ADMIN",
+                    "value": ""
+                  }
+                ]
+              },
+              "analytics": {
+                "disabled": "OPTIONS_DISABLED_ANALYTICS",
+                "enabled": "OPTIONS_ENABLED_ANALYTICS"
+              },
+              "descriptionLink": {
+                "analytics": "OPTIONS_ABOUT_ADOBE_ACROBAT_CLICKED",
+                "url": "https://helpx.adobe.com/acrobat/kb/acrobat-pro-aip-for-chrome.html",
+                "urlKey": "LearnMoreURL",
+                "text": "Learn more",
+                "textKey": "preferenceOptinLearnMore"
+              }
+            },
+            {
+              "id": "analyticsOptinTitle",
+              "type": "checkbox",
+              "title": "Send usage data",
+              "titleKey": "analyticsOptinTitle",
+              "description": "None of your usage data is being shared. ",
+              "descriptionKey": "web2pdfOptOutDisabled",
+              "storageKey": "logAnalytics",
+              "defaultValue": false,
+              "disabled": true,
+              "visibilityCondition": {
+                "type": "and",
+                "conditions": [
+                  {
+                    "storageKey": "ANALYTICS_OPT_IN_ADMIN",
+                    "value": "false"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "adobe-internal",
+      "label": "Adobe internal",
+      "labelKey": "preferenceAdobeInternalTabLabel",
+      "visible": true,
+      "visibilityCondition": {
+        "type": "or",
+        "conditions": [
+          {
+            "settingsKey": "DEBUG_MODE",
+            "value": true
+          },
+          {
+            "storageKey": "adobeInternal",
+            "value": "true"
+          }
+        ]
+      },
+      "order": 5,
+      "sections": [
+        {
+          "id": "developer-options-section",
+          "controls": [
+            {
+              "id": "environment-selector",
+              "type": "dropdown",
+              "title": "Development Environment",
+              "titleKey": "preferenceAdobeInternalEnvironmentTitle",
+              "description": "Select the target environment for the extension.",
+              "descriptionKey": "preferenceAdobeInternalEnvironmentDescription",
+              "storageKey": "env",
+              "backgroundPreferencesKey": "environment",
+              "defaultValue": {
+                "function": "getEnvironmentPreference"
+              },
+              "options": [
+                {
+                  "label": "Production",
+                  "labelKey": "envProd",
+                  "value": "prod"
+                },
+                {
+                  "label": "Stage",
+                  "labelKey": "envStage",
+                  "value": "stage"
+                },
+                {
+                  "label": "Test",
+                  "labelKey": "envTest",
+                  "value": "test"
+                },
+                {
+                  "label": "Dev",
+                  "labelKey": "envDev",
+                  "value": "dev"
+                },
+                {
+                  "label": "Local Dev",
+                  "labelKey": "envLocalDev",
+                  "value": "local-dev"
+                }
+              ],
+              "saveCallback": "onSaveEnvironmentPreference",
+              "visible": true,
+              "visibilityCondition": {
+                "type": "and",
+                "conditions": [
+                  {
+                    "settingsKey": "DEBUG_MODE",
+                    "value": true
+                  }
+                ]
+              }
+            },
+            {
+              "id": "environment-selector",
+              "type": "dropdown",
+              "title": "Development Environment",
+              "titleKey": "preferenceAdobeInternalEnvironmentTitle",
+              "description": "Select the target environment for the extension.",
+              "descriptionKey": "preferenceAdobeInternalEnvironmentDescription",
+              "storageKey": "env",
+              "backgroundPreferencesKey": "environment",
+              "defaultValue": {
+                "function": "getEnvironmentPreference"
+              },
+              "options": [
+                {
+                  "label": "Production",
+                  "labelKey": "envProd",
+                  "value": "prod"
+                },
+                {
+                  "label": "Stage",
+                  "labelKey": "envStage",
+                  "value": "stage"
+                }
+              ],
+              "saveCallback": "onSaveEnvironmentPreference",
+              "visible": true,
+              "visibilityCondition": {
+                "type": "and",
+                "conditions": [
+                  {
+                    "storageKey": "adobeInternal",
+                    "value": "true"
+                  },
+                  {
+                    "settingsKey": "DEBUG_MODE",
+                    "value": false
+                  }
+                ]
+              }
+            },
+            {
+              "id": "connected-app-selector",
+              "type": "dropdown",
+              "title": "Connected Application",
+              "titleKey": "preferenceAdobeInternalConnectedAppTitle",
+              "description": "Select the target connected application for the extension functionalities. This setting only mocks the views, the functionality may be broken.",
+              "descriptionKey": "preferenceAdobeInternalConnectedAppDescription",
+              "storageKey": "product",
+              "backgroundPreferencesKey": "product",
+              "defaultValue": {
+                "function": "getConnectedApp"
+              },
+              "options": [
+                {
+                  "label": "Acrobat",
+                  "labelKey": "productAcrobat",
+                  "value": "acrobat"
+                },
+                {
+                  "label": "Reader",
+                  "labelKey": "productReader",
+                  "value": "reader"
+                },
+                {
+                  "label": "No App",
+                  "labelKey": "productNoApp",
+                  "value": "no-app"
+                }
+              ],
+              "visible": true,
+              "visibilityCondition": {
+                "type": "and",
+                "conditions": [
+                  {
+                    "settingsKey": "DEBUG_MODE",
+                    "value": true
+                  }
+                ]
+              }
+            },
+            {
+              "id": "genai-cluster-selector",
+              "type": "dropdown",
+              "title": "GenAI Cluster",
+              "titleKey": "preferenceAdobeInternalGenAIClusterTitle",
+              "description": "Select the target cluster for GenAI services.",
+              "descriptionKey": "preferenceAdobeInternalGenAIClusterDescription",
+              "storageKey": "cluster",
+              "defaultValue": {
+                "function": "getGenAIServiceVariant"
+              },
+              "options": [
+                {
+                  "label": "Develop",
+                  "labelKey": "clusterDevelop",
+                  "value": "dev"
+                },
+                {
+                  "label": "Beta",
+                  "labelKey": "clusterBeta",
+                  "value": "beta"
+                },
+                {
+                  "label": "Release",
+                  "labelKey": "clusterRelease",
+                  "value": "release"
+                }
+              ],
+              "visible": true,
+              "visibilityCondition": {
+                "type": "and",
+                "conditions": [
+                  {
+                    "settingsKey": "DEBUG_MODE",
+                    "value": true
+                  }
+                ]
+              }
+            },
+            {
+              "id": "bypassGenAIWebpageEligibilityTitle",
+              "type": "checkbox",
+              "title": "Enable AI Assistant for Webpages on all pages",
+              "titleKey": "bypassGenAIWebpageEligibilityTitle",
+              "description": "When enabled, GenAI features will be available on all webpages regardless of eligibility checks. This setting is only available for Adobe internal users.",
+              "descriptionKey": "bypassGenAIWebpageEligibilityDescription",
+              "storageKey": "bypassGenAIWebpageEligibility",
+              "defaultValue": "false",
+              "visible": true,
+              "visibilityCondition": {
+                "type": "and",
+                "conditions": [
+                  {
+                    "storageKey": "adobeInternal",
+                    "value": "true"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -13,11 +13,18 @@
 	"Plugins": [
 		{
 			"Name": "MetaHuman",
-			"Enabled": true
+			"Enabled": true,
+			"SupportedTargetPlatforms": [
+				"Win64",
+				"Linux"
+			]
 		},
 		{
 			"Name": "AudioCapture",
 			"Enabled": true
 		}
+	],
+	"AdditionalPluginDirectories": [
+		"../../../../Downloads/UnrealClaude-master/UnrealClaude-master/UnrealClaude"
 	]
 }
