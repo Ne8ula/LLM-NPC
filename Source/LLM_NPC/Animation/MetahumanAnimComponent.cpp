@@ -246,56 +246,68 @@ void UMetahumanAnimComponent::BuildDefaultEmotionMappings()
 
 void UMetahumanAnimComponent::SetFaceControl(FName ControlName, float Value)
 {
-	if (!CachedFaceAnimInstance) return;
+	if (!CachedFaceAnimInstance || !CachedSetControlFunc) return;
 
-	// Call the "Set Control" Blueprint function via reflection
-	if (CachedSetControlFunc)
+	// Call "Set Control" via ProcessEvent
+	// UE 5.7 Blueprint floats are double internally, so we use double for Value
+	// Struct must match the UFunction's parameter layout exactly
+	struct
 	{
-		struct
-		{
-			FName ControlName;
-			float Value;
-			bool Result;
-			bool ControlAdded;
-		} Params;
-		Params.ControlName = ControlName;
-		Params.Value = Value;
-		Params.Result = false;
-		Params.ControlAdded = false;
+		FName ControlName;
+		double Value;      // Blueprint "float" is double in UE 5.7
+		bool Result;
+		uint8 Pad0[7];     // Padding after bool
+		bool ControlAdded;
+	} Params;
+	FMemory::Memzero(&Params, sizeof(Params));
+	Params.ControlName = ControlName;
+	Params.Value = (double)Value;
 
-		CachedFaceAnimInstance->ProcessEvent(CachedSetControlFunc, &Params);
-	}
+	CachedFaceAnimInstance->ProcessEvent(CachedSetControlFunc, &Params);
 }
 
 void UMetahumanAnimComponent::SetJawOpenAlpha(float Value)
 {
 	if (!CachedFaceAnimInstance) return;
 
-	// Set "Jaw Open Alpha" via property reflection
-	static FName PropName;
+	// Set "JawOpenAlpha" via property reflection
+	// In UE 5.7, Blueprint floats are stored as double internally
 	static FProperty* CachedProp = nullptr;
 	static bool bSearched = false;
+	static bool bIsDouble = false;
 
 	if (!bSearched)
 	{
 		bSearched = true;
-		CachedProp = CachedFaceAnimInstance->GetClass()->FindPropertyByName(FName("Jaw Open Alpha"));
+		CachedProp = CachedFaceAnimInstance->GetClass()->FindPropertyByName(FName("JawOpenAlpha"));
 		if (!CachedProp)
 		{
-			CachedProp = CachedFaceAnimInstance->GetClass()->FindPropertyByName(FName("JawOpenAlpha"));
+			CachedProp = CachedFaceAnimInstance->GetClass()->FindPropertyByName(FName("Jaw Open Alpha"));
 		}
 		if (!CachedProp)
 		{
 			CachedProp = CachedFaceAnimInstance->GetClass()->FindPropertyByName(FName("Jaw_Open_Alpha"));
 		}
+		if (CachedProp)
+		{
+			bIsDouble = CachedProp->IsA<FDoubleProperty>();
+			UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: JawOpenAlpha property type: %s (isDouble: %d)"),
+				*CachedProp->GetCPPType(), bIsDouble ? 1 : 0);
+		}
 	}
 
 	if (CachedProp)
 	{
-		float* ValuePtr = CachedProp->ContainerPtrToValuePtr<float>(CachedFaceAnimInstance);
-		if (ValuePtr)
+		float ClampedValue = FMath::Clamp(Value, 0.0f, 1.0f);
+		if (bIsDouble)
 		{
-			*ValuePtr = FMath::Clamp(Value, 0.0f, 1.0f);
+			double* ValuePtr = CachedProp->ContainerPtrToValuePtr<double>(CachedFaceAnimInstance);
+			if (ValuePtr) *ValuePtr = (double)ClampedValue;
+		}
+		else
+		{
+			float* ValuePtr = CachedProp->ContainerPtrToValuePtr<float>(CachedFaceAnimInstance);
+			if (ValuePtr) *ValuePtr = ClampedValue;
 		}
 	}
 }
