@@ -5,9 +5,6 @@
 #include "HAL/CriticalSection.h"
 #include "WhisperSTTComponent.generated.h"
 
-class UAudioCaptureComponent;
-class FWhisperSubmixListener;
-
 /** Delegate fired when a transcript is ready from speech-to-text. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTranscriptReady, const FString&, Transcript);
 
@@ -18,8 +15,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnRecordingStateChanged, bool, bIsR
  * Speech-to-text component using OpenAI Whisper API (cloud).
  *
  * Hold V key to record, release to transcribe.
- * Uses UAudioCaptureComponent to drive mic input, with a submix buffer listener
- * to capture raw PCM samples. Encodes as WAV and sends to OpenAI Whisper API.
+ * Uses Windows waveIn API directly for microphone capture (bypasses UE AudioCapture).
+ * Encodes as 16-bit 16kHz mono WAV, sends to OpenAI /v1/audio/transcriptions.
  */
 UCLASS(ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
 class LLM_NPC_API UWhisperSTTComponent : public UNPCSubsystemComponent
@@ -58,13 +55,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "NPC|STT")
 	bool IsAPIKeyConfigured() const { return !OpenAIAPIKey.IsEmpty(); }
 
-protected:
-	virtual void BeginPlay() override;
-	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-
 private:
-	/** Encode recorded audio as WAV bytes for upload. */
-	TArray<uint8> EncodeAsWAV(const TArray<float>& AudioData, int32 InSampleRate, int32 NumChannels) const;
+	/** Encode recorded PCM as WAV bytes for upload. */
+	TArray<uint8> EncodeAsWAV(const TArray<uint8>& PCMData, int32 InSampleRate, int32 NumChannels, int32 BitsPerSample) const;
 
 	/** Send WAV data to OpenAI Whisper API. */
 	void SendToWhisperAPI(const TArray<uint8>& WAVData);
@@ -72,33 +65,33 @@ private:
 	/** Handle HTTP response from OpenAI. */
 	void OnWhisperResponseReceived(bool bWasSuccessful, int32 ResponseCode, const FString& ResponseBody);
 
-	/** Register/unregister the submix listener on the audio device. */
-	void RegisterSubmixListener();
-	void UnregisterSubmixListener();
+	/** Recorded PCM bytes — written from waveIn callback thread. */
+	TArray<uint8> RecordedPCM;
 
-	/** Audio capture component (drives mic input through the audio engine). */
-	UPROPERTY()
-	TObjectPtr<UAudioCaptureComponent> AudioCapture;
+	/** Lock for thread-safe access to RecordedPCM. */
+	FCriticalSection PCMLock;
 
-	/** Submix buffer listener (non-UObject, defined in .cpp). */
-	TSharedPtr<FWhisperSubmixListener> SubmixListener;
-
-	/** Recorded audio samples — written from audio thread, read from game thread. */
-	TArray<float> RecordedSamples;
-
-	/** Lock for thread-safe access to RecordedSamples. */
-	FCriticalSection SamplesLock;
+	/** Opaque handle to waveIn device (HWAVEIN). */
+	void* WaveInHandle = nullptr;
 
 	/** Recording state. */
 	bool bIsRecording = false;
-	bool bListenerRegistered = false;
 
 	/** OpenAI API key. */
 	FString OpenAIAPIKey;
 
-	/** Sample rate for recording (Whisper target). */
-	int32 SampleRate = 16000;
+	/** Sample rate for recording (matches Whisper expectation). */
+	static constexpr int32 SampleRate = 16000;
 
-	/** Actual sample rate from the audio device. */
-	int32 DeviceSampleRate = 0;
+	/** Number of waveIn buffers for double-buffering. */
+	static constexpr int32 NumBuffers = 4;
+
+	/** Size of each buffer in bytes (0.5 seconds of 16-bit mono 16kHz). */
+	static constexpr int32 BufferSizeBytes = SampleRate * sizeof(int16) / 2;
+
+	/** waveIn buffer headers (opaque, allocated in .cpp). */
+	void* WaveHeaders = nullptr;
+
+	/** Raw buffer memory for waveIn. */
+	uint8* BufferMemory = nullptr;
 };

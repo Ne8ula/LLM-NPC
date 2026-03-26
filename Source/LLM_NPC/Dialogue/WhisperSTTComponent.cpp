@@ -1,6 +1,4 @@
 #include "WhisperSTTComponent.h"
-#include "AudioCaptureComponent.h"
-#include "AudioDevice.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
@@ -8,46 +6,61 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
-/**
- * Standalone submix buffer listener (non-UObject).
- * Lives entirely in the .cpp so we can include AudioDevice.h without header bloat.
- */
-class FWhisperSubmixListener : public ISubmixBufferListener
+// Windows multimedia API for direct microphone capture
+#include "Windows/AllowWindowsPlatformTypes.h"
+#include <windows.h>
+#include <mmsystem.h>
+#include "Windows/HideWindowsPlatformTypes.h"
+
+// ----------------------------------------------------------------------------
+// waveIn callback — runs on a system audio thread
+// ----------------------------------------------------------------------------
+static void CALLBACK WaveInCallback(HWAVEIN hWaveIn, UINT uMsg, DWORD_PTR dwInstance, DWORD_PTR dwParam1, DWORD_PTR dwParam2)
 {
-public:
-	TArray<float>* SamplesPtr = nullptr;
-	FCriticalSection* LockPtr = nullptr;
-	bool bRecording = false;
-	int32 CapturedSampleRate = 0;
-
-	virtual void OnNewSubmixBuffer(const USoundSubmix* OwningSubmix, float* AudioData, int32 NumSamples, int32 NumChannels, const int32 InSampleRate, double AudioClock) override
+	if (uMsg != WIM_DATA)
 	{
-		if (!bRecording || !SamplesPtr || !LockPtr || NumChannels <= 0 || NumSamples <= 0)
-		{
-			return;
-		}
-
-		if (CapturedSampleRate == 0)
-		{
-			CapturedSampleRate = InSampleRate;
-			UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Submix sample rate: %d Hz, channels: %d"), InSampleRate, NumChannels);
-		}
-
-		FScopeLock Lock(LockPtr);
-
-		// Mix down to mono and append
-		int32 NumFrames = NumSamples / NumChannels;
-		for (int32 Frame = 0; Frame < NumFrames; ++Frame)
-		{
-			float Sample = 0.0f;
-			for (int32 Ch = 0; Ch < NumChannels; ++Ch)
-			{
-				Sample += AudioData[Frame * NumChannels + Ch];
-			}
-			Sample /= NumChannels;
-			SamplesPtr->Add(Sample);
-		}
+		return;
 	}
+
+	UWhisperSTTComponent* Comp = reinterpret_cast<UWhisperSTTComponent*>(dwInstance);
+	WAVEHDR* Header = reinterpret_cast<WAVEHDR*>(dwParam1);
+
+	if (!Comp || !Header || Header->dwBytesRecorded == 0)
+	{
+		return;
+	}
+
+	if (Comp->IsRecording())
+	{
+		// Append recorded bytes to the component's buffer (thread-safe via internal lock)
+		// We access RecordedPCM and PCMLock through a static friend-like pattern
+		// by calling a small helper. But since RecordedPCM/PCMLock are private,
+		// we use the publicly-visible IsRecording() plus a direct memory append.
+		//
+		// NOTE: We store the lock/buffer pointers in the WAVEHDR::dwUser field
+		// to avoid needing friendship.
+		struct FBufferContext
+		{
+			TArray<uint8>* PCMPtr;
+			FCriticalSection* LockPtr;
+		};
+		FBufferContext* Ctx = reinterpret_cast<FBufferContext*>(Header->dwUser);
+		if (Ctx && Ctx->PCMPtr && Ctx->LockPtr)
+		{
+			FScopeLock Lock(Ctx->LockPtr);
+			Ctx->PCMPtr->Append(reinterpret_cast<const uint8*>(Header->lpData), Header->dwBytesRecorded);
+		}
+
+		// Re-add the buffer for continued recording
+		waveInAddBuffer(hWaveIn, Header, sizeof(WAVEHDR));
+	}
+}
+
+// Small context struct stored in WAVEHDR::dwUser
+struct FWaveInBufferContext
+{
+	TArray<uint8>* PCMPtr;
+	FCriticalSection* LockPtr;
 };
 
 // ----------------------------------------------------------------------------
@@ -60,24 +73,34 @@ UWhisperSTTComponent::UWhisperSTTComponent()
 
 UWhisperSTTComponent::~UWhisperSTTComponent()
 {
-	UnregisterSubmixListener();
-}
-
-void UWhisperSTTComponent::BeginPlay()
-{
-	Super::BeginPlay();
-}
-
-void UWhisperSTTComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
-{
-	if (bIsRecording)
+	if (WaveInHandle)
 	{
-		bIsRecording = false;
-		if (SubmixListener) SubmixListener->bRecording = false;
-		if (AudioCapture) AudioCapture->Stop();
-		UnregisterSubmixListener();
+		waveInStop(reinterpret_cast<HWAVEIN>(WaveInHandle));
+		waveInReset(reinterpret_cast<HWAVEIN>(WaveInHandle));
+
+		WAVEHDR* Headers = reinterpret_cast<WAVEHDR*>(WaveHeaders);
+		if (Headers)
+		{
+			for (int32 i = 0; i < NumBuffers; ++i)
+			{
+				waveInUnprepareHeader(reinterpret_cast<HWAVEIN>(WaveInHandle), &Headers[i], sizeof(WAVEHDR));
+				if (Headers[i].dwUser)
+				{
+					delete reinterpret_cast<FWaveInBufferContext*>(Headers[i].dwUser);
+				}
+			}
+			delete[] Headers;
+		}
+
+		waveInClose(reinterpret_cast<HWAVEIN>(WaveInHandle));
+		WaveInHandle = nullptr;
 	}
-	Super::EndPlay(EndPlayReason);
+
+	if (BufferMemory)
+	{
+		delete[] BufferMemory;
+		BufferMemory = nullptr;
+	}
 }
 
 void UWhisperSTTComponent::InitializeSubsystem()
@@ -93,6 +116,27 @@ void UWhisperSTTComponent::InitializeSubsystem()
 		return;
 	}
 
+	// Check if any recording devices exist
+	UINT NumDevices = waveInGetNumDevs();
+	if (NumDevices == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("WhisperSTT: No microphone devices found. Voice input disabled."));
+		bIsAvailable = false;
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Found %d microphone device(s)."), NumDevices);
+
+	// Log device names
+	for (UINT i = 0; i < NumDevices; ++i)
+	{
+		WAVEINCAPS caps;
+		if (waveInGetDevCaps(i, &caps, sizeof(caps)) == MMSYSERR_NOERROR)
+		{
+			UE_LOG(LogTemp, Log, TEXT("WhisperSTT:   [%d] %s"), i, caps.szPname);
+		}
+	}
+
 	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: OpenAI API key loaded. Voice input available."));
 	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Hold V to record, release to transcribe."));
 	bIsAvailable = true;
@@ -103,57 +147,19 @@ void UWhisperSTTComponent::ShutdownSubsystem()
 	if (bIsRecording)
 	{
 		bIsRecording = false;
-		if (SubmixListener) SubmixListener->bRecording = false;
-		if (AudioCapture) AudioCapture->Stop();
-		UnregisterSubmixListener();
+		if (WaveInHandle)
+		{
+			waveInStop(reinterpret_cast<HWAVEIN>(WaveInHandle));
+			waveInReset(reinterpret_cast<HWAVEIN>(WaveInHandle));
+		}
 	}
-	RecordedSamples.Empty();
+	RecordedPCM.Empty();
 	Super::ShutdownSubsystem();
 }
 
 bool UWhisperSTTComponent::IsSubsystemAvailable() const
 {
 	return bIsAvailable && !OpenAIAPIKey.IsEmpty();
-}
-
-void UWhisperSTTComponent::RegisterSubmixListener()
-{
-	if (bListenerRegistered)
-	{
-		return;
-	}
-
-	if (!SubmixListener.IsValid())
-	{
-		SubmixListener = MakeShared<FWhisperSubmixListener>();
-		SubmixListener->SamplesPtr = &RecordedSamples;
-		SubmixListener->LockPtr = &SamplesLock;
-	}
-
-	if (FAudioDevice* AudioDevice = GEngine->GetMainAudioDeviceRaw())
-	{
-		AudioDevice->RegisterSubmixBufferListener(SubmixListener.Get());
-		bListenerRegistered = true;
-		UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Registered submix buffer listener."));
-	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("WhisperSTT: No audio device available."));
-	}
-}
-
-void UWhisperSTTComponent::UnregisterSubmixListener()
-{
-	if (!bListenerRegistered || !SubmixListener.IsValid())
-	{
-		return;
-	}
-
-	if (FAudioDevice* AudioDevice = GEngine->GetMainAudioDeviceRaw())
-	{
-		AudioDevice->UnregisterSubmixBufferListener(SubmixListener.Get());
-	}
-	bListenerRegistered = false;
 }
 
 void UWhisperSTTComponent::StartRecording()
@@ -163,43 +169,81 @@ void UWhisperSTTComponent::StartRecording()
 		return;
 	}
 
+	// Clear previous recording
 	{
-		FScopeLock Lock(&SamplesLock);
-		RecordedSamples.Empty();
-		RecordedSamples.Reserve(48000 * 30); // Pre-allocate for up to 30 seconds at 48kHz
+		FScopeLock Lock(&PCMLock);
+		RecordedPCM.Empty();
+		RecordedPCM.Reserve(SampleRate * sizeof(int16) * 30); // 30 seconds max
 	}
 
-	// Create audio capture component if not exists
-	if (!AudioCapture && GetOwner())
-	{
-		AudioCapture = NewObject<UAudioCaptureComponent>(GetOwner());
-		if (AudioCapture)
-		{
-			AudioCapture->RegisterComponent();
-			UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Created AudioCaptureComponent."));
-		}
-	}
+	// Set up wave format: 16-bit mono PCM at 16kHz
+	WAVEFORMATEX wfx = {};
+	wfx.wFormatTag = WAVE_FORMAT_PCM;
+	wfx.nChannels = 1;
+	wfx.nSamplesPerSec = SampleRate;
+	wfx.wBitsPerSample = 16;
+	wfx.nBlockAlign = wfx.nChannels * wfx.wBitsPerSample / 8;
+	wfx.nAvgBytesPerSec = wfx.nSamplesPerSec * wfx.nBlockAlign;
 
-	if (!AudioCapture)
+	// Open default recording device
+	HWAVEIN hWaveIn = nullptr;
+	MMRESULT result = waveInOpen(
+		&hWaveIn,
+		WAVE_MAPPER,
+		&wfx,
+		reinterpret_cast<DWORD_PTR>(&WaveInCallback),
+		reinterpret_cast<DWORD_PTR>(this),
+		CALLBACK_FUNCTION
+	);
+
+	if (result != MMSYSERR_NOERROR)
 	{
-		UE_LOG(LogTemp, Error, TEXT("WhisperSTT: Failed to create AudioCaptureComponent."));
+		UE_LOG(LogTemp, Error, TEXT("WhisperSTT: waveInOpen failed with error %d."), result);
 		return;
 	}
 
-	// Register submix listener to intercept raw audio samples
-	RegisterSubmixListener();
-	if (SubmixListener)
+	WaveInHandle = hWaveIn;
+
+	// Allocate buffers
+	BufferMemory = new uint8[BufferSizeBytes * NumBuffers];
+	FMemory::Memzero(BufferMemory, BufferSizeBytes * NumBuffers);
+
+	WAVEHDR* Headers = new WAVEHDR[NumBuffers];
+	FMemory::Memzero(Headers, sizeof(WAVEHDR) * NumBuffers);
+	WaveHeaders = Headers;
+
+	for (int32 i = 0; i < NumBuffers; ++i)
 	{
-		SubmixListener->bRecording = true;
-		SubmixListener->CapturedSampleRate = 0;
+		// Create context for this buffer
+		FWaveInBufferContext* Ctx = new FWaveInBufferContext();
+		Ctx->PCMPtr = &RecordedPCM;
+		Ctx->LockPtr = &PCMLock;
+
+		Headers[i].lpData = reinterpret_cast<LPSTR>(BufferMemory + i * BufferSizeBytes);
+		Headers[i].dwBufferLength = BufferSizeBytes;
+		Headers[i].dwUser = reinterpret_cast<DWORD_PTR>(Ctx);
+
+		waveInPrepareHeader(hWaveIn, &Headers[i], sizeof(WAVEHDR));
+		waveInAddBuffer(hWaveIn, &Headers[i], sizeof(WAVEHDR));
 	}
 
-	// Start the audio capture — this routes mic audio through the engine
-	AudioCapture->Start();
+	// Start recording
+	result = waveInStart(hWaveIn);
+	if (result != MMSYSERR_NOERROR)
+	{
+		UE_LOG(LogTemp, Error, TEXT("WhisperSTT: waveInStart failed with error %d."), result);
+		waveInClose(hWaveIn);
+		WaveInHandle = nullptr;
+		delete[] Headers;
+		WaveHeaders = nullptr;
+		delete[] BufferMemory;
+		BufferMemory = nullptr;
+		return;
+	}
 
 	bIsRecording = true;
 	OnRecordingStateChanged.Broadcast(true);
-	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Recording started..."));
+	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Recording started (16kHz mono 16-bit via Windows waveIn)..."));
 }
 
 void UWhisperSTTComponent::StopRecordingAndTranscribe()
@@ -210,82 +254,71 @@ void UWhisperSTTComponent::StopRecordingAndTranscribe()
 	}
 
 	bIsRecording = false;
-	if (SubmixListener) SubmixListener->bRecording = false;
 	OnRecordingStateChanged.Broadcast(false);
 
-	if (AudioCapture)
+	HWAVEIN hWaveIn = reinterpret_cast<HWAVEIN>(WaveInHandle);
+
+	// Stop and reset the device (this will flush pending buffers)
+	waveInStop(hWaveIn);
+	waveInReset(hWaveIn);
+
+	// Unprepare headers and clean up
+	WAVEHDR* Headers = reinterpret_cast<WAVEHDR*>(WaveHeaders);
+	if (Headers)
 	{
-		AudioCapture->Stop();
+		for (int32 i = 0; i < NumBuffers; ++i)
+		{
+			waveInUnprepareHeader(hWaveIn, &Headers[i], sizeof(WAVEHDR));
+			if (Headers[i].dwUser)
+			{
+				delete reinterpret_cast<FWaveInBufferContext*>(Headers[i].dwUser);
+			}
+		}
+		delete[] Headers;
+		WaveHeaders = nullptr;
 	}
-	UnregisterSubmixListener();
 
-	// Get captured sample rate
-	int32 CaptureRate = 48000;
-	if (SubmixListener && SubmixListener->CapturedSampleRate > 0)
+	waveInClose(hWaveIn);
+	WaveInHandle = nullptr;
+
+	if (BufferMemory)
 	{
-		CaptureRate = SubmixListener->CapturedSampleRate;
+		delete[] BufferMemory;
+		BufferMemory = nullptr;
 	}
 
-	// Copy samples under lock
-	TArray<float> CapturedSamples;
+	// Copy PCM data under lock
+	TArray<uint8> CapturedPCM;
 	{
-		FScopeLock Lock(&SamplesLock);
-		CapturedSamples = MoveTemp(RecordedSamples);
-		RecordedSamples.Empty();
+		FScopeLock Lock(&PCMLock);
+		CapturedPCM = MoveTemp(RecordedPCM);
+		RecordedPCM.Empty();
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Recording stopped. Captured %d samples (%.1f seconds at %d Hz)."),
-		CapturedSamples.Num(),
-		CapturedSamples.Num() > 0 ? (float)CapturedSamples.Num() / CaptureRate : 0.0f,
-		CaptureRate);
+	float DurationSec = (float)CapturedPCM.Num() / (SampleRate * sizeof(int16));
+	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Recording stopped. Captured %d bytes (%.1f seconds)."),
+		CapturedPCM.Num(), DurationSec);
 
-	// Need at least ~0.5 seconds of audio
-	int32 MinSamples = CaptureRate / 2;
-	if (CapturedSamples.Num() < MinSamples)
+	// Need at least ~0.5 seconds
+	int32 MinBytes = SampleRate * sizeof(int16) / 2;
+	if (CapturedPCM.Num() < MinBytes)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("WhisperSTT: Recording too short (%d samples, need %d), ignoring."),
-			CapturedSamples.Num(), MinSamples);
+		UE_LOG(LogTemp, Warning, TEXT("WhisperSTT: Recording too short, ignoring."));
 		return;
 	}
 
-	// Resample to 16kHz if captured at a different rate (Whisper expects 16kHz)
-	TArray<float> FinalSamples;
-	if (CaptureRate != SampleRate)
-	{
-		float Ratio = (float)SampleRate / (float)CaptureRate;
-		int32 OutputLen = FMath::CeilToInt(CapturedSamples.Num() * Ratio);
-		FinalSamples.SetNumUninitialized(OutputLen);
-
-		for (int32 i = 0; i < OutputLen; ++i)
-		{
-			float SrcIndex = (float)i / Ratio;
-			int32 Idx0 = FMath::FloorToInt(SrcIndex);
-			int32 Idx1 = FMath::Min(Idx0 + 1, CapturedSamples.Num() - 1);
-			float Frac = SrcIndex - (float)Idx0;
-			FinalSamples[i] = FMath::Lerp(CapturedSamples[Idx0], CapturedSamples[Idx1], Frac);
-		}
-
-		UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Resampled %d -> %d samples (%d Hz -> %d Hz)."),
-			CapturedSamples.Num(), FinalSamples.Num(), CaptureRate, SampleRate);
-	}
-	else
-	{
-		FinalSamples = MoveTemp(CapturedSamples);
-	}
-
-	// Encode as WAV and send to API
-	TArray<uint8> WAVData = EncodeAsWAV(FinalSamples, SampleRate, 1);
+	// PCM is already 16-bit 16kHz mono — just add WAV header
+	TArray<uint8> WAVData = EncodeAsWAV(CapturedPCM, SampleRate, 1, 16);
 	SendToWhisperAPI(WAVData);
 }
 
-TArray<uint8> UWhisperSTTComponent::EncodeAsWAV(const TArray<float>& AudioData, int32 InSampleRate, int32 NumChannels) const
+TArray<uint8> UWhisperSTTComponent::EncodeAsWAV(const TArray<uint8>& PCMData, int32 InSampleRate, int32 NumChannels, int32 BitsPerSample) const
 {
 	TArray<uint8> WAVBytes;
 
-	const int32 BitsPerSample = 16;
-	const int32 BytesPerSample = BitsPerSample / 8;
-	const int32 DataSize = AudioData.Num() * BytesPerSample;
+	const int32 DataSize = PCMData.Num();
 	const int32 FileSize = 44 + DataSize;
+	const int32 BytesPerSample = BitsPerSample / 8;
 
 	WAVBytes.SetNumUninitialized(FileSize);
 	uint8* Ptr = WAVBytes.GetData();
@@ -300,7 +333,7 @@ TArray<uint8> UWhisperSTTComponent::EncodeAsWAV(const TArray<float>& AudioData, 
 	FMemory::Memcpy(Ptr, "fmt ", 4); Ptr += 4;
 	int32 SubChunk1Size = 16;
 	FMemory::Memcpy(Ptr, &SubChunk1Size, 4); Ptr += 4;
-	int16 AudioFormat = 1;
+	int16 AudioFormat = 1; // PCM
 	FMemory::Memcpy(Ptr, &AudioFormat, 2); Ptr += 2;
 	int16 Channels = (int16)NumChannels;
 	FMemory::Memcpy(Ptr, &Channels, 2); Ptr += 2;
@@ -309,21 +342,15 @@ TArray<uint8> UWhisperSTTComponent::EncodeAsWAV(const TArray<float>& AudioData, 
 	FMemory::Memcpy(Ptr, &ByteRate, 4); Ptr += 4;
 	int16 BlockAlign = NumChannels * BytesPerSample;
 	FMemory::Memcpy(Ptr, &BlockAlign, 2); Ptr += 2;
-	int16 BPS = BitsPerSample;
+	int16 BPS = (int16)BitsPerSample;
 	FMemory::Memcpy(Ptr, &BPS, 2); Ptr += 2;
 
 	// data sub-chunk
 	FMemory::Memcpy(Ptr, "data", 4); Ptr += 4;
 	FMemory::Memcpy(Ptr, &DataSize, 4); Ptr += 4;
 
-	// Convert float to 16-bit PCM
-	for (int32 i = 0; i < AudioData.Num(); ++i)
-	{
-		float Sample = FMath::Clamp(AudioData[i], -1.0f, 1.0f);
-		int16 PCMSample = (int16)(Sample * 32767.0f);
-		FMemory::Memcpy(Ptr, &PCMSample, 2);
-		Ptr += 2;
-	}
+	// PCM data is already in the right format — copy directly
+	FMemory::Memcpy(Ptr, PCMData.GetData(), DataSize);
 
 	return WAVBytes;
 }
