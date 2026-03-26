@@ -1,5 +1,6 @@
 #include "NPCInventoryComponent.h"
 #include "InventoryDataAsset.h"
+#include "LLM_NPC/Emotion/EmotionComponent.h"
 #include "Engine/StreamableManager.h"
 #include "TimerManager.h"
 
@@ -53,36 +54,17 @@ void UNPCInventoryComponent::InitializeSubsystem()
 		UE_LOG(LogTemp, Warning, TEXT("NPC Inventory: No InventoryDataAsset assigned"));
 	}
 
-	// Bind to emotion subsystem's delegate if available
+	// Bind to EmotionComponent's delegate directly
 	if (AActor* Owner = GetOwner())
 	{
-		TArray<UActorComponent*> Components;
-		Owner->GetComponents(UNPCSubsystemComponent::StaticClass(), Components);
-		for (UActorComponent* Comp : Components)
+		if (UEmotionComponent* EmotionComp = Owner->FindComponentByClass<UEmotionComponent>())
 		{
-			if (Comp && Comp->GetClass()->GetName().Contains(TEXT("Emotion")))
-			{
-				// Bind via dynamic delegate lookup – the Emotion component is expected
-				// to have an OnEmotionStateChanged delegate. We bind at runtime.
-				FScriptDelegate Delegate;
-				Delegate.BindUFunction(this, GET_FUNCTION_NAME_CHECKED(UNPCInventoryComponent, HandleEmotionStateChanged));
-
-				FMulticastScriptDelegate* EmotionDelegate = Comp->GetClass()->FindPropertyByName(TEXT("OnEmotionStateChanged"))
-					? nullptr : nullptr;
-
-				// Fallback: attempt to find and bind via reflection
-				if (FMulticastDelegateProperty* DelegateProp = CastField<FMulticastDelegateProperty>(
-					Comp->GetClass()->FindPropertyByName(TEXT("OnEmotionStateChanged"))))
-				{
-					DelegateProp->GetMulticastDelegate(Comp)->AddDelegate(Delegate);
-					UE_LOG(LogTemp, Log, TEXT("NPC Inventory: Bound to EmotionComponent's OnEmotionStateChanged"));
-				}
-				else
-				{
-					UE_LOG(LogTemp, Warning, TEXT("NPC Inventory: Could not find OnEmotionStateChanged delegate on Emotion component"));
-				}
-				break;
-			}
+			EmotionComp->OnEmotionStateChanged.AddDynamic(this, &UNPCInventoryComponent::HandleEmotionStateChanged);
+			UE_LOG(LogTemp, Log, TEXT("NPC Inventory: Bound to EmotionComponent's OnEmotionStateChanged"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("NPC Inventory: No EmotionComponent found on owner"));
 		}
 	}
 }
