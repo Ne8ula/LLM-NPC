@@ -1,6 +1,7 @@
 #include "DialogueComponent.h"
 #include "ClaudeAPISubsystem.h"
 #include "LLM_NPC/Core/NPCConfigDataAsset.h"
+#include "LLM_NPC/Core/NPCCharacter.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 
@@ -25,6 +26,15 @@ void UDialogueComponent::InitializeSubsystem()
 {
 	Super::InitializeSubsystem();
 
+	// Try to get NPCConfig from owner's ANPCCharacter if not set directly
+	if (!NPCConfig && GetOwner())
+	{
+		if (ANPCCharacter* NPC = Cast<ANPCCharacter>(GetOwner()))
+		{
+			NPCConfig = NPC->NPCConfig;
+		}
+	}
+
 	if (!NPCConfig)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("DialogueComponent: No NPCConfig assigned on %s. Dialogue will not function."),
@@ -33,16 +43,27 @@ void UDialogueComponent::InitializeSubsystem()
 		return;
 	}
 
+	// Cache the subsystem lazily — it may not be ready during BeginPlay
+	if (!CachedClaudeSubsystem && GetWorld())
+	{
+		if (UGameInstance* GI = GetWorld()->GetGameInstance())
+		{
+			CachedClaudeSubsystem = GI->GetSubsystem<UClaudeAPISubsystem>();
+		}
+	}
+
 	if (CachedClaudeSubsystem && CachedClaudeSubsystem->IsAPIKeyConfigured())
 	{
 		bIsAvailable = true;
 		bIsInitialized = true;
-		UE_LOG(LogTemp, Log, TEXT("DialogueComponent: Initialized for %s."), *GetOwner()->GetName());
+		UE_LOG(LogTemp, Log, TEXT("DialogueComponent: Initialized for NPC '%s'. Claude API ready."),
+			*NPCConfig->NPCName.ToString());
 	}
 	else
 	{
-		bIsAvailable = false;
-		UE_LOG(LogTemp, Warning, TEXT("DialogueComponent: ClaudeAPISubsystem not available or API key not configured."));
+		// Still mark as available — we can retry getting the subsystem when sending messages
+		bIsAvailable = true;
+		UE_LOG(LogTemp, Warning, TEXT("DialogueComponent: ClaudeAPISubsystem not yet available. Will retry on first message."));
 	}
 }
 
