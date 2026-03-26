@@ -7,6 +7,7 @@
 #include "LLM_NPC/Inventory/NPCInventoryComponent.h"
 #include "LLM_NPC/Animation/MetahumanAnimComponent.h"
 #include "LLM_NPC/Animation/NPCLipSyncComponent.h"
+#include "LLM_NPC/Dialogue/WhisperSTTComponent.h"
 #include "LLM_NPC/Fallback/FallbackManagerComponent.h"
 
 ANPCCharacter::ANPCCharacter()
@@ -21,6 +22,7 @@ ANPCCharacter::ANPCCharacter()
 	InventoryComponent = CreateDefaultSubobject<UNPCInventoryComponent>(TEXT("InventoryComponent"));
 	MetahumanAnimComponent = CreateDefaultSubobject<UMetahumanAnimComponent>(TEXT("MetahumanAnimComponent"));
 	LipSyncComponent = CreateDefaultSubobject<UNPCLipSyncComponent>(TEXT("LipSyncComponent"));
+	WhisperSTTComponent = CreateDefaultSubobject<UWhisperSTTComponent>(TEXT("WhisperSTTComponent"));
 	FallbackManagerComponent = CreateDefaultSubobject<UFallbackManagerComponent>(TEXT("FallbackManagerComponent"));
 }
 

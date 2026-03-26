@@ -14,6 +14,7 @@ class UNPCInventoryComponent;
 class UMetahumanAnimComponent;
 class UNPCLipSyncComponent;
 class UFallbackManagerComponent;
+class UWhisperSTTComponent;
 
 /**
  * Base Metahuman NPC actor that owns all subsystem components.
@@ -56,6 +57,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
 	TObjectPtr<UNPCLipSyncComponent> LipSyncComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
+	TObjectPtr<UWhisperSTTComponent> WhisperSTTComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
 	TObjectPtr<UFallbackManagerComponent> FallbackManagerComponent;
