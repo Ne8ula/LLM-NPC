@@ -14,6 +14,7 @@ class UNPCInventoryComponent;
 class UMetahumanAnimComponent;
 class UNPCLipSyncComponent;
 class UFallbackManagerComponent;
+class UWhisperSTTComponent;
 class UElevenLabsTTSComponent;
 
 /**
@@ -59,6 +60,12 @@ public:
 	TObjectPtr<UNPCLipSyncComponent> LipSyncComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
+	TObjectPtr<UWhisperSTTComponent> WhisperSTTComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
+	TObjectPtr<UElevenLabsTTSComponent> ElevenLabsTTSComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
 	TObjectPtr<UFallbackManagerComponent> FallbackManagerComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
@@ -70,4 +77,25 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
+
+private:
+	/** Called when DialogueComponent receives a Claude response — forwards text to TTS. */
+	UFUNCTION()
+	void OnDialogueResponse(const FString& ResponseText, EEmotionType NPCEmotionHint, bool bShouldGiveItem, FName ItemID);
+
+	/** Returns a stability modifier for the given emotion. Lower = more expressive voice. */
+	float GetEmotionStabilityModifier(EEmotionType Emotion) const;
+
+	/** Get the jaw open amount for a character (viseme estimation). */
+	float GetVisemeJawOpen(TCHAR Char) const;
+
+	/** Text currently being spoken by TTS. */
+	FString CurrentSpeechText;
+
+	/** Time when current speech started. */
+	float SpeechStartTime = 0.0f;
+
+	/** Whether TTS is currently speaking. */
+	bool bIsSpeaking = false;
 };

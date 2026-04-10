@@ -7,11 +7,10 @@
 #include "MetahumanAnimComponent.generated.h"
 
 /**
- * Drives Metahuman facial blend shapes based on the NPC's current emotional state.
+ * Drives Metahuman facial expressions via the Face AnimBP's control system.
  *
- * Each tick the component reads the current FEmotionState from the Emotion subsystem,
- * looks up the corresponding blend shape targets in the BlendShapeMappingDataAsset,
- * and smoothly interpolates the skeletal mesh's morph targets toward those values.
+ * Works WITH RigLogic by setting curves through the AnimBP's "Set Control" function
+ * and "Jaw Open Alpha" property, rather than trying to override morph targets directly.
  */
 UCLASS(ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
 class LLM_NPC_API UMetahumanAnimComponent : public UNPCSubsystemComponent
@@ -21,51 +20,74 @@ class LLM_NPC_API UMetahumanAnimComponent : public UNPCSubsystemComponent
 public:
 	UMetahumanAnimComponent();
 
-	// --- Lifecycle ---
 	virtual void InitializeSubsystem() override;
 	virtual void ShutdownSubsystem() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
 		FActorComponentTickFunction* ThisTickFunction) override;
 
-	// --- Public API ---
-
-	/**
-	 * Interpolate current blend shape values toward targets.
-	 * Called automatically from TickComponent.
-	 */
+	/** Legacy — now handled internally. */
 	UFUNCTION(BlueprintCallable, Category = "NPC|Animation")
 	void UpdateBlendShapes(float DeltaTime);
 
+	/** Set the lip sync jaw open value (0-1). Called externally by TTS/audio system. */
+	UFUNCTION(BlueprintCallable, Category = "NPC|Animation")
+	void SetLipSyncJawOpen(float Value);
+
+	/** Get the cached Face skeletal mesh. */
+	USkeletalMeshComponent* GetFaceMesh() const { return CachedSkeletalMesh; }
+
 	// --- Configuration ---
 
-	/** Data asset mapping emotions to blend shape targets. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Animation")
 	TSoftObjectPtr<UBlendShapeMappingDataAsset> BlendShapeMappingAssetRef;
 
-	/** Speed of interpolation toward target blend shape values (higher = faster). */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Animation",
-		meta = (ClampMin = "0.1"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Animation", meta = (ClampMin = "0.1"))
 	float InterpolationSpeed = 4.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Animation", meta = (ClampMin = "0.1"))
+	float LipSyncInterpolationSpeed = 12.0f;
 
 protected:
 	virtual void BeginPlay() override;
 
 private:
-	/** Cached reference to the Emotion component. */
+	USkeletalMeshComponent* FindFaceMesh(AActor* Actor) const;
+	void BuildDefaultEmotionMappings();
+
+	/** Call the Face AnimBP's "Set Control" function via reflection. */
+	void SetFaceControl(FName ControlName, float Value);
+
+	/** Set "Jaw Open Alpha" on the Face AnimBP via property reflection. */
+	void SetJawOpenAlpha(float Value);
+
 	UPROPERTY()
 	TObjectPtr<class UEmotionComponent> CachedEmotionComp;
 
-	/** Cached reference to the owner's skeletal mesh component (face mesh). */
 	UPROPERTY()
 	TObjectPtr<USkeletalMeshComponent> CachedSkeletalMesh;
 
-	/** Loaded blend shape mapping data asset (runtime). */
 	UPROPERTY()
 	TObjectPtr<UBlendShapeMappingDataAsset> LoadedMappingData;
 
-	/** Current blend shape values being interpolated. Key = morph target name. */
-	TMap<FName, float> CurrentBlendShapeValues;
+	/** Cached Face AnimInstance for reflection calls. */
+	UPROPERTY()
+	TObjectPtr<UAnimInstance> CachedFaceAnimInstance;
 
-	/** Target blend shape values from the latest emotion state lookup. */
-	TMap<FName, float> TargetBlendShapeValues;
+	/** Cached "Set Control" function pointer. */
+	UFunction* CachedSetControlFunc = nullptr;
+
+	/** Emotion to FACS curve mappings (curve name → target value). */
+	TMap<EEmotionType, TArray<TPair<FName, float>>> EmotionCurveMappings;
+
+	/** Currently active curve values (for smooth interpolation). */
+	TMap<FName, float> ActiveCurveValues;
+
+	/** Lip sync state. */
+	float LipSyncJawOpenValue = 0.0f;
+	float CurrentJawOpenValue = 0.0f;
+
+	/** Blinking state. */
+	bool bIsBlinking = false;
+	float BlinkTimer = 3.0f;
+	float BlinkPhase = 0.0f;
 };

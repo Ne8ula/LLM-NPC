@@ -80,6 +80,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|TTS|Config", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float DefaultSimilarityBoost = 0.75f;
 
+	/** Style exaggeration (0.0 = none, 1.0 = max). Higher values make emotional speech more pronounced. Requires v2 model. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|TTS|Config", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float StyleExaggeration = 0.5f;
+
 	/** Audio output model ID (e.g., "eleven_multilingual_v2"). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|TTS|Config")
 	FString ModelID = TEXT("eleven_multilingual_v2");
