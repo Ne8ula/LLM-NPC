@@ -8,7 +8,7 @@
 #include "Components/AudioComponent.h"
 #include "Sound/SoundWaveProcedural.h"
 #include "Engine/World.h"
-#include "Misc/App.h"
+#include "Async/Async.h"
 
 UElevenLabsTTSComponent::UElevenLabsTTSComponent()
 {
@@ -241,8 +241,7 @@ void UElevenLabsTTSComponent::HandleTTSResponse(bool bWasSuccessful, int32 Respo
 
 	// Dispatch everything to the game thread — both the delegate broadcast and audio playback
 	TWeakObjectPtr<UElevenLabsTTSComponent> WeakThis(this);
-	TArray<uint8> AudioBytesCopy = AudioBytes;
-	AsyncTask(ENamedThreads::GameThread, [WeakThis, AudioBytesCopy = MoveTemp(AudioBytesCopy)]()
+	AsyncTask(ENamedThreads::GameThread, [WeakThis, AudioBytes]()
 	{
 		if (!WeakThis.IsValid())
 		{
@@ -250,10 +249,10 @@ void UElevenLabsTTSComponent::HandleTTSResponse(bool bWasSuccessful, int32 Respo
 		}
 
 		// Broadcast raw audio data for lip sync (PCM 24000 Hz, 16-bit mono)
-		WeakThis->OnTTSAudioDataReceived.Broadcast(AudioBytesCopy, 24000);
+		WeakThis->OnTTSAudioDataReceived.Broadcast(AudioBytes, 24000);
 
 		// Play the audio
-		WeakThis->PlayAudioFromPCM(AudioBytesCopy);
+		WeakThis->PlayAudioFromPCM(AudioBytes);
 	});
 }
 

@@ -6,7 +6,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
-#include "Misc/App.h"
+#include "Async/Async.h"
 #include "TimerManager.h"
 #include "Engine/GameInstance.h"
 
