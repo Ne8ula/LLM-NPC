@@ -27,6 +27,7 @@ Content/Collections/
 Content/Developers/
 Content/MetaHumans/Hana/SourceAssets/
 
+
 # ThirdParty binaries (download locally, don't commit)
 ThirdParty/whisper.cpp/lib/*.dll
 ThirdParty/whisper.cpp/lib/*.lib

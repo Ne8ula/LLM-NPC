@@ -27,6 +27,7 @@ ANPCCharacter::ANPCCharacter()
 	WhisperSTTComponent = CreateDefaultSubobject<UWhisperSTTComponent>(TEXT("WhisperSTTComponent"));
 	ElevenLabsTTSComponent = CreateDefaultSubobject<UElevenLabsTTSComponent>(TEXT("ElevenLabsTTSComponent"));
 	FallbackManagerComponent = CreateDefaultSubobject<UFallbackManagerComponent>(TEXT("FallbackManagerComponent"));
+	TTSComponent = CreateDefaultSubobject<UElevenLabsTTSComponent>(TEXT("TTSComponent"));
 }
 
 void ANPCCharacter::BeginPlay()

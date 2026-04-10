@@ -398,15 +398,21 @@ void UWhisperSTTComponent::SendToWhisperAPI(const TArray<uint8>& WAVData)
 
 	Request->SetContent(PostData);
 
+	TWeakObjectPtr<UWhisperSTTComponent> WeakThis(this);
 	Request->OnProcessRequestComplete().BindLambda(
-		[this](FHttpRequestPtr Req, FHttpResponsePtr Resp, bool bSuccess)
+		[WeakThis](FHttpRequestPtr Req, FHttpResponsePtr Resp, bool bSuccess)
 		{
+			if (!WeakThis.IsValid())
+			{
+				return;
+			}
+
 			if (!bSuccess || !Resp.IsValid())
 			{
 				UE_LOG(LogTemp, Error, TEXT("WhisperSTT: HTTP request failed."));
 				return;
 			}
-			OnWhisperResponseReceived(bSuccess, Resp->GetResponseCode(), Resp->GetContentAsString());
+			WeakThis->OnWhisperResponseReceived(bSuccess, Resp->GetResponseCode(), Resp->GetContentAsString());
 		}
 	);
 
