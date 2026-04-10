@@ -14,6 +14,7 @@ class UNPCInventoryComponent;
 class UMetahumanAnimComponent;
 class UNPCLipSyncComponent;
 class UFallbackManagerComponent;
+class UElevenLabsTTSComponent;
 
 /**
  * Base Metahuman NPC actor that owns all subsystem components.
@@ -59,6 +60,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
 	TObjectPtr<UFallbackManagerComponent> FallbackManagerComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
+	TObjectPtr<UElevenLabsTTSComponent> TTSComponent;
 
 	/** Initialize all subsystems with the assigned NPC config. */
 	UFUNCTION(BlueprintCallable, Category = "NPC")

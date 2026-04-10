@@ -8,6 +8,7 @@
 #include "LLM_NPC/Animation/MetahumanAnimComponent.h"
 #include "LLM_NPC/Animation/NPCLipSyncComponent.h"
 #include "LLM_NPC/Fallback/FallbackManagerComponent.h"
+#include "LLM_NPC/Dialogue/ElevenLabsTTSComponent.h"
 
 ANPCCharacter::ANPCCharacter()
 {
@@ -22,6 +23,7 @@ ANPCCharacter::ANPCCharacter()
 	MetahumanAnimComponent = CreateDefaultSubobject<UMetahumanAnimComponent>(TEXT("MetahumanAnimComponent"));
 	LipSyncComponent = CreateDefaultSubobject<UNPCLipSyncComponent>(TEXT("LipSyncComponent"));
 	FallbackManagerComponent = CreateDefaultSubobject<UFallbackManagerComponent>(TEXT("FallbackManagerComponent"));
+	TTSComponent = CreateDefaultSubobject<UElevenLabsTTSComponent>(TEXT("TTSComponent"));
 }
 
 void ANPCCharacter::BeginPlay()
