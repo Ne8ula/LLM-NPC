@@ -6,7 +6,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
-#include "Misc/App.h"
+#include "Async/Async.h"
 #include "TimerManager.h"
 #include "Engine/GameInstance.h"
 
@@ -174,13 +174,19 @@ void UClaudeAPISubsystem::ExecuteRequest(TSharedPtr<FPendingRequest> PendingRequ
 	);
 	HttpRequest->SetContentAsString(RequestBody);
 
+	TWeakObjectPtr<UClaudeAPISubsystem> WeakThis(this);
 	HttpRequest->OnProcessRequestComplete().BindLambda(
-		[this, PendingRequest](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully)
+		[WeakThis, PendingRequest](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully)
 		{
+			if (!WeakThis.IsValid())
+			{
+				return;
+			}
+
 			int32 ResponseCode = Response.IsValid() ? Response->GetResponseCode() : 0;
 			FString ResponseBody = Response.IsValid() ? Response->GetContentAsString() : TEXT("");
 
-			HandleResponse(PendingRequest, bConnectedSuccessfully, ResponseCode, ResponseBody);
+			WeakThis->HandleResponse(PendingRequest, bConnectedSuccessfully, ResponseCode, ResponseBody);
 		}
 	);
 
@@ -242,10 +248,14 @@ void UClaudeAPISubsystem::HandleResponse(
 	}
 
 	// Fire callbacks on the game thread
-	AsyncTask(ENamedThreads::GameThread, [this, PendingRequest, ParsedResponse]()
+	TWeakObjectPtr<UClaudeAPISubsystem> WeakSelf(this);
+	AsyncTask(ENamedThreads::GameThread, [WeakSelf, PendingRequest, ParsedResponse]()
 	{
 		PendingRequest->OnComplete.ExecuteIfBound(ParsedResponse);
-		OnAnyResponseReceived.Broadcast(ParsedResponse);
+		if (WeakSelf.IsValid())
+		{
+			WeakSelf->OnAnyResponseReceived.Broadcast(ParsedResponse);
+		}
 	});
 }
 

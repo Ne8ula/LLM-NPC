@@ -68,6 +68,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
 	TObjectPtr<UFallbackManagerComponent> FallbackManagerComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
+	TObjectPtr<UElevenLabsTTSComponent> TTSComponent;
+
 	/** Initialize all subsystems with the assigned NPC config. */
 	UFUNCTION(BlueprintCallable, Category = "NPC")
 	void InitializeNPC();
