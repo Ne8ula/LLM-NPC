@@ -3,9 +3,8 @@
 #include "CoreMinimal.h"
 #include "LLM_NPC/Core/NPCSubsystemComponent.h"
 #include "HAL/CriticalSection.h"
+#include "AudioCaptureCore.h"
 #include "WhisperSTTComponent.generated.h"
-
-namespace Audio { class FAudioCapture; struct FCaptureDeviceInfo; }
 
 /** Delegate fired when a transcript is ready from speech-to-text. */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTranscriptReady, const FString&, Transcript);

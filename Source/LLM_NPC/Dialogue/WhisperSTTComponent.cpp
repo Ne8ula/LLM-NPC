@@ -149,7 +149,7 @@ void UWhisperSTTComponent::StartRecording()
 	Audio::FAudioCaptureDeviceParams Params;
 	// Params default to device index 0 (default mic)
 
-	Audio::FOnAudioCaptureFunction OnCapture = [this](const float* InAudio, int32 NumFrames, int32 InNumChannels, int32 InSampleRate, double StreamTime, bool bOverflow)
+	Audio::FOnAudioCaptureFunction OnCapture = [this](const void* InBuffer, int32 NumFrames, int32 InNumChannels, int32 InSampleRate, double StreamTime, bool bOverflow)
 	{
 		if (!bIsRecording)
 		{
@@ -161,6 +161,8 @@ void UWhisperSTTComponent::StartRecording()
 		{
 			DeviceSampleRate = InSampleRate;
 		}
+
+		const float* InAudio = static_cast<const float*>(InBuffer);
 
 		FScopeLock Lock(&SamplesLock);
 
@@ -178,7 +180,7 @@ void UWhisperSTTComponent::StartRecording()
 	};
 
 	// Third param is NumFramesDesired per callback (buffer size), not sample rate
-	bool bOpened = AudioCapture->OpenCaptureStream(Params, MoveTemp(OnCapture), 1024);
+	bool bOpened = AudioCapture->OpenAudioCaptureStream(Params, MoveTemp(OnCapture), 1024);
 	if (!bOpened)
 	{
 		UE_LOG(LogTemp, Error, TEXT("WhisperSTT: Failed to open audio capture stream."));
