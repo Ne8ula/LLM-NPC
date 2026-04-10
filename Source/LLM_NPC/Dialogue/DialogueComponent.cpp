@@ -3,6 +3,7 @@
 #include "LLM_NPC/Core/NPCConfigDataAsset.h"
 #include "LLM_NPC/Core/NPCCharacter.h"
 #include "LLM_NPC/Emotion/EmotionComponent.h"
+#include "LLM_NPC/Dialogue/ElevenLabsTTSComponent.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 
@@ -181,6 +182,27 @@ void UDialogueComponent::OnClaudeResponseReceived(const FClaudeAPIResponse& Resp
 		Response.bShouldGiveItem,
 		ItemName
 	);
+
+	// Trigger TTS to speak the response aloud
+	if (AActor* Owner = GetOwner())
+	{
+		if (UElevenLabsTTSComponent* TTS = Owner->FindComponentByClass<UElevenLabsTTSComponent>())
+		{
+			FString VoiceID;
+			float Stability = -1.0f;
+			float SimilarityBoost = -1.0f;
+
+			// Pull voice settings from NPCConfig if available
+			if (NPCConfig)
+			{
+				VoiceID = NPCConfig->ElevenLabsVoiceID;
+				Stability = NPCConfig->VoiceStability;
+				SimilarityBoost = NPCConfig->VoiceSimilarityBoost;
+			}
+
+			TTS->SpeakText(Response.ResponseText, VoiceID, Stability, SimilarityBoost);
+		}
+	}
 }
 
 FString UDialogueComponent::BuildEmotionAnnotation(const FDetectedUserEmotion& UserEmotion) const

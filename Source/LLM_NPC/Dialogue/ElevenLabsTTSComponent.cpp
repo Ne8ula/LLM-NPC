@@ -159,9 +159,15 @@ void UElevenLabsTTSComponent::SpeakText(const FString& Text, const FString& Voic
 	HttpRequest->SetHeader(TEXT("Accept"), TEXT("audio/pcm"));
 	HttpRequest->SetContentAsString(RequestBody);
 
+	TWeakObjectPtr<UElevenLabsTTSComponent> WeakThis(this);
 	HttpRequest->OnProcessRequestComplete().BindLambda(
-		[this](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully)
+		[WeakThis](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully)
 		{
+			if (!WeakThis.IsValid())
+			{
+				return;
+			}
+
 			if (!bConnectedSuccessfully || !Response.IsValid())
 			{
 				UE_LOG(LogTemp, Error, TEXT("ElevenLabsTTSComponent: TTS request failed - connection error."));
@@ -177,7 +183,7 @@ void UElevenLabsTTSComponent::SpeakText(const FString& Text, const FString& Voic
 			}
 
 			TArray<uint8> AudioBytes = Response->GetContent();
-			HandleTTSResponse(true, ResponseCode, AudioBytes);
+			WeakThis->HandleTTSResponse(true, ResponseCode, AudioBytes);
 		}
 	);
 
@@ -233,14 +239,21 @@ void UElevenLabsTTSComponent::HandleTTSResponse(bool bWasSuccessful, int32 Respo
 		return;
 	}
 
-	// Broadcast raw audio data for lip sync
-	// PCM 24000 Hz, 16-bit mono
-	OnTTSAudioDataReceived.Broadcast(AudioBytes, 24000);
-
-	// Play the audio on the game thread
-	AsyncTask(ENamedThreads::GameThread, [this, AudioBytes]()
+	// Dispatch everything to the game thread — both the delegate broadcast and audio playback
+	TWeakObjectPtr<UElevenLabsTTSComponent> WeakThis(this);
+	TArray<uint8> AudioBytesCopy = AudioBytes;
+	AsyncTask(ENamedThreads::GameThread, [WeakThis, AudioBytesCopy = MoveTemp(AudioBytesCopy)]()
 	{
-		PlayAudioFromPCM(AudioBytes);
+		if (!WeakThis.IsValid())
+		{
+			return;
+		}
+
+		// Broadcast raw audio data for lip sync (PCM 24000 Hz, 16-bit mono)
+		WeakThis->OnTTSAudioDataReceived.Broadcast(AudioBytesCopy, 24000);
+
+		// Play the audio
+		WeakThis->PlayAudioFromPCM(AudioBytesCopy);
 	});
 }
 
