@@ -16,6 +16,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSpeechFinished);
 /** Delegate fired when raw audio data is received (for lip sync). */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTTSAudioDataReceived, const TArray<uint8>&, AudioData, int32, SampleRate);
 
+/** Delegate fired when character-level alignment data is received from ElevenLabs (for viseme lip sync). */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnTTSAlignmentReceived, const FString&, Characters, const TArray<float>&, StartTimesSec, const TArray<float>&, DurationsSec);
+
 /**
  * Text-to-Speech component using the ElevenLabs API.
  *
@@ -65,6 +68,19 @@ public:
 	/** Fired when raw audio data is received. Used by lip sync components. */
 	UPROPERTY(BlueprintAssignable, Category = "NPC|TTS")
 	FOnTTSAudioDataReceived OnTTSAudioDataReceived;
+
+	/** Fired when ElevenLabs character-level alignment data is received. Broadcast before audio playback starts. */
+	UPROPERTY(BlueprintAssignable, Category = "NPC|TTS")
+	FOnTTSAlignmentReceived OnTTSAlignmentReceived;
+
+	/**
+	 * Seconds elapsed since the current TTS utterance started playing.
+	 * Returns 0 if nothing is playing. Uses a wall-clock timestamp captured
+	 * at Play() because USoundWaveProcedural does not expose a reliable
+	 * playback cursor.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "NPC|TTS")
+	float GetPlaybackElapsedSeconds() const;
 
 	// --- Configuration ---
 
@@ -116,6 +132,14 @@ private:
 	/** Create a USoundWaveProcedural from raw PCM audio data and play it. */
 	void PlayAudioFromPCM(const TArray<uint8>& PCMData);
 
+	/** Parse the JSON body returned by the /with-timestamps endpoint into PCM bytes + alignment arrays. */
+	bool ParseTimestampedResponse(
+		const FString& JsonBody,
+		TArray<uint8>& OutPCM,
+		FString& OutCharacters,
+		TArray<float>& OutStartTimesSec,
+		TArray<float>& OutDurationsSec) const;
+
 	/** Callback when audio playback finishes. */
 	UFUNCTION()
 	void OnAudioPlaybackFinished();
@@ -136,6 +160,9 @@ private:
 
 	/** Whether speech is currently being played. */
 	bool bIsSpeaking = false;
+
+	/** Wall-clock timestamp (FPlatformTime::Seconds) captured when Play() was called. 0 when idle. */
+	double PlaybackStartWallTime = 0.0;
 
 	/** Whether the API key is configured. */
 	bool bAPIKeyConfigured = false;

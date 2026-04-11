@@ -7,6 +7,7 @@
 #include "LLM_NPC/Inventory/NPCInventoryComponent.h"
 #include "LLM_NPC/Animation/MetahumanAnimComponent.h"
 #include "LLM_NPC/Animation/NPCLipSyncComponent.h"
+#include "LLM_NPC/Animation/NPCBodyMotionComponent.h"
 #include "LLM_NPC/Dialogue/WhisperSTTComponent.h"
 #include "LLM_NPC/Dialogue/ElevenLabsTTSComponent.h"
 #include "LLM_NPC/Fallback/FallbackManagerComponent.h"
@@ -24,6 +25,7 @@ ANPCCharacter::ANPCCharacter()
 	InventoryComponent = CreateDefaultSubobject<UNPCInventoryComponent>(TEXT("InventoryComponent"));
 	MetahumanAnimComponent = CreateDefaultSubobject<UMetahumanAnimComponent>(TEXT("MetahumanAnimComponent"));
 	LipSyncComponent = CreateDefaultSubobject<UNPCLipSyncComponent>(TEXT("LipSyncComponent"));
+	BodyMotionComponent = CreateDefaultSubobject<UNPCBodyMotionComponent>(TEXT("BodyMotionComponent"));
 	WhisperSTTComponent = CreateDefaultSubobject<UWhisperSTTComponent>(TEXT("WhisperSTTComponent"));
 	ElevenLabsTTSComponent = CreateDefaultSubobject<UElevenLabsTTSComponent>(TEXT("ElevenLabsTTSComponent"));
 	FallbackManagerComponent = CreateDefaultSubobject<UFallbackManagerComponent>(TEXT("FallbackManagerComponent"));
@@ -40,56 +42,12 @@ void ANPCCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	// Drive lip sync from text-based viseme estimation
-	if (MetahumanAnimComponent && ElevenLabsTTSComponent)
-	{
-		bool bTTSSpeaking = ElevenLabsTTSComponent->IsSpeaking();
-		UAudioComponent* AudioComp = ElevenLabsTTSComponent->GetAudioComponent();
-		bool bAudioPlaying = AudioComp && AudioComp->IsPlaying();
-
-		if (bTTSSpeaking && bAudioPlaying && !CurrentSpeechText.IsEmpty())
-		{
-			if (!bIsSpeaking)
-			{
-				// Speech just started
-				bIsSpeaking = true;
-				SpeechStartTime = GetWorld()->GetTimeSeconds();
-			}
-
-			// Estimate current position in text
-			// ElevenLabs speaks at roughly 13-15 characters per second
-			float ElapsedTime = GetWorld()->GetTimeSeconds() - SpeechStartTime;
-			float CharsPerSecond = 14.0f;
-			int32 EstimatedCharIndex = FMath::FloorToInt(ElapsedTime * CharsPerSecond);
-
-			if (EstimatedCharIndex < CurrentSpeechText.Len())
-			{
-				// Look at current and neighboring characters for smoother visemes
-				TCHAR CurrentChar = FChar::ToLower(CurrentSpeechText[EstimatedCharIndex]);
-				float TargetJaw = GetVisemeJawOpen(CurrentChar);
-
-				// Add slight randomness for natural variation
-				float Noise = FMath::Sin(ElapsedTime * 23.0f) * 0.03f;
-				TargetJaw = FMath::Clamp(TargetJaw + Noise, 0.0f, 0.4f);
-
-				MetahumanAnimComponent->SetLipSyncJawOpen(TargetJaw);
-			}
-			else
-			{
-				// Past end of text, close mouth
-				MetahumanAnimComponent->SetLipSyncJawOpen(0.0f);
-			}
-		}
-		else
-		{
-			if (bIsSpeaking)
-			{
-				bIsSpeaking = false;
-				CurrentSpeechText.Empty();
-			}
-			MetahumanAnimComponent->SetLipSyncJawOpen(0.0f);
-		}
-	}
+	// Lip sync is now driven by UNPCLipSyncComponent via the ElevenLabs
+	// character-alignment pipeline (viseme schedule → SetVisemeCurves on
+	// UMetahumanAnimComponent). The legacy text-based jaw estimator that
+	// used to live here has been removed — it was a placeholder, it
+	// conflicted with the new curve driver, and it crashed when a float
+	// rounding edge case made the estimated char index negative.
 }
 
 void ANPCCharacter::InitializeNPC()
@@ -159,10 +117,6 @@ void ANPCCharacter::OnDialogueResponse(const FString& ResponseText, EEmotionType
 
 		UE_LOG(LogTemp, Log, TEXT("ANPCCharacter: TTS emotion='%s', stability=%.2f, style=%.2f: %s"),
 			*UEnum::GetValueAsString(NPCEmotionHint), Stability, ElevenLabsTTSComponent->StyleExaggeration, *ResponseText.Left(80));
-
-		// Store the text for viseme-based lip sync
-		CurrentSpeechText = ResponseText;
-		bIsSpeaking = false; // Will be set true on next Tick when audio starts
 
 		ElevenLabsTTSComponent->SpeakText(ResponseText, VoiceID, Stability, SimilarityBoost);
 	}

@@ -13,6 +13,7 @@ class UGestureRecognitionComponent;
 class UNPCInventoryComponent;
 class UMetahumanAnimComponent;
 class UNPCLipSyncComponent;
+class UNPCBodyMotionComponent;
 class UFallbackManagerComponent;
 class UWhisperSTTComponent;
 class UElevenLabsTTSComponent;
@@ -58,6 +59,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
 	TObjectPtr<UNPCLipSyncComponent> LipSyncComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
+	TObjectPtr<UNPCBodyMotionComponent> BodyMotionComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
 	TObjectPtr<UWhisperSTTComponent> WhisperSTTComponent;

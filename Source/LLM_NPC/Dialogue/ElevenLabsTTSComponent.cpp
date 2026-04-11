@@ -3,8 +3,11 @@
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
 #include "Dom/JsonObject.h"
+#include "Dom/JsonValue.h"
+#include "Serialization/JsonReader.h"
 #include "Serialization/JsonWriter.h"
 #include "Serialization/JsonSerializer.h"
+#include "Misc/Base64.h"
 #include "Components/AudioComponent.h"
 #include "Sound/SoundWaveProcedural.h"
 #include "Engine/World.h"
@@ -156,7 +159,7 @@ void UElevenLabsTTSComponent::SpeakText(const FString& Text, const FString& Voic
 	HttpRequest->SetVerb(TEXT("POST"));
 	HttpRequest->SetHeader(TEXT("Content-Type"), TEXT("application/json"));
 	HttpRequest->SetHeader(TEXT("xi-api-key"), APIKey);
-	HttpRequest->SetHeader(TEXT("Accept"), TEXT("audio/pcm"));
+	HttpRequest->SetHeader(TEXT("Accept"), TEXT("application/json"));
 	HttpRequest->SetContentAsString(RequestBody);
 
 	TWeakObjectPtr<UElevenLabsTTSComponent> WeakThis(this);
@@ -196,6 +199,7 @@ void UElevenLabsTTSComponent::StopSpeaking()
 	{
 		AudioPlaybackComponent->Stop();
 		bIsSpeaking = false;
+		PlaybackStartWallTime = 0.0;
 		OnSpeechFinished.Broadcast();
 	}
 
@@ -209,7 +213,9 @@ bool UElevenLabsTTSComponent::IsSpeaking() const
 
 FString UElevenLabsTTSComponent::BuildAPIURL(const FString& VoiceID) const
 {
-	return FString::Printf(TEXT("%s/text-to-speech/%s?output_format=%s"),
+	// /with-timestamps returns a JSON body containing base64 audio plus
+	// character-level alignment used by the lip sync system.
+	return FString::Printf(TEXT("%s/text-to-speech/%s/with-timestamps?output_format=%s"),
 		*APIBaseURL, *VoiceID, *OutputFormat);
 }
 
@@ -237,25 +243,149 @@ void UElevenLabsTTSComponent::HandleTTSResponse(bool bWasSuccessful, int32 Respo
 {
 	if (!bWasSuccessful || AudioBytes.Num() == 0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("ElevenLabsTTSComponent: No audio data received."));
+		UE_LOG(LogTemp, Error, TEXT("ElevenLabsTTSComponent: No response body received."));
 		return;
 	}
 
-	// Dispatch everything to the game thread — both the delegate broadcast and audio playback
+	// Response body is JSON: { audio_base64, alignment, normalized_alignment }.
+	// Copy into a null-terminated buffer before converting — the HTTP body
+	// is not null-terminated and the alignment field may contain UTF-8.
+	TArray<uint8> NullTerminated = AudioBytes;
+	NullTerminated.Add(0);
+	const FString JsonBody(UTF8_TO_TCHAR(reinterpret_cast<const ANSICHAR*>(NullTerminated.GetData())));
+
+	TArray<uint8> PCMBytes;
+	FString Characters;
+	TArray<float> StartTimesSec;
+	TArray<float> DurationsSec;
+
+	if (!ParseTimestampedResponse(JsonBody, PCMBytes, Characters, StartTimesSec, DurationsSec))
+	{
+		UE_LOG(LogTemp, Error, TEXT("ElevenLabsTTSComponent: Failed to parse /with-timestamps response."));
+		return;
+	}
+
+	if (PCMBytes.Num() == 0)
+	{
+		UE_LOG(LogTemp, Error, TEXT("ElevenLabsTTSComponent: Response contained no audio data."));
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("ElevenLabsTTSComponent: Received %d PCM bytes, %d aligned chars."),
+		PCMBytes.Num(), Characters.Len());
+
+	// Dispatch to the game thread: broadcast alignment first (so lip sync can build
+	// its schedule before the clock starts), then raw audio, then play.
 	TWeakObjectPtr<UElevenLabsTTSComponent> WeakThis(this);
-	AsyncTask(ENamedThreads::GameThread, [WeakThis, AudioBytes]()
+	AsyncTask(ENamedThreads::GameThread,
+		[WeakThis, PCMBytes = MoveTemp(PCMBytes), Characters, StartTimesSec, DurationsSec]()
 	{
 		if (!WeakThis.IsValid())
 		{
 			return;
 		}
 
-		// Broadcast raw audio data for lip sync (PCM 24000 Hz, 16-bit mono)
-		WeakThis->OnTTSAudioDataReceived.Broadcast(AudioBytes, 24000);
+		// Alignment first — lip sync subscribers use this to build the viseme schedule.
+		if (Characters.Len() > 0)
+		{
+			WeakThis->OnTTSAlignmentReceived.Broadcast(Characters, StartTimesSec, DurationsSec);
+		}
 
-		// Play the audio
-		WeakThis->PlayAudioFromPCM(AudioBytes);
+		// Legacy raw-audio delegate (PCM 24000 Hz, 16-bit mono).
+		WeakThis->OnTTSAudioDataReceived.Broadcast(PCMBytes, 24000);
+
+		// Play the audio.
+		WeakThis->PlayAudioFromPCM(PCMBytes);
 	});
+}
+
+bool UElevenLabsTTSComponent::ParseTimestampedResponse(
+	const FString& JsonBody,
+	TArray<uint8>& OutPCM,
+	FString& OutCharacters,
+	TArray<float>& OutStartTimesSec,
+	TArray<float>& OutDurationsSec) const
+{
+	OutPCM.Reset();
+	OutCharacters.Reset();
+	OutStartTimesSec.Reset();
+	OutDurationsSec.Reset();
+
+	TSharedPtr<FJsonObject> Root;
+	TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(JsonBody);
+	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+	{
+		return false;
+	}
+
+	// audio_base64 — required.
+	FString AudioBase64;
+	if (!Root->TryGetStringField(TEXT("audio_base64"), AudioBase64) || AudioBase64.IsEmpty())
+	{
+		return false;
+	}
+	if (!FBase64::Decode(AudioBase64, OutPCM))
+	{
+		return false;
+	}
+
+	// Alignment — prefer normalized_alignment, fall back to alignment. Both optional.
+	const TSharedPtr<FJsonObject>* AlignmentObj = nullptr;
+	if (!Root->TryGetObjectField(TEXT("normalized_alignment"), AlignmentObj) || !AlignmentObj || !AlignmentObj->IsValid())
+	{
+		if (!Root->TryGetObjectField(TEXT("alignment"), AlignmentObj) || !AlignmentObj || !AlignmentObj->IsValid())
+		{
+			// Audio still valid, just no alignment — return true so playback proceeds.
+			return true;
+		}
+	}
+
+	const TArray<TSharedPtr<FJsonValue>>* CharsArr = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* StartArr = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* EndArr = nullptr;
+
+	(*AlignmentObj)->TryGetArrayField(TEXT("characters"), CharsArr);
+	(*AlignmentObj)->TryGetArrayField(TEXT("character_start_times_seconds"), StartArr);
+	(*AlignmentObj)->TryGetArrayField(TEXT("character_end_times_seconds"), EndArr);
+
+	if (!CharsArr || !StartArr || !EndArr)
+	{
+		return true; // audio OK, alignment missing
+	}
+
+	const int32 Count = CharsArr->Num();
+	if (Count == 0 || StartArr->Num() != Count || EndArr->Num() != Count)
+	{
+		return true;
+	}
+
+	OutCharacters.Reserve(Count);
+	OutStartTimesSec.Reserve(Count);
+	OutDurationsSec.Reserve(Count);
+
+	for (int32 i = 0; i < Count; ++i)
+	{
+		FString CharStr = (*CharsArr)[i]->AsString();
+		const TCHAR C = CharStr.Len() > 0 ? CharStr[0] : TEXT(' ');
+		const float Start = static_cast<float>((*StartArr)[i]->AsNumber());
+		const float End   = static_cast<float>((*EndArr)[i]->AsNumber());
+		const float Dur   = FMath::Max(0.0f, End - Start);
+
+		OutCharacters.AppendChar(C);
+		OutStartTimesSec.Add(Start);
+		OutDurationsSec.Add(Dur);
+	}
+
+	return true;
+}
+
+float UElevenLabsTTSComponent::GetPlaybackElapsedSeconds() const
+{
+	if (!bIsSpeaking || PlaybackStartWallTime <= 0.0)
+	{
+		return 0.0f;
+	}
+	return static_cast<float>(FPlatformTime::Seconds() - PlaybackStartWallTime);
 }
 
 void UElevenLabsTTSComponent::PlayAudioFromPCM(const TArray<uint8>& PCMData)
@@ -287,6 +417,11 @@ void UElevenLabsTTSComponent::PlayAudioFromPCM(const TArray<uint8>& PCMData)
 	AudioPlaybackComponent->SetSound(CurrentSoundWave);
 	AudioPlaybackComponent->Play();
 
+	// Capture wall-clock start time for GetPlaybackElapsedSeconds().
+	// USoundWaveProcedural does not expose a reliable playback cursor, so the
+	// lip sync sampler reads elapsed time via this wall-clock value instead.
+	PlaybackStartWallTime = FPlatformTime::Seconds();
+
 	bIsSpeaking = true;
 	OnSpeechStarted.Broadcast();
 
@@ -297,6 +432,7 @@ void UElevenLabsTTSComponent::PlayAudioFromPCM(const TArray<uint8>& PCMData)
 void UElevenLabsTTSComponent::OnAudioPlaybackFinished()
 {
 	bIsSpeaking = false;
+	PlaybackStartWallTime = 0.0;
 	CurrentSoundWave = nullptr;
 	OnSpeechFinished.Broadcast();
 
