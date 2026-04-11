@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs -I {} basename {})",
+      "Bash(pip show:*)",
+      "Bash(py --version)",
+      "Bash(where python3:*)",
+      "Bash(where py:*)",
+      "Bash(py -m pip show python-pptx)",
+      "Bash(py -m pip install python-pptx -q)",
+      "Bash(py -m pip install python-pptx)",
+      "Bash(py -c \"from pptx import Presentation; print\\('OK'\\)\")",
+      "Bash(py make_deck.py)"
+    ]
+  }
+}

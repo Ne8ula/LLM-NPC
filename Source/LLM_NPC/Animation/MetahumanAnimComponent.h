@@ -151,6 +151,11 @@ private:
 	UFUNCTION()
 	void HandleSpeechFinished();
 
+	/** Bound to UElevenLabsTTSComponent::OnSpeechError — immediate thinking
+	 *  pose clear so brow curves decay without waiting for the 15s watchdog. */
+	UFUNCTION()
+	void HandleSpeechError(int32 ResponseCode, const FString& ErrorBody);
+
 	/** Cached sibling pipeline components (subscribe/unsubscribe pairing). */
 	TWeakObjectPtr<UWhisperSTTComponent>    CachedSTT;
 	TWeakObjectPtr<UElevenLabsTTSComponent> CachedTTS;

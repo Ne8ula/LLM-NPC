@@ -85,6 +85,19 @@ public:
 		meta = (ClampMin = "0.01", ClampMax = "0.5"))
 	float EndFadeOutSec = 0.150f;
 
+	/**
+	 * Schedule watchdog: if the playback clock from UElevenLabsTTSComponent::
+	 * GetPlaybackElapsedSeconds() hasn't advanced for this many seconds while
+	 * bScheduleActive is true, force StopLipSync. Guards the case where TTS
+	 * alignment arrived but audio playback never started (e.g. TTS request
+	 * failed mid-stream after broadcasting alignment) — without this, the
+	 * sampler replays the first viseme frame forever and the mouth locks
+	 * open. Works even if OnSpeechError subscription path is broken.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|LipSync",
+		meta = (ClampMin = "0.2", ClampMax = "10.0"))
+	float ScheduleClockTimeoutSec = 2.0f;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -99,6 +112,11 @@ private:
 	/** Bound to UElevenLabsTTSComponent::OnSpeechFinished. */
 	UFUNCTION()
 	void HandleSpeechFinished();
+
+	/** Bound to UElevenLabsTTSComponent::OnSpeechError — immediate StopLipSync
+	 *  so the mouth doesn't freeze open when a TTS request fails mid-stream. */
+	UFUNCTION()
+	void HandleSpeechError(int32 ResponseCode, const FString& ErrorBody);
 
 	/**
 	 * Sample the active schedule at ScheduleTime. Returns the blended curve
@@ -123,6 +141,10 @@ private:
 	/** Fade-out state after the schedule ends so the mouth closes smoothly. */
 	bool bFadingOut = false;
 	float FadeOutTimeRemaining = 0.0f;
+
+	/** Schedule watchdog state — tracks whether the TTS playback clock is advancing. */
+	float LastPlaybackElapsed = -1.0f;
+	float ClockStallAccum = 0.0f;
 
 	/** Last raw sample from the schedule (pre-smoothing). */
 	TMap<FName, float> LastCurves;

@@ -58,6 +58,7 @@ void UNPCLipSyncComponent::InitializeSubsystem()
 	{
 		CachedTTS->OnTTSAlignmentReceived.AddDynamic(this, &UNPCLipSyncComponent::HandleTTSAlignmentReceived);
 		CachedTTS->OnSpeechFinished.AddDynamic(this, &UNPCLipSyncComponent::HandleSpeechFinished);
+		CachedTTS->OnSpeechError.AddDynamic(this, &UNPCLipSyncComponent::HandleSpeechError);
 		UE_LOG(LogTemp, Log, TEXT("LipSync: Subscribed to TTS component %p (name='%s') on owner '%s'"),
 			CachedTTS.Get(), *CachedTTS->GetName(), *Owner->GetName());
 	}
@@ -73,6 +74,7 @@ void UNPCLipSyncComponent::ShutdownSubsystem()
 	{
 		CachedTTS->OnTTSAlignmentReceived.RemoveDynamic(this, &UNPCLipSyncComponent::HandleTTSAlignmentReceived);
 		CachedTTS->OnSpeechFinished.RemoveDynamic(this, &UNPCLipSyncComponent::HandleSpeechFinished);
+		CachedTTS->OnSpeechError.RemoveDynamic(this, &UNPCLipSyncComponent::HandleSpeechError);
 	}
 
 	StopLipSync();
@@ -91,6 +93,10 @@ void UNPCLipSyncComponent::StopLipSync()
 	FadeOutTimeRemaining = 0.0f;
 	ActiveSchedule.Reset();
 	LastKeyIndex = 0;
+
+	// Reset schedule watchdog state.
+	LastPlaybackElapsed = -1.0f;
+	ClockStallAccum = 0.0f;
 
 	// Zero out any curves we were driving.
 	if (CachedMetahumanAnim.IsValid() && (LastCurves.Num() > 0 || SmoothedCurves.Num() > 0))
@@ -113,6 +119,11 @@ void UNPCLipSyncComponent::HandleTTSAlignmentReceived(
 	bFadingOut = false;
 	FadeOutTimeRemaining = 0.0f;
 
+	// Reset watchdog state for the new utterance. LastPlaybackElapsed starts
+	// negative so the first clock read is never interpreted as "no progress."
+	LastPlaybackElapsed = -1.0f;
+	ClockStallAccum = 0.0f;
+
 	UE_LOG(LogTemp, Log, TEXT("LipSync: Built viseme schedule — %d keys, %.2fs duration."),
 		ActiveSchedule.Keys.Num(), ActiveSchedule.TotalDuration);
 }
@@ -127,6 +138,16 @@ void UNPCLipSyncComponent::HandleSpeechFinished()
 		bFadingOut = true;
 		FadeOutTimeRemaining = EndFadeOutSec;
 	}
+}
+
+void UNPCLipSyncComponent::HandleSpeechError(int32 ResponseCode, const FString& ErrorBody)
+{
+	UE_LOG(LogTemp, Warning,
+		TEXT("LipSync: HandleSpeechError — code=%d, body=%s — calling StopLipSync to release any orphaned schedule."),
+		ResponseCode, *ErrorBody);
+	// StopLipSync zeroes curves via SetVisemeCurves(empty), clears bScheduleActive,
+	// clears fade-out state, and resets the watchdog — full cleanup in one call.
+	StopLipSync();
 }
 
 TMap<FName, float> UNPCLipSyncComponent::SampleScheduleAt(float ScheduleTime)
@@ -249,6 +270,33 @@ void UNPCLipSyncComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 			ScheduleTime = CachedTTS->GetPlaybackElapsedSeconds();
 		}
 
+		// --- Watchdog: detect a dead playback clock. ---
+		// If GetPlaybackElapsedSeconds isn't advancing (because TTS failed
+		// mid-stream after broadcasting alignment, or because bIsSpeaking was
+		// never set), the sampler would replay the first viseme frame forever
+		// and lock the mouth open. Track accumulated stall time and force
+		// StopLipSync past the configured timeout. Works even if OnSpeechError
+		// didn't fire (belt-and-suspenders — the error path handles the common
+		// case but this catches anything else).
+		const bool bClockAdvanced = (ScheduleTime - LastPlaybackElapsed) > 0.001f;
+		if (bClockAdvanced)
+		{
+			ClockStallAccum = 0.0f;
+			LastPlaybackElapsed = ScheduleTime;
+		}
+		else
+		{
+			ClockStallAccum += DeltaTime;
+			if (ClockStallAccum >= ScheduleClockTimeoutSec)
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("LipSync: schedule watchdog tripped — playback clock stalled at %.3fs for %.1fs. Calling StopLipSync."),
+					ScheduleTime, ClockStallAccum);
+				StopLipSync();
+				return;
+			}
+		}
+
 		// DIAGNOSTIC: log first tick of a new schedule + one tick per second so
 		// we can confirm the sampler is running and see the jawOpen curve
 		// evolving. Reads the *smoothed* jawOpen value (post step 2).
@@ -341,12 +389,24 @@ void UNPCLipSyncComponent::TickComponent(float DeltaTime, ELevelTick TickType,
 	}
 
 	// If we're fading out and everything has decayed, the utterance is done.
+	//
+	// CRITICAL MOUTH-CLOSING FIX: when SmoothedCurves reaches zero naturally
+	// via FInterpTo decay, each curve gets REMOVED from the map (line ~386).
+	// If we then stop calling SetVisemeCurves — which the old code did — the
+	// face's ActiveVisemeCurveNames still holds the last-pushed set, and
+	// those stale curves NEVER get zeroed out on the face because the zero
+	// cleanup only runs inside SetVisemeCurves itself (it zeros any name in
+	// ActiveVisemeCurveNames that isn't present in the new push).
+	//
+	// Result: mouth stays open at the last-pushed value forever.
+	//
+	// Fix: when fade-out completes, call StopLipSync which explicitly pushes
+	// SetVisemeCurves(empty) to trigger the zero cleanup path. This is the
+	// same function the OnSpeechError handler uses.
 	if (bFadingOut && SmoothedCurves.Num() == 0)
 	{
-		bFadingOut = false;
-		ActiveSchedule.Reset();
-		LastKeyIndex = 0;
-		LastCurves.Reset();
+		StopLipSync();
+		return;
 	}
 
 	// --- Step 3: push the smoothed curve set to the face. ---

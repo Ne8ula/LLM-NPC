@@ -20,6 +20,19 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTTSAudioDataReceived, const TArr
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnTTSAlignmentReceived, const FString&, Characters, const TArray<float>&, StartTimesSec, const TArray<float>&, DurationsSec);
 
 /**
+ * Delegate fired when a TTS HTTP request fails — non-200 response, parse
+ * failure, or audio creation failure. ResponseCode is the HTTP status (or
+ * a negative internal code: -1 parse, -2 audio_create). ErrorBody is the
+ * raw response body from ElevenLabs or an internal reason string.
+ *
+ * Subscribers should treat this as "speech is NOT happening" and clear any
+ * speaking/thinking state they were holding. Used by UNPCLipSyncComponent
+ * to StopLipSync cleanly, UMetahumanAnimComponent to clear the thinking
+ * face pose, and UNPCBodyMotionComponent to return the body to idle.
+ */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSpeechError, int32, ResponseCode, const FString&, ErrorBody);
+
+/**
  * Text-to-Speech component using the ElevenLabs API.
  *
  * Sends text to ElevenLabs, receives audio bytes, creates a USoundWaveProcedural,
@@ -73,6 +86,10 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "NPC|TTS")
 	FOnTTSAlignmentReceived OnTTSAlignmentReceived;
 
+	/** Fired when a TTS request fails. Subscribers should clear any speaking/thinking state. */
+	UPROPERTY(BlueprintAssignable, Category = "NPC|TTS")
+	FOnSpeechError OnSpeechError;
+
 	/**
 	 * Seconds elapsed since the current TTS utterance started playing.
 	 * Returns 0 if nothing is playing. Uses a wall-clock timestamp captured
@@ -100,9 +117,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|TTS|Config", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float StyleExaggeration = 0.5f;
 
-	/** Audio output model ID (e.g., "eleven_multilingual_v2"). */
+	/** Audio output model ID. Default is eleven_flash_v2_5 which costs 0.5 credits
+	 *  per character (vs 1.0 for multilingual_v2) and has lower latency. English
+	 *  quality is comparable; set back to eleven_multilingual_v2 for best non-English
+	 *  quality if you have the credit budget. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|TTS|Config")
-	FString ModelID = TEXT("eleven_multilingual_v2");
+	FString ModelID = TEXT("eleven_flash_v2_5");
 
 	/** Output audio format. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|TTS|Config")

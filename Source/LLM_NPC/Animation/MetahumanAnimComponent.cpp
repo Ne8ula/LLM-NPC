@@ -337,6 +337,8 @@ void UMetahumanAnimComponent::InitializeSubsystem()
 				this, &UMetahumanAnimComponent::HandleSpeechStarted);
 			CachedTTS->OnSpeechFinished.AddDynamic(
 				this, &UMetahumanAnimComponent::HandleSpeechFinished);
+			CachedTTS->OnSpeechError.AddDynamic(
+				this, &UMetahumanAnimComponent::HandleSpeechError);
 		}
 	}
 
@@ -635,6 +637,8 @@ void UMetahumanAnimComponent::ShutdownSubsystem()
 			this, &UMetahumanAnimComponent::HandleSpeechStarted);
 		CachedTTS->OnSpeechFinished.RemoveDynamic(
 			this, &UMetahumanAnimComponent::HandleSpeechFinished);
+		CachedTTS->OnSpeechError.RemoveDynamic(
+			this, &UMetahumanAnimComponent::HandleSpeechError);
 	}
 
 	bIsThinking   = false;
@@ -848,5 +852,13 @@ void UMetahumanAnimComponent::HandleSpeechStarted()
 
 void UMetahumanAnimComponent::HandleSpeechFinished()
 {
+	SetThinkingActive(false);
+}
+
+void UMetahumanAnimComponent::HandleSpeechError(int32 ResponseCode, const FString& ErrorBody)
+{
+	UE_LOG(LogTemp, Warning,
+		TEXT("MetahumanAnim: HandleSpeechError — code=%d, body=%s — clearing thinking."),
+		ResponseCode, *ErrorBody);
 	SetThinkingActive(false);
 }

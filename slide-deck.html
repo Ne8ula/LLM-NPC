@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM-NPC: Conversational NPCs with Real-Time AI</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --blue: #58a6ff;
+    --green: #3fb950;
+    --amber: #d29922;
+    --purple: #bc8cff;
+    --red: #f85149;
+    --teal: #39d353;
+    --accent: #1f6feb;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ── NAV ── */
+  nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  nav .logo { font-size: 13px; color: var(--muted); letter-spacing: .04em; }
+  nav .controls { display: flex; align-items: center; gap: 12px; }
+  nav button {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 5px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: background .15s;
+  }
+  nav button:hover { background: var(--accent); border-color: var(--blue); }
+  nav button:disabled { opacity: .35; cursor: default; }
+  nav .counter { font-size: 13px; color: var(--muted); min-width: 50px; text-align: center; }
+
+  /* ── SLIDE CONTAINER ── */
+  .slides { flex: 1; overflow: hidden; position: relative; }
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: none;
+    padding: 48px 64px;
+    flex-direction: column;
+    justify-content: flex-start;
+    overflow: hidden;
+  }
+  .slide.active { display: flex; }
+
+  /* ── TYPOGRAPHY ── */
+  h1 { font-size: 36px; font-weight: 700; line-height: 1.15; }
+  h2 { font-size: 22px; font-weight: 600; color: var(--blue); margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+  p  { font-size: 14px; color: var(--muted); line-height: 1.6; }
+  .subtitle { font-size: 16px; color: var(--muted); margin-top: 8px; }
+
+  /* ── CHIPS ── */
+  .chips { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+  .chip {
+    padding: 6px 16px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid;
+  }
+  .chip-blue   { background: rgba(88,166,255,.1);  border-color: var(--blue);   color: var(--blue); }
+  .chip-green  { background: rgba(63,185,80,.1);   border-color: var(--green);  color: var(--green); }
+  .chip-purple { background: rgba(188,140,255,.1); border-color: var(--purple); color: var(--purple); }
+  .chip-amber  { background: rgba(210,153,34,.1);  border-color: var(--amber);  color: var(--amber); }
+  .chip-teal   { background: rgba(57,211,83,.1);   border-color: var(--teal);   color: var(--teal); }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+  }
+  .card-grid { display: grid; gap: 14px; }
+  .card-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .card-grid-2 { grid-template-columns: 1fr 1fr; }
+
+  /* ── TABLES ── */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: var(--surface2); color: var(--muted); font-weight: 600; text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  td code, th code { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; background: var(--surface2); padding: 1px 5px; border-radius: 4px; color: var(--blue); }
+
+  /* ── CODE BLOCK ── */
+  pre {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    overflow: auto;
+    color: var(--text);
+  }
+  .token-key    { color: var(--blue); }
+  .token-str    { color: var(--green); }
+  .token-num    { color: var(--amber); }
+  .token-tts    { color: #79c0ff; }
+  .token-emo    { color: #f87171; }
+  .token-inv    { color: var(--purple); }
+  .token-comment{ color: var(--muted); font-style: italic; }
+
+  /* ── FLOW DIAGRAM ── */
+  .flow { display: flex; flex-direction: column; gap: 0; }
+  .flow-row { display: flex; align-items: stretch; gap: 0; }
+  .flow-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .flow-arrow-h { display: flex; align-items: center; padding: 0 4px; color: var(--muted); font-size: 16px; }
+  .flow-arrow-v { display: flex; justify-content: center; padding: 3px 0; color: var(--muted); font-size: 14px; height: 18px; }
+  .fb-blue   { border-color: var(--blue);   background: rgba(88,166,255,.07); }
+  .fb-green  { border-color: var(--green);  background: rgba(63,185,80,.07); }
+  .fb-amber  { border-color: var(--amber);  background: rgba(210,153,34,.07); }
+  .fb-purple { border-color: var(--purple); background: rgba(188,140,255,.07); }
+  .fb-red    { border-color: var(--red);    background: rgba(248,81,73,.07); }
+
+  /* ── TREE ── */
+  .tree { font-size: 13px; line-height: 2; }
+  .tree .root { font-weight: 700; color: var(--blue); font-size: 15px; }
+  .tree .child { padding-left: 28px; color: var(--text); position: relative; }
+  .tree .child::before { content: '├─'; position: absolute; left: 8px; color: var(--muted); }
+  .tree .child:last-child::before { content: '└─'; }
+  .tree .note { color: var(--muted); font-size: 11px; }
+
+  /* ── PAD DIAGRAM ── */
+  .pad-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .pad-emotion {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: var(--surface);
+    font-size: 12px;
+  }
+  .pad-name { font-weight: 600; margin-bottom: 4px; }
+  .pad-vec  { font-family: monospace; color: var(--muted); font-size: 11px; }
+  .bar { height: 4px; border-radius: 2px; margin-top: 6px; background: var(--border); }
+  .bar-fill { height: 100%; border-radius: 2px; }
+
+  /* ── ANIM TRACKS ── */
+  .tracks { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; margin-top: 6px; }
+  .track {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .track-header {
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: .04em;
+  }
+  .track-body { padding: 12px 14px; }
+  .track-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 12px;
+    margin-bottom: 10px;
+    color: var(--text);
+  }
+  .track-step:last-child { margin-bottom: 0; }
+  .step-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+  .track-a .track-header { background: rgba(88,166,255,.15); color: var(--blue); }
+  .track-b .track-header { background: rgba(210,153,34,.15); color: var(--amber); }
+  .track-c .track-header { background: rgba(63,185,80,.15); color: var(--green); }
+  .track-a .step-dot { background: var(--blue); }
+  .track-b .step-dot { background: var(--amber); }
+  .track-c .step-dot { background: var(--green); }
+
+  /* ── TWO-COL ── */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+
+  /* ── ACHIEVEMENT LIST ── */
+  .check-list, .warn-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .check-list li, .warn-list li { font-size: 13px; display: flex; gap: 10px; align-items: flex-start; }
+  .check-list li::before { content: '✓'; color: var(--green); font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+  .warn-list li::before  { content: '△'; color: var(--amber); font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+
+  /* ── BADGE ── */
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    vertical-align: middle;
+    margin-left: 4px;
+    letter-spacing: .04em;
+  }
+  .badge-api   { background: rgba(88,166,255,.15);  color: var(--blue); }
+  .badge-onnx  { background: rgba(188,140,255,.15); color: var(--purple); }
+  .badge-rt    { background: rgba(63,185,80,.15);   color: var(--green); }
+
+  /* ── VISION DIAGRAM ── */
+  .vision-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .vision-box {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--surface);
+    text-align: center;
+    min-width: 120px;
+  }
+  .vision-label { font-size: 10px; color: var(--muted); margin-top: 3px; }
+  .arrow-r { color: var(--muted); font-size: 18px; }
+
+  /* ── PROGRESS BAR ── */
+  .progress {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: var(--blue);
+    transition: width .3s ease;
+    border-radius: 0 2px 2px 0;
+  }
+
+  /* ── SPLIT PANEL ── */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .split-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .split-panel h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-bottom: 10px; }
+
+  /* ── SLIDE 1 special ── */
+  .slide-1-accent {
+    position: absolute;
+    top: 0; right: 0;
+    width: 45%;
+    height: 100%;
+    background: linear-gradient(135deg, rgba(31,111,235,.08) 0%, rgba(188,140,255,.06) 100%);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+  }
+  .big-node {
+    width: 160px; height: 160px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: var(--muted);
+    gap: 4px;
+  }
+  .big-node-icon { font-size: 36px; }
+  .connector-line { width: 2px; height: 30px; background: var(--border); }
+
+  /* slide content width on title slide */
+  .slide-1-content { width: 55%; }
+</style>
+</head>
+<body>
+
+<nav>
+  <span class="logo">LLM-NPC · Technical Overview</span>
+  <div class="controls">
+    <button id="prev" onclick="go(-1)" disabled>← Prev</button>
+    <span class="counter" id="counter">1 / 12</span>
+    <button id="next" onclick="go(1)">Next →</button>
+  </div>
+</nav>
+
+<div class="slides">
+
+  <!-- ══════════════════════════════════════
+       SLIDE 1 — Title
+  ══════════════════════════════════════ -->
+  <div class="slide active" id="s1">
+    <div class="slide-1-content">
+      <div style="margin-bottom:16px;">
+        <span class="chip chip-blue" style="font-size:11px;">UE5 · Research Prototype</span>
+      </div>
+      <h1>Conversational NPCs<br>with Real-Time AI</h1>
+      <p class="subtitle" style="margin-top:12px;">
+        A modular Metahuman NPC system powered by Claude LLM, ElevenLabs TTS,<br>
+        OpenAI Whisper STT, and on-device ONNX vision — built in Unreal Engine 5.7
+      </p>
+      <div class="chips" style="margin-top:28px;">
+        <span class="chip chip-blue">Emotionally Aware</span>
+        <span class="chip chip-green">Procedurally Animated</span>
+        <span class="chip chip-purple">Voice-Driven</span>
+      </div>
+      <div style="margin-top:32px; display:flex; gap:32px;">
+        <div>
+          <div style="font-size:24px; font-weight:700; color:var(--blue);">3</div>
+          <div style="font-size:11px; color:var(--muted);">External AI APIs</div>
+        </div>
+        <div>
+          <div style="font-size:24px; font-weight:700; color:var(--green);">6</div>
+          <div style="font-size:11px; color:var(--muted);">Subsystems</div>
+        </div>
+        <div>
+          <div style="font-size:24px; font-weight:700; color:var(--purple);">0</div>
+          <div style="font-size:11px; color:var(--muted);">Hand-authored dialogue lines</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide-1-accent">
+      <div class="big-node" style="border-color:var(--blue);">
+        <span class="big-node-icon">🎙️</span>
+        <span>Voice Input</span>
+      </div>
+      <div class="connector-line"></div>
+      <div class="big-node" style="border-color:var(--purple); width:180px; height:180px;">
+        <span class="big-node-icon">🧠</span>
+        <span>Claude + PAD</span>
+        <span style="font-size:10px;">Emotion Engine</span>
+      </div>
+      <div class="connector-line"></div>
+      <div class="big-node" style="border-color:var(--green);">
+        <span class="big-node-icon">🗣️</span>
+        <span>Metahuman NPC</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 2 — System Overview
+  ══════════════════════════════════════ -->
+  <div class="slide" id="s2">
+    <h2>System Overview</h2>
+    <div class="card-grid card-grid-3" style="flex:1;">
+
+      <div class="card" style="border-color:var(--blue);">
+        <div style="font-size:28px; margin-bottom:10px;">📥</div>
+        <h3 style="color:var(--blue); margin-bottom:12px;">INPUT</h3>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div class="flow-box fb-blue" style="font-size:12px;">🎙️ Microphone → Whisper STT</div>
+          <div class="flow-box fb-blue" style="font-size:12px;">⌨️ Keyboard / Text fallback</div>
+          <div class="flow-box fb-blue" style="font-size:12px;">📷 Camera → ONNX face emotion</div>
+          <div class="flow-box fb-blue" style="font-size:12px;">✋ Camera → ONNX hand gestures</div>
+        </div>
+      </div>
+
+      <div class="card" style="border-color:var(--purple); position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+        <div style="font-size:28px; margin-bottom:10px;">🧠</div>
+        <h3 style="color:var(--purple); margin-bottom:12px; text-align:center;">BRAIN</h3>
+        <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
+          <div class="flow-box fb-purple" style="font-size:12px;">Claude LLM — dialogue generation</div>
+          <div class="flow-box fb-purple" style="font-size:12px;">PAD Emotion State Machine</div>
+          <div class="flow-box fb-purple" style="font-size:12px;">Inventory unlock logic</div>
+          <div class="flow-box fb-purple" style="font-size:12px;">DialogueComponent — history</div>
+        </div>
+        <div style="position:absolute;top:50%;left:-14px;transform:translateY(-50%);color:var(--muted);font-size:20px;">→</div>
+        <div style="position:absolute;top:50%;right:-14px;transform:translateY(-50%);color:var(--muted);font-size:20px;">→</div>
+      </div>
+
+      <div class="card" style="border-color:var(--green);">
+        <div style="font-size:28px; margin-bottom:10px;">📤</div>
+        <h3 style="color:var(--green); margin-bottom:12px;">OUTPUT</h3>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div class="flow-box fb-green" style="font-size:12px;">🔊 ElevenLabs TTS — voice audio</div>
+          <div class="flow-box fb-green" style="font-size:12px;">👄 Lip sync — viseme schedule</div>
+          <div class="flow-box fb-green" style="font-size:12px;">😊 FACS face curves — RigLogic</div>
+          <div class="flow-box fb-green" style="font-size:12px;">🚶 Body FK — poses + overlays</div>
+        </div>
+      </div>
+
+    </div>
+    <p style="margin-top:16px; text-align:center;">All dialogue is model-generated. Zero scripted branches.</p>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 3 — Subsystem Architecture
+  ══════════════════════════════════════ -->
+  <div class="slide" id="s3">
+    <h2>Subsystem Architecture</h2>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; flex:1;">
+
+      <div>
+        <div class="card" style="border-color:var(--blue); margin-bottom:14px; text-align:center; padding:12px;">
+          <div style="font-size:13px; font-weight:700; color:var(--blue);">ANPCCharacter</div>
+          <div style="font-size:11px; color:var(--muted);">Root actor — owns + orchestrates all subsystems</div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div class="card" style="text-align:center;">
+            <div style="font-size:18px;">💬</div>
+            <div style="font-size:12px; font-weight:600; color:var(--blue);">DialogueComponent</div>
+            <div style="font-size:11px; color:var(--muted);">History, routing, Claude API</div>
+          </div>
+          <div class="card" style="text-align:center;">
+            <div style="font-size:18px;">❤️</div>
+            <div style="font-size:12px; font-weight:600; color:var(--red);">EmotionComponent</div>
+            <div style="font-size:11px; color:var(--muted);">PAD state machine</div>
+          </div>
+          <div class="card" style="text-align:center;">
+            <div style="font-size:18px;">📷</div>
+            <div style="font-size:12px; font-weight:600; color:var(--green);">VisionComponent</div>
+            <div style="font-size:11px; color:var(--muted);">ONNX face + hand</div>
+          </div>
+          <div class="card" style="text-align:center;">
+            <div style="font-size:18px;">🔊</div>
+            <div style="font-size:12px; font-weight:600; color:var(--amber);">Voice Pipeline</div>
+            <div style="font-size:11px; color:var(--muted);">Whisper + ElevenLabs</div>
+          </div>
+          <div class="card" style="text-align:center;">
+            <div style="font-size:18px;">🕺</div>
+            <div style="font-size:12px; font-weight:600; color:var(--purple);">AnimComponents</div>
+            <div style="font-size:11px; color:var(--muted);">Face + LipSync + Body</div>
+          </div>
+          <div class="card" style="text-align:center;">
+            <div style="font-size:18px;">🎒</div>
+            <div style="font-size:12px; font-weight:600; color:var(--teal);">InventoryComponent</div>
+            <div style="font-size:11px; color:var(--muted);">Emotion-gated items</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div class="card">
+          <h3>Communication Pattern</h3>
+          <p style="margin-top:6px;">Components are <strong style="color:var(--blue)">loosely coupled via UE4 delegates</strong>. No direct inter-component references — each subsystem broadcasts events, others subscribe.</p>
+          <pre style="margin-top:10px; font-size:11px;">OnClaudeResponseReceived → TTS, Emotion, Inventory
+OnTTSAlignmentReceived   → LipSync, BodyMotion
+OnEmotionChanged         → FaceAnim, Inventory
+OnTranscriptReady        → Dialogue, BodyMotion</pre>
+        </div>
+        <div class="card">
+          <h3>Configuration: Data Assets</h3>
+          <p style="margin-top:6px;">All NPC archetypes defined in Blueprint data assets. <strong style="color:var(--green)">No C++ recompile</strong> needed to create a new NPC persona.</p>
+          <div class="chips" style="margin-top:10px;">
+            <span class="chip chip-amber" style="font-size:11px;">NPCConfigDataAsset</span>
+            <span class="chip chip-amber" style="font-size:11px;">EmotionGraphDataAsset</span>
+            <span class="chip chip-amber" style="font-size:11px;">InventoryDataAsset</span>
+            <span class="chip chip-amber" style="font-size:11px;">BlendShapeMappingDataAsset</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Base Class Pattern</h3>
+          <p style="margin-top:6px;"><code style="color:var(--blue); font-family:monospace; font-size:12px;">UNPCSubsystemComponent</code> provides <code style="font-size:12px; font-family:monospace; color:var(--green)">InitializeSubsystem()</code> / <code style="font-size:12px; font-family:monospace; color:var(--red)">ShutdownSubsystem()</code> — each can initialize and tear down independently.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 4 — Full Data Flow
+  ══════════════════════════════════════ -->
+  <div class="slide" id="s4">
+    <h2>Full Input → Output Data Flow</h2>
+    <div style="display:flex; gap:20px; flex:1; overflow:hidden;">
+
+      <!-- Main flow -->
+      <div style="flex:1; display:flex; flex-direction:column; gap:4px; justify-content:center;">
+
+        <div style="display:flex; align-items:center; gap:6px;">
+          <div class="flow-box fb-blue" style="width:200px;">🎙️ Microphone (waveIn)</div>
+          <div class="flow-arrow-h">→</div>
+          <div class="flow-box fb-blue" style="flex:1;">WAV encode → OpenAI Whisper <code style="font-size:11px;">/v1/audio/transcriptions</code></div>
+        </div>
+        <div class="flow-arrow-v">↓</div>
+
+        <div style="display:flex; align-items:center; gap:6px;">
+          <div class="flow-box fb-purple" style="flex:1;">DialogueComponent — appends user emotion context (ONNX vision) + builds conversation history</div>
+        </div>
+        <div class="flow-arrow-v">↓</div>
+
+        <div style="display:flex; align-items:center; gap:6px;">
+          <div class="flow-box fb-purple" style="flex:1;">ClaudeAPISubsystem — <code style="font-size:11px;">POST /v1/messages</code> · rate-limited · exponential retry</div>
+        </div>
+        <div class="flow-arrow-v">↓</div>
+
+        <div style="display:flex; align-items:center; gap:6px;">
+          <div class="flow-box" style="flex:1; border-color:var(--border);">Parse JSON response → <code style="font-size:11px;">dialogue</code> · <code style="font-size:11px;">emotion_update[8]</code> · <code style="font-size:11px;">item_give</code></div>
+        </div>
+        <div class="flow-arrow-v">↓</div>
+
+        <!-- Branch -->
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+          <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+            <div class="flow-box fb-blue" style="width:100%; text-align:center; justify-content:center; font-size:11px;">ElevenLabs TTS<br><code style="font-size:10px;">/with-timestamps</code></div>
+            <div class="flow-arrow-v">↓</div>
+            <div class="flow-box fb-blue" style="width:100%; text-align:center; justify-content:center; font-size:11px;">PCM audio +<br>char alignment</div>
+            <div class="flow-arrow-v">↓</div>
+            <div class="flow-box fb-green" style="width:100%; text-align:center; justify-content:center; font-size:11px;">🔊 Audio plays<br>+ Lip Sync starts</div>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+            <div class="flow-box fb-red" style="width:100%; text-align:center; justify-content:center; font-size:11px;">EmotionComponent<br>ProcessSignal()</div>
+            <div class="flow-arrow-v">↓</div>
+            <div class="flow-box fb-red" style="width:100%; text-align:center; justify-content:center; font-size:11px;">PAD state update<br>→ OnEmotionChanged</div>
+            <div class="flow-arrow-v">↓</div>
+            <div class="flow-box fb-green" style="width:100%; text-align:center; justify-content:center; font-size:11px;">😊 FACS curves<br>→ Body state</div>
+          </div>
+          <div style="display:flex; flex-direction:column; align-items:center; gap:4px;">
+            <div class="flow-box fb-amber" style="width:100%; text-align:center; justify-content:center; font-size:11px;">InventoryComponent<br>CheckUnlock()</div>
+            <div class="flow-arrow-v">↓</div>
+            <div class="flow-box fb-amber" style="width:100%; text-align:center; justify-content:center; font-size:11px;">Emotion threshold<br>+ keyword match</div>
+            <div class="flow-arrow-v">↓</div>
+            <div class="flow-box fb-green" style="width:100%; text-align:center; justify-content:center; font-size:11px;">🎒 Item given<br>to player</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Side legend -->
+      <div style="width:140px; display:flex; flex-direction:column; gap:8px; justify-content:center;">
+        <div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px;">Legend</div>
+        <div style="display:flex; align-items:center; gap:8px; font-size:12px;"><div style="width:10px;height:10px;border-radius:2px;background:rgba(88,166,255,.3);border:1px solid var(--blue);"></div> Voice / LLM</div>
+        <div style="display:flex; align-items:center; gap:8px; font-size:12px;"><div style="width:10px;height:10px;border-radius:2px;background:rgba(188,140,255,.3);border:1px solid var(--purple);"></div> Dialogue</div>
+        <div style="display:flex; align-items:center; gap:8px; font-size:12px;"><div style="width:10px;height:10px;border-radius:2px;background:rgba(248,81,73,.3);border:1px solid var(--red);"></div> Emotion</div>
+        <div style="display:flex; align-items:center; gap:8px; font-size:12px;"><div style="width:10px;height:10px;border-radius:2px;background:rgba(210,153,34,.3);border:1px solid var(--amber);"></div> Inventory</div>
+        <div style="display:flex; align-items:center; gap:8px; font-size:12px;"><div style="width:10px;height:10px;border-radius:2px;background:rgba(63,185,80,.3);border:1px solid var(--green);"></div> Render output</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 5 — API Connections
+  ══════════════════════════════════════ -->
+  <div class="slide" id="s5">
+    <h2>API Connections</h2>
+
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
+      <div style="font-size:12px; color:var(--muted);">Call order during a single NPC turn:</div>
+      <div class="flow-box fb-blue" style="font-size:11px;">1. Whisper</div>
+      <div class="flow-arrow-h">→</div>
+      <div class="flow-box fb-purple" style="font-size:11px;">2. Claude</div>
+      <div class="flow-arrow-h">→</div>
+      <div class="flow-box fb-green" style="font-size:11px;">3. ElevenLabs</div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>API</th>
+          <th>Provider</th>
+          <th>Endpoint</th>
+          <th>Auth Header</th>
+          <th>Input</th>
+          <th>Output</th>
+          <th>Key Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong style="color:var(--blue)">Whisper STT</strong></td>
+          <td>OpenAI</td>
+          <td><code>POST /v1/audio/transcriptions</code></td>
+          <td><code>Authorization: Bearer</code></td>
+          <td>WAV (16kHz mono, waveIn)</td>
+          <td>Plain text transcript</td>
+          <td>4× double buffers at 0.5s each · local capture only</td>
+        </tr>
+        <tr>
+          <td><strong style="color:var(--purple)">Claude LLM</strong></td>
+          <td>Anthropic</td>
+          <td><code>POST /v1/messages</code></td>
+          <td><code>x-api-key</code></td>
+          <td>System prompt + conversation history + user emotion</td>
+          <td>JSON: <code>dialogue</code>, <code>emotion_update[8]</code>, <code>item_give</code></td>
+          <td>claude-sonnet-4-6 · max 512 tokens · 0.5s rate limit · 3× retry w/ backoff</td>
+        </tr>
+        <tr>
+          <td><strong style="color:var(--green)">ElevenLabs TTS</strong></td>
+          <td>ElevenLabs</td>
+          <td><code>POST /v1/text-to-speech/{voice_id}/with-timestamps</code></td>
+          <td><code>xi-api-key</code></td>
+          <td>Dialogue text + voice settings (stability, similarity, style)</td>
+          <td>Base64 PCM (24kHz) + character-level alignment array</td>
+          <td>eleven_flash_v2_5 model · USoundWaveProcedural playback · wall-clock sync</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card-grid card-grid-3" style="margin-top:16px;">
+      <div class="card">
+        <h3 style="color:var(--blue);">🔑 Key Storage</h3>
+        <p style="margin-top:6px; font-size:12px;">API keys loaded from environment variables at runtime:<br>
+          <code style="font-size:11px;">OPENAI_API_KEY</code><br>
+          <code style="font-size:11px;">ANTHROPIC_API_KEY</code><br>
+          <code style="font-size:11px;">ELEVENLABS_API_KEY</code>
+        </p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--amber);">⚡ Rate Limiting</h3>
+        <p style="margin-top:6px; font-size:12px;">Claude: 0.5s minimum interval between requests. 429 / 5xx → exponential backoff (1s → 2s → 4s ±25% jitter), max 3 retries.</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--green);">🔄 Async Pattern</h3>
+        <p style="margin-top:6px; font-size:12px;">All HTTP callbacks dispatch to game thread via <code style="font-size:11px;">AsyncTask(ENamedThreads::GameThread)</code> before delegate broadcasts.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 6 — Claude Prompt & Response Contract
+  ══════════════════════════════════════ -->
+  <div class="slide" id="s6">
+    <h2>Claude Prompt &amp; Response Contract</h2>
+    <div class="split" style="flex:1;">
+
+      <div class="split-panel">
+        <h3>System Prompt Structure</h3>
+        <pre style="font-size:11px; margin-top:8px; height:calc(100% - 40px);">[NPC Persona]
+  Name, backstory, personality traits,
+  speaking style, relationship to player
+
+[Emotion Vocabulary]
+  Plutchik 8: joy, trust, fear, surprise,
+  sadness, disgust, anger, anticipation
+
+[Inventory Catalogue]
+  Items the NPC can give + unlock conditions
+
+[Response Format Schema]
+  Strict JSON — no freeform output
+
+[Current PAD State] ← appended each turn
+  Pleasure: 0.4, Arousal: 0.2, Dominance: 0.6
+
+[Player Emotion Context] ← from ONNX vision
+  Detected: neutral (confidence: 0.82)
+
+[Conversation History]  ← rolling 20-turn buffer
+  [user] "...", [assistant] "..."</pre>
+      </div>
+
+      <div class="split-panel">
+        <h3>Required JSON Response Schema</h3>
+        <pre style="font-size:11px; margin-top:8px;"><span class="token-key">{</span>
+  <span class="token-key">"dialogue"</span>: <span class="token-str token-tts">"The spoken response text"</span>,
+  <span class="token-comment">// ↑ routed to ElevenLabs TTS</span>
+
+  <span class="token-key">"emotion_update"</span>: <span class="token-emo">{</span>
+    <span class="token-key">"joy"</span>:          <span class="token-num">0.2</span>,
+    <span class="token-key">"trust"</span>:        <span class="token-num">0.5</span>,
+    <span class="token-key">"fear"</span>:         <span class="token-num">-0.1</span>,
+    <span class="token-key">"surprise"</span>:     <span class="token-num">0.0</span>,
+    <span class="token-key">"sadness"</span>:      <span class="token-num">0.0</span>,
+    <span class="token-key">"disgust"</span>:      <span class="token-num">0.0</span>,
+    <span class="token-key">"anger"</span>:        <span class="token-num">0.0</span>,
+    <span class="token-key">"anticipation"</span>: <span class="token-num">0.3</span>
+  <span class="token-emo">}</span>,  <span class="token-comment">// ↑ → PAD state machine → FACS curves</span>
+
+  <span class="token-key">"item_give"</span>: <span class="token-inv">"key_of_the_old_tower"</span>
+  <span class="token-comment">// ↑ → InventoryComponent (null if none)</span>
+<span class="token-key">}</span></pre>
+
+        <div class="chips" style="margin-top:14px;">
+          <span class="chip chip-blue" style="font-size:11px;">🔵 → TTS Audio</span>
+          <span class="chip chip-red" style="font-size:11px;">🔴 → Emotion Engine</span>
+          <span class="chip chip-purple" style="font-size:11px;">🟣 → Inventory</span>
+        </div>
+
+        <div class="card" style="margin-top:12px; padding:10px 14px;">
+          <p style="font-size:12px;">Parse failures fall back to raw text string extraction. Emotion defaults to Neutral on malformed JSON. <code style="font-size:11px;">item_give: null</code> skips inventory check.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 7 — ML / AI Systems
+  ══════════════════════════════════════ -->
+  <div class="slide" id="s7">
+    <h2>ML / AI Systems</h2>
+    <table style="margin-bottom:16px;">
+      <thead>
+        <tr>
+          <th>System</th>
+          <th>Type</th>
+          <th>Input</th>
+          <th>Output</th>
+          <th>Role</th>
+          <th>Deploy</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Claude (Anthropic)</strong></td>
+          <td>LLM — transformer</td>
+          <td>Text prompt + history</td>
+          <td>Structured JSON dialogue</td>
+          <td>Dialogue + emotional intent generation</td>
+          <td><span class="badge badge-api">☁ External API</span></td>
+        </tr>
+        <tr>
+          <td><strong>ElevenLabs TTS</strong></td>
+          <td>Neural voice synthesis</td>
+          <td>Text string + voice config</td>
+          <td>PCM audio + phoneme timestamps</td>
+          <td>Realistic voice + lip sync data source</td>
+          <td><span class="badge badge-api">☁ External API</span></td>
+        </tr>
+        <tr>
+          <td><strong>OpenAI Whisper</strong></td>
+          <td>ASR — encoder-decoder</td>
+          <td>WAV audio (16kHz)</td>
+          <td>Text transcript</td>
+          <td>Player voice → text for Claude prompt</td>
+          <td><span class="badge badge-api">☁ External API</span></td>
+        </tr>
+        <tr>
+          <td><strong>PAD Emotion Engine</strong></td>
+          <td>Graph state machine</td>
+          <td>Emotion delta (Plutchik 8)</td>
+          <td>3D PAD vector + named state</td>
+          <td>Continuous emotional state tracking + decay</td>
+          <td><span class="badge badge-rt">⚙ Runtime C++</span></td>
+        </tr>
+        <tr>
+          <td><strong>Facial Classifier</strong></td>
+          <td>CNN — ONNX (8-class)</td>
+          <td>Camera frame (OpenCV)</td>
+          <td>Emotion label + confidence</td>
+          <td>Player emotional state → Claude context</td>
+          <td><span class="badge badge-onnx">▣ On-device ONNX</span></td>
+        </tr>
+        <tr>
+          <td><strong>Hand Landmark Detector</strong></td>
+          <td>Regression — ONNX</td>
+          <td>Camera frame</td>
+          <td>21-point hand skeleton</td>
+          <td>Gesture → inventory / NPC reaction</td>
+          <td><span class="badge badge-onnx">▣ On-device ONNX</span></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="card-grid card-grid-3">
+      <div class="card" style="border-color:var(--blue);">
+        <h3 style="color:var(--blue);">☁ External APIs</h3>
+        <p style="margin-top:6px; font-size:12px;">3 cloud APIs — highest latency (~100ms–2s). Rate-limited, retried, async. Require internet + API keys.</p>
+      </div>
+      <div class="card" style="border-color:var(--purple);">
+        <h3 style="color:var(--purple);">▣ On-device ONNX</h3>
+        <p style="margin-top:6px; font-size:12px;">2 ONNX models (face + hand) — run locally via OpenCV DNN. 10 FPS (face) / 15 FPS (hand). No API call.</p>
+      </div>
+      <div class="card" style="border-color:var(--green);">
+        <h3 style="color:var(--green);">⚙ Runtime Engine</h3>
+        <p style="margin-top:6px; font-size:12px;">PAD state machine — pure C++ math, per-frame tick. Integrates Claude emotion deltas with decay (0.05/s).</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 8 — PAD Emotion State Machine
+  ══════════════════════════════════════ -->
+  <div class="slide" id="s8">
+    <h2>PAD Emotion State Machine</h2>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; flex:1;">
+
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div class="card">
+          <h3>Pleasure · Arousal · Dominance</h3>
+          <p style="margin-top:6px; font-size:12px;">Each emotion maps to a canonical point in continuous 3D space. Claude's <code>emotion_update</code> acts as a delta vector. State decays toward neutral at 0.05/s.</p>
+        </div>
+
+        <div class="pad-grid">
+          <div class="pad-emotion" style="border-color:var(--amber);">
+            <div class="pad-name" style="color:var(--amber);">Joy</div>
+            <div class="pad-vec">P:+0.8  A:+0.5  D:+0.6</div>
+            <div class="bar"><div class="bar-fill" style="width:80%;background:var(--amber);"></div></div>
+          </div>
+          <div class="pad-emotion" style="border-color:var(--blue);">
+            <div class="pad-name" style="color:var(--blue);">Sadness</div>
+            <div class="pad-vec">P:-0.7  A:-0.3  D:-0.5</div>
+            <div class="bar"><div class="bar-fill" style="width:20%;background:var(--blue);"></div></div>
+          </div>
+          <div class="pad-emotion" style="border-color:var(--red);">
+            <div class="pad-name" style="color:var(--red);">Anger</div>
+            <div class="pad-vec">P:-0.5  A:+0.7  D:+0.8</div>
+            <div class="bar"><div class="bar-fill" style="width:70%;background:var(--red);"></div></div>
+          </div>
+          <div class="pad-emotion" style="border-color:var(--purple);">
+            <div class="pad-name" style="color:var(--purple);">Fear</div>
+            <div class="pad-vec">P:-0.6  A:+0.6  D:-0.7</div>
+            <div class="bar"><div class="bar-fill" style="width:30%;background:var(--purple);"></div></div>
+          </div>
+          <div class="pad-emotion" style="border-color:var(--green);">
+            <div class="pad-name" style="color:var(--green);">Trust</div>
+            <div class="pad-vec">P:+0.6  A:+0.1  D:+0.3</div>
+            <div class="bar"><div class="bar-fill" style="width:60%;background:var(--green);"></div></div>
+          </div>
+          <div class="pad-emotion">
+            <div class="pad-name" style="color:var(--muted);">Neutral</div>
+            <div class="pad-vec">P: 0.0  A: 0.0  D: 0.0</div>
+            <div class="bar"><div class="bar-fill" style="width:50%;background:var(--muted);"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div class="card">
+          <h3>Graph-Based Transitions</h3>
+          <p style="margin-top:6px; font-size:12px;"><code>EmotionGraphDataAsset</code> defines nodes (emotions) and edges (transition rules). Each edge has conditions: minimum PAD distance, time-in-state, signal strength. Evaluated each tick — lowest-cost valid path wins.</p>
+        </div>
+
+        <div class="card">
+          <h3>Per-NPC Transition Costs</h3>
+          <p style="margin-top:6px; font-size:12px;">Each NPC archetype defines a cost map for reaching each emotion. A <em>stoic</em> NPC has high cost for Sadness, low for Neutral. A <em>volatile</em> NPC has low cost for Anger. Drives personality without changing the core algorithm.</p>
+        </div>
+
+        <div class="card">
+          <h3>Downstream Consumers</h3>
+          <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+            <div class="flow-box fb-amber" style="font-size:11px; flex:1; text-align:center; justify-content:center;">😊 FACS blend shape weights</div>
+            <div class="flow-box fb-purple" style="font-size:11px; flex:1; text-align:center; justify-content:center;">🕺 Body animation state</div>
+            <div class="flow-box fb-green" style="font-size:11px; flex:1; text-align:center; justify-content:center;">🎒 Inventory unlock check</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 9 — Animation Synthesis Pipeline
+  ══════════════════════════════════════ -->
+  <div class="slide" id="s9">
+    <h2>Animation Synthesis Pipeline</h2>
+
+    <div class="card" style="margin-bottom:12px; padding:10px 16px; display:flex; align-items:center; gap:12px;">
+      <span style="font-size:12px; color:var(--muted);">Source:</span>
+      <div class="flow-box fb-red" style="font-size:12px;">PAD emotional state</div>
+      <span style="color:var(--muted);">+</span>
+      <div class="flow-box fb-blue" style="font-size:12px;">ElevenLabs char-level alignment</div>
+      <span style="color:var(--muted);">→</span>
+      <span style="font-size:12px; color:var(--muted);">drive three parallel animation tracks</span>
+    </div>
+
+    <div class="tracks">
+
+      <div class="track track-a">
+        <div class="track-header">A — Lip Sync</div>
+        <div class="track-body">
+          <div class="track-step">
+            <div class="step-dot"></div>
+            <div>Character timestamps → <strong>viseme schedule</strong> (FPhonemeVisemeMapper)</div>
+          </div>
+          <div class="track-step">
+            <div class="step-dot"></div>
+            <div>Digraph handling (th, sh, ch, ph, ng) + silence gap insertion (&gt;80ms)</div>
+          </div>
+          <div class="track-step">
+            <div class="step-dot"></div>
+            <div>Per-frame: sample schedule at <code>playbackElapsed</code>, smoothstep interpolation between bracketing visemes</div>
+          </div>
+          <div class="track-step">
+            <div class="step-dot"></div>
+            <div>Asymmetric smoothing: closure curves fast-close (50/s), slow-open (7/s)</div>
+          </div>
+          <div class="track-step">
+            <div class="step-dot"></div>
+            <div>→ ARKit FACS morph targets via <strong>Metahuman RigLogic</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="track track-b">
+        <div class="track-header">B — Facial Expression</div>
+        <div class="track-body">
+          <div class="track-step">
+            <div class="step-dot"></div>
+            <div>PAD state → <code>EEmotionType</code> → lookup in <strong>BlendShapeMappingDataAsset</strong></div>
+          </div>
+          <div class="track-step">
+            <div class="step-dot"></div>
+            <div>Maps emotion → FACS AU curve names + weights<br><em>e.g. Joy → cheekRaiser 0.7, mouthCornerPull 0.6</em></div>
+          </div>
+          <div class="track-step">
+            <div class="step-dot"></div>
+            <div>Thinking pose: brow-only curves, auto-clears on TTS start or 15s timeout</div>
+          </div>
+          <div class="track-step">
+            <div class="step-dot"></div>
+            <div>FInterpTo smoothing at speed 4.0</div>
+          </div>
+          <div class="track-step">
+            <div class="step-dot"></div>
+            <div>→ SetFaceControl via <strong>reflection</strong> on Face AnimBP</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="track track-c">
+        <div class="track-header">C — Body Language (Procedural FK)</div>
+        <div class="track-body">
+          <div class="track-step">
+            <div class="step-dot"></div>
+            <div>3-state machine: <strong>Idle / Thinking / Speaking</strong> — blended by alpha values</div>
+          </div>
+          <div class="track-step">
+            <div class="step-dot"></div>
+            <div>State triggers: <code>OnTranscriptReady</code> → Thinking; <code>OnSpeechStarted</code> → Speaking; <code>OnSpeechFinished</code> → Idle</div>
+          </div>
+          <div class="track-step">
+            <div class="step-dot"></div>
+            <div>Gesture cycle: cosine blend Speaking ↔ SpeakingGesture (8s period)</div>
+          </div>
+          <div class="track-step">
+            <div class="step-dot"></div>
+            <div>Sine overlays: breathing 0.25Hz · head drift 0.05Hz · nods 0.5Hz · shoulder sway</div>
+          </div>
+          <div class="track-step">
+            <div class="step-dot"></div>
+            <div>→ 15 bones via FK delegate <code>OnBoneTransformsFinalizedMC</code></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 10 — Vision Input
+  ══════════════════════════════════════ -->
+  <div class="slide" id="s10">
+    <h2>Vision Input: Facial &amp; Gesture Recognition</h2>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; flex:1;">
+
+      <div>
+        <div class="vision-row" style="margin-bottom:16px; justify-content:center;">
+          <div class="vision-box" style="border-color:var(--blue);">
+            <div style="font-size:24px;">📷</div>
+            <div>Webcam Frame</div>
+            <div class="vision-label">UCameraManagerSubsystem</div>
+          </div>
+          <div class="arrow-r">→</div>
+          <div style="display:flex; flex-direction:column; gap:8px;">
+            <div class="vision-box" style="border-color:var(--amber);">
+              <div>OpenCV DNN</div>
+              <div class="vision-label">Face detection + crop</div>
+            </div>
+            <div class="vision-box" style="border-color:var(--purple);">
+              <div>ONNX Hand Model</div>
+              <div class="vision-label">21-point skeleton</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:10px;">
+          <h3 style="color:var(--amber);">Facial Emotion Classifier</h3>
+          <p style="margin-top:6px; font-size:12px;">CNN → 8 emotion class probabilities (Plutchik). Confidence threshold: 0.5. Timer-based at <strong>10 FPS</strong> (not tick-based). Output injected into Claude prompt as player emotional context.</p>
+          <pre style="margin-top:8px; font-size:11px;">Detected: trust (confidence: 0.74)
+→ appended to next Claude turn as:
+  [Player appears: trusting]</pre>
+        </div>
+
+        <div class="card">
+          <h3 style="color:var(--purple);">Hand Gesture Classifier</h3>
+          <p style="margin-top:6px; font-size:12px;">ONNX regression → 21 hand landmarks → geometry analysis. Timer-based at <strong>15 FPS</strong>. Classifies: Pinch / Spread / Rotate / Spindle.</p>
+          <p style="margin-top:6px; font-size:12px;">Routes to: inventory interaction (inspect object) and NPC reaction triggers.</p>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div class="card" style="border-color:var(--green);">
+          <h3 style="color:var(--green);">On-Device — No Extra API Cost</h3>
+          <p style="margin-top:6px; font-size:12px;">Both ONNX models run locally. No internet call. Player sensing is private and zero-latency relative to API calls.</p>
+        </div>
+
+        <div class="card">
+          <h3>Data Flow to Claude</h3>
+          <div class="flow" style="margin-top:8px;">
+            <div class="flow-row">
+              <div class="flow-box fb-amber" style="font-size:11px; flex:1;">Camera frame → ONNX face model</div>
+            </div>
+            <div class="flow-arrow-v">↓</div>
+            <div class="flow-row">
+              <div class="flow-box" style="font-size:11px; flex:1;">FDetectedUserEmotion { type, confidence, probs[8] }</div>
+            </div>
+            <div class="flow-arrow-v">↓</div>
+            <div class="flow-row">
+              <div class="flow-box fb-purple" style="font-size:11px; flex:1;">DialogueComponent annotates next message</div>
+            </div>
+            <div class="flow-arrow-v">↓</div>
+            <div class="flow-row">
+              <div class="flow-box fb-blue" style="font-size:11px; flex:1;">Claude sees player emotion → adjusts NPC response</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Gesture → Inventory Bridge</h3>
+          <div class="flow" style="margin-top:8px;">
+            <div class="flow-row">
+              <div class="flow-box fb-purple" style="font-size:11px; flex:1;">✋ Pinch detected on InspectableItem</div>
+            </div>
+            <div class="flow-arrow-v">↓</div>
+            <div class="flow-row">
+              <div class="flow-box fb-amber" style="font-size:11px; flex:1;">ObjectInspectWidget opens</div>
+            </div>
+            <div class="flow-arrow-v">↓</div>
+            <div class="flow-row">
+              <div class="flow-box fb-green" style="font-size:11px; flex:1;">NPC reacts + inventory unlocks possible</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 11 — Inventory & Emotion-Gated Mechanics
+  ══════════════════════════════════════ -->
+  <div class="slide" id="s11">
+    <h2>Inventory &amp; Emotion-Gated Mechanics</h2>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px; flex:1;">
+
+      <div>
+        <div class="card" style="margin-bottom:12px;">
+          <h3>How Items Unlock</h3>
+          <p style="margin-top:8px; font-size:13px;">Each item in <code>InventoryDataAsset</code> has a <code>FEmotionUnlockCondition</code>:</p>
+          <pre style="margin-top:8px; font-size:11px;">FEmotionUnlockCondition {
+  EmotionType:  ETrust,
+  MinIntensity: 0.7,    // PAD threshold
+  MinDuration:  10.0s,  // must be sustained
+  Keywords:     ["key", "tower", "secret"]
+}</pre>
+          <p style="margin-top:8px; font-size:12px;">All three conditions must be met simultaneously. Duration is tracked cumulatively — player must <em>build rapport</em> over the conversation.</p>
+        </div>
+
+        <div class="card">
+          <h3>Unlock Trigger Chain</h3>
+          <div class="flow" style="margin-top:8px;">
+            <div class="flow-row"><div class="flow-box fb-red" style="flex:1; font-size:11px;">Claude → <code>emotion_update</code> raises Trust</div></div>
+            <div class="flow-arrow-v">↓</div>
+            <div class="flow-row"><div class="flow-box fb-purple" style="flex:1; font-size:11px;">PAD state: Trust &gt; 0.7 sustained &gt; 10s</div></div>
+            <div class="flow-arrow-v">↓</div>
+            <div class="flow-row"><div class="flow-box fb-amber" style="flex:1; font-size:11px;">Keyword "key" appears in dialogue</div></div>
+            <div class="flow-arrow-v">↓</div>
+            <div class="flow-row"><div class="flow-box fb-green" style="flex:1; font-size:11px;">Claude returns <code>item_give: "key_of_the_old_tower"</code></div></div>
+            <div class="flow-arrow-v">↓</div>
+            <div class="flow-row"><div class="flow-box fb-green" style="flex:1; font-size:11px;">🎒 NPCInventoryComponent::TryGiveItem() → OnItemGiven</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div class="card" style="border-color:var(--purple);">
+          <h3 style="color:var(--purple);">Why This Matters</h3>
+          <p style="margin-top:8px; font-size:13px;">LLM reasoning directly gates gameplay progression — no scripted branches, no dialogue trees. The NPC decides when to give the item based on emotional read of the conversation.</p>
+        </div>
+
+        <div class="card">
+          <h3>Conversation Arc</h3>
+          <div style="margin-top:10px; position:relative; height:60px;">
+            <div style="position:absolute; bottom:0; left:0; right:0; height:2px; background:var(--border);"></div>
+            <div style="position:absolute; bottom:0; left:0; right:0; height:45px; background:linear-gradient(to right, rgba(248,81,73,.3), rgba(63,185,80,.4)); border-radius:4px 4px 0 0;"></div>
+            <div style="position:absolute; bottom:8px; left:8px; font-size:10px; color:var(--red);">Low trust</div>
+            <div style="position:absolute; bottom:8px; right:8px; font-size:10px; color:var(--green);">High trust</div>
+            <div style="position:absolute; bottom:50px; right:30%; font-size:10px; color:var(--amber);">🎁 Item unlocks here</div>
+            <div style="position:absolute; bottom:0; right:30%; width:2px; height:50px; background:var(--amber); border-radius:1px;"></div>
+          </div>
+          <p style="font-size:12px; margin-top:8px; color:var(--muted);">Trust accumulates across turns. Emotional state persists for the session duration.</p>
+        </div>
+
+        <div class="card">
+          <h3>Fallback Inputs</h3>
+          <p style="margin-top:6px; font-size:12px;">If Whisper STT fails for 30s → <strong>FallbackManagerComponent</strong> switches to text input widget. If TTS fails → <strong>DialogueFallbackWidget</strong> shows text-only response. Zero-downtime degradation.</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       SLIDE 12 — Summary & Open Challenges
+  ══════════════════════════════════════ -->
+  <div class="slide" id="s12">
+    <h2>Summary &amp; Open Challenges</h2>
+    <div class="two-col" style="flex:1;">
+
+      <div>
+        <div class="card" style="border-color:var(--green); margin-bottom:14px; padding:10px 14px;">
+          <h3 style="color:var(--green); margin-bottom:12px;">Achievements</h3>
+          <ul class="check-list">
+            <li>End-to-end real-time conversational NPC — zero scripted dialogue lines</li>
+            <li>Unified PAD emotional state drives voice, face, and body simultaneously</li>
+            <li>Character-level lip sync from ElevenLabs alignment with asymmetric smoothing</li>
+            <li>Procedural full-body FK animation — no AnimBP assets required</li>
+            <li>On-device ONNX vision keeps player sensing local + private</li>
+            <li>Emotion-gated item unlock — LLM reasoning gates gameplay progression</li>
+            <li>Modular subsystem architecture — new NPC via data asset, no C++ recompile</li>
+          </ul>
+        </div>
+      </div>
+
+      <div>
+        <div class="card" style="border-color:var(--amber); margin-bottom:14px; padding:10px 14px;">
+          <h3 style="color:var(--amber); margin-bottom:12px;">Open Challenges</h3>
+          <ul class="warn-list">
+            <li>LLM API latency (~1–2s per turn) breaks real-time immersion at scale</li>
+            <li>ONNX model accuracy degrades under variable lighting / partial occlusion</li>
+            <li>PAD emotional state resets between sessions — no persistence layer yet</li>
+            <li>Voice cloning ethics + ElevenLabs licensing boundaries for shipped games</li>
+            <li>Single NPC only — multi-NPC coordination + shared emotional memory TBD</li>
+          </ul>
+        </div>
+
+        <div class="card" style="padding:12px 16px;">
+          <h3>Stack Summary</h3>
+          <div class="chips" style="margin-top:10px;">
+            <span class="chip chip-blue">UE 5.7</span>
+            <span class="chip chip-purple">Claude API</span>
+            <span class="chip chip-green">ElevenLabs</span>
+            <span class="chip chip-amber">Whisper</span>
+            <span class="chip chip-teal">ONNX Runtime</span>
+            <span class="chip chip-blue">Metahuman RigLogic</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div style="text-align:center; padding-top:16px; border-top:1px solid var(--border); margin-top:auto;">
+      <p style="font-size:13px; font-style:italic; color:var(--muted);">
+        "All dialogue emerges from model inference. Zero hand-authored lines."
+      </p>
+    </div>
+  </div>
+
+</div><!-- /slides -->
+
+<div class="progress" id="progress"></div>
+
+<script>
+  const total = 12;
+  let cur = 1;
+
+  function go(dir) {
+    const next = cur + dir;
+    if (next < 1 || next > total) return;
+    document.getElementById('s' + cur).classList.remove('active');
+    cur = next;
+    document.getElementById('s' + cur).classList.add('active');
+    document.getElementById('counter').textContent = cur + ' / ' + total;
+    document.getElementById('prev').disabled = cur === 1;
+    document.getElementById('next').disabled = cur === total;
+    document.getElementById('progress').style.width = (cur / total * 100) + '%';
+  }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') go(1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   go(-1);
+  });
+
+  // init progress
+  document.getElementById('progress').style.width = (1 / total * 100) + '%';
+</script>
+</body>
+</html>

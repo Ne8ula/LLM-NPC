@@ -174,14 +174,33 @@ void UElevenLabsTTSComponent::SpeakText(const FString& Text, const FString& Voic
 			if (!bConnectedSuccessfully || !Response.IsValid())
 			{
 				UE_LOG(LogTemp, Error, TEXT("ElevenLabsTTSComponent: TTS request failed - connection error."));
+				// Broadcast error so lip sync, thinking face, and body motion
+				// can reset state instead of latching on forever. Dispatch to
+				// game thread: OnSpeechError is a dynamic multicast delegate
+				// and must be invoked on the game thread.
+				AsyncTask(ENamedThreads::GameThread, [WeakThis]()
+				{
+					if (WeakThis.IsValid())
+					{
+						WeakThis->OnSpeechError.Broadcast(-3, TEXT("connection_error"));
+					}
+				});
 				return;
 			}
 
 			int32 ResponseCode = Response->GetResponseCode();
 			if (ResponseCode != 200)
 			{
+				const FString ResponseBody = Response->GetContentAsString();
 				UE_LOG(LogTemp, Error, TEXT("ElevenLabsTTSComponent: TTS request failed with code %d: %s"),
-					ResponseCode, *Response->GetContentAsString());
+					ResponseCode, *ResponseBody);
+				AsyncTask(ENamedThreads::GameThread, [WeakThis, ResponseCode, ResponseBody]()
+				{
+					if (WeakThis.IsValid())
+					{
+						WeakThis->OnSpeechError.Broadcast(ResponseCode, ResponseBody);
+					}
+				});
 				return;
 			}
 
@@ -241,9 +260,24 @@ FString UElevenLabsTTSComponent::BuildRequestBody(const FString& Text, float Sta
 
 void UElevenLabsTTSComponent::HandleTTSResponse(bool bWasSuccessful, int32 ResponseCode, const TArray<uint8>& AudioBytes)
 {
+	// Local helper: broadcast an internal error on the game thread so
+	// subscribers (lip sync / thinking face / body motion) recover cleanly.
+	TWeakObjectPtr<UElevenLabsTTSComponent> WeakSelf(this);
+	auto BroadcastInternalError = [WeakSelf](int32 Code, const FString& Reason)
+	{
+		AsyncTask(ENamedThreads::GameThread, [WeakSelf, Code, Reason]()
+		{
+			if (WeakSelf.IsValid())
+			{
+				WeakSelf->OnSpeechError.Broadcast(Code, Reason);
+			}
+		});
+	};
+
 	if (!bWasSuccessful || AudioBytes.Num() == 0)
 	{
 		UE_LOG(LogTemp, Error, TEXT("ElevenLabsTTSComponent: No response body received."));
+		BroadcastInternalError(-1, TEXT("empty_response"));
 		return;
 	}
 
@@ -262,12 +296,14 @@ void UElevenLabsTTSComponent::HandleTTSResponse(bool bWasSuccessful, int32 Respo
 	if (!ParseTimestampedResponse(JsonBody, PCMBytes, Characters, StartTimesSec, DurationsSec))
 	{
 		UE_LOG(LogTemp, Error, TEXT("ElevenLabsTTSComponent: Failed to parse /with-timestamps response."));
+		BroadcastInternalError(-1, TEXT("parse_failure"));
 		return;
 	}
 
 	if (PCMBytes.Num() == 0)
 	{
 		UE_LOG(LogTemp, Error, TEXT("ElevenLabsTTSComponent: Response contained no audio data."));
+		BroadcastInternalError(-2, TEXT("no_audio"));
 		return;
 	}
 
@@ -392,6 +428,8 @@ void UElevenLabsTTSComponent::PlayAudioFromPCM(const TArray<uint8>& PCMData)
 {
 	if (!AudioPlaybackComponent)
 	{
+		UE_LOG(LogTemp, Error, TEXT("ElevenLabsTTSComponent: PlayAudioFromPCM — no AudioPlaybackComponent."));
+		OnSpeechError.Broadcast(-2, TEXT("audio_create_failure"));
 		return;
 	}
 
@@ -400,6 +438,7 @@ void UElevenLabsTTSComponent::PlayAudioFromPCM(const TArray<uint8>& PCMData)
 	if (!CurrentSoundWave)
 	{
 		UE_LOG(LogTemp, Error, TEXT("ElevenLabsTTSComponent: Failed to create USoundWaveProcedural."));
+		OnSpeechError.Broadcast(-2, TEXT("audio_create_failure"));
 		return;
 	}
 
