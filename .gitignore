@@ -47,3 +47,4 @@ Content/Models/*.onnx
 .DS_Store
 Thumbs.db
 Desktop.ini
+~$slide-deck.pptx
