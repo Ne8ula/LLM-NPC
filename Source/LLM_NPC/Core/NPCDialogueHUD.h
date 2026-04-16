@@ -5,6 +5,8 @@
 #include "NPCDialogueHUD.generated.h"
 
 class UDialogueComponent;
+class UWhisperSTTComponent;
+class ANPCCharacter;
 
 /**
  * HUD that draws NPC dialogue chat using canvas DrawText.
@@ -29,6 +31,9 @@ public:
 	void AppendToInput(const FString& Char);
 	void BackspaceInput();
 
+	/** Rebind all delegates to a new focused NPC. Pass nullptr to enter null-focus state. */
+	void SetFocusedNPC(ANPCCharacter* NPC);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void DrawHUD() override;
@@ -50,6 +55,17 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UDialogueComponent> BoundDialogue;
+
+	/** Cached STT reference so we can RemoveDynamic on NPC switch. */
+	UPROPERTY()
+	TObjectPtr<UWhisperSTTComponent> BoundSTT;
+
+	/** Cached focused NPC actor — used to detect no-op re-binds. */
+	UPROPERTY()
+	TObjectPtr<ANPCCharacter> FocusedNPCActor;
+
+	/** Display name of the currently focused NPC. */
+	FString FocusedNPCName;
 
 	/** Callback when voice transcript arrives. */
 	UFUNCTION()

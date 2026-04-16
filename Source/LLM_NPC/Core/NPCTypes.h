@@ -206,6 +206,23 @@ enum class EGestureType : uint8
 	Spindle  UMETA(DisplayName = "Spindle (Two-Hand)")
 };
 
+/**
+ * Meta-communicative intent behind a gesture, used in the TESTIMONIAL mechanic.
+ * Injected into Claude context before the player's voice message is processed,
+ * modifying HOW the NPC receives testimony without changing the words.
+ *
+ * Mapped from EGestureType by NPCPlayerController and consumed per-message by DialogueComponent.
+ */
+UENUM(BlueprintType)
+enum class EGestureIntent : uint8
+{
+	None       UMETA(DisplayName = "No gesture"),
+	Withhold   UMETA(DisplayName = "Pinch — withholding"),
+	Disclose   UMETA(DisplayName = "Spread — open disclosure"),
+	Doubt      UMETA(DisplayName = "Rotate — skepticism"),
+	Synthesise UMETA(DisplayName = "Spindle — connecting sources")
+};
+
 USTRUCT(BlueprintType)
 struct LLM_NPC_API FGestureInput
 {

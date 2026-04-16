@@ -32,12 +32,15 @@ public:
 	// ---- Claude Prompt Configuration ----
 
 	/**
+	 * [SOFT DEPRECATED — Phase 2 will replace with BuildSystemPromptFromGraph()]
+	 *
 	 * The system prompt sent to Claude API.
 	 * Establishes the "Magic Circle" — NPC exists entirely within the fiction.
-	 * Should include: world lore, NPC personality, behavioral rules, response format.
 	 *
-	 * Leverages the ELIZA Effect: instruct Claude to maintain consistent emotional
-	 * personality, reference prior context, and express genuine-seeming reactions.
+	 * In THRESHOLD, system prompts are assembled at runtime from UNPCGraphDataAsset
+	 * via DialogueComponent::BuildSystemPromptFromGraph(). This field remains for
+	 * backward compatibility with existing test assets and will be removed once
+	 * all NPCs are graph-driven.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|Dialogue", meta = (MultiLine = true))
 	FString SystemPrompt;
@@ -100,6 +103,15 @@ public:
 	TMap<EEmotionType, float> EmotionTransitionCosts;
 
 	// ---- References to Other Data Assets ----
+
+	/**
+	 * Social graph data asset for this playthrough.
+	 * When set, DialogueComponent::BuildSystemPromptFromGraph() uses this to
+	 * assemble the system prompt at runtime, ignoring SystemPrompt above.
+	 * Set by NPCGameMode after loading the active UNPCGraphDataAsset.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|References")
+	TSoftObjectPtr<class UNPCGraphDataAsset> GraphDataAsset;
 
 	/** Emotion graph data asset for this NPC's state machine. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NPC|References")
