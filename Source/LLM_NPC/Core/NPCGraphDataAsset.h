@@ -205,6 +205,6 @@ public:
 	 * Call once after populating Nodes (either at asset save time or after procedural generation).
 	 * Overwrites any existing ReflectionReveal value.
 	 */
-	UFUNCTION(BlueprintCallable, Category = "NPC Graph")
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "NPC Graph")
 	void BuildReflectionReveal();
 };

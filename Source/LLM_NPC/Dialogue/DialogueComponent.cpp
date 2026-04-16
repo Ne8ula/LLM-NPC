@@ -233,7 +233,7 @@ void UDialogueComponent::OnClaudeResponseReceived(const FClaudeAPIResponse& Resp
 			{
 				FEmotionSignal Signal;
 				Signal.TargetEmotion = Response.NPCEmotionUpdate;
-				Signal.Strength = 0.8f;
+				Signal.Strength = 1.0f;
 				Signal.Source = TEXT("ClaudeDialogueResponse");
 				EmotionComp->ProcessSignal(Signal);
 				UE_LOG(LogTemp, Log, TEXT("DialogueComponent: Sent emotion signal '%s' to EmotionComponent"),
@@ -260,12 +260,27 @@ void UDialogueComponent::OnClaudeResponseReceived(const FClaudeAPIResponse& Resp
 			float Stability = -1.0f;
 			float SimilarityBoost = -1.0f;
 
-			// Pull voice settings from NPCConfig if available
+			// Pull voice settings from NPCConfig as baseline
 			if (NPCConfig)
 			{
 				VoiceID = NPCConfig->ElevenLabsVoiceID;
 				Stability = NPCConfig->VoiceStability;
 				SimilarityBoost = NPCConfig->VoiceSimilarityBoost;
+
+				// Graph node voice ID trumps NPCConfig voice ID
+				if (!GraphNodeID.IsNone())
+				{
+					if (const UNPCGraphDataAsset* Graph = NPCConfig->GraphDataAsset.Get())
+					{
+						if (const FNPCGraphNode* Node = Graph->FindNode(GraphNodeID))
+						{
+							if (!Node->ElevenLabsVoiceID.IsEmpty())
+							{
+								VoiceID = Node->ElevenLabsVoiceID;
+							}
+						}
+					}
+				}
 			}
 
 			TTS->SpeakText(Response.ResponseText, VoiceID, Stability, SimilarityBoost);
@@ -382,6 +397,18 @@ FString UDialogueComponent::BuildSystemPromptFromGraph(const UNPCGraphDataAsset*
 		P.Appendf(TEXT("%s\n\n"), *Node.ReflectionAspect);
 	}
 
+	// 8.5 Response length — brief until trust is earned
+	P.Append(
+		TEXT("Keep your response to one or two sentences. ")
+		TEXT("You do not give more than you need to. Trust is not assumed.\n\n")
+	);
+
+	// 8.6 Emotional register — let internal states surface in speech
+	P.Append(
+		TEXT("When you feel something, let it show in how you speak — not stated, but present. ")
+		TEXT("Discomfort, warmth, wariness, grief: these should be audible in word choice and rhythm, not explained.\n\n")
+	);
+
 	// 9. Cycle-marker instruction — required for Phase 2.5 compatibility
 	P.Append(
 		TEXT("The conversation history may contain markers like [--- Cycle 2 ---] or [--- Cycle 3 ---]. ")
@@ -391,20 +418,14 @@ FString UDialogueComponent::BuildSystemPromptFromGraph(const UNPCGraphDataAsset*
 	);
 
 	// 10. Hard character boundary
+	// NOTE: Do not add a JSON format instruction here. ClaudeAPISubsystem appends its own
+	// format instruction (response_text / npc_emotion_update / item_id) to every request.
+	// A second conflicting format instruction here would cause parsing failures.
 	P.Append(
 		TEXT("Remain in character at all times. ")
 		TEXT("Do not acknowledge that you are an AI, a language model, or part of any constructed experience. ")
 		TEXT("Do not reveal hidden design behind your character or hint at any meta-layer. ")
-		TEXT("Speak as this person speaks — within their knowledge, their distortions, their relationship to what happened.\n\n")
-	);
-
-	// 11. JSON response format
-	P.Append(
-		TEXT("Respond exclusively in this JSON format:\n")
-		TEXT("{\"dialogue\":\"...\",\"emotion_update\":{\"joy\":0.0,\"trust\":0.0,\"sadness\":0.0,\"anger\":0.0,\"fear\":0.0,\"disgust\":0.0,\"anticipation\":0.0,\"surprise\":0.0},\"item_give\":null}\n\n")
-		TEXT("dialogue: your spoken response. ")
-		TEXT("emotion_update: float changes from -1.0 to 1.0 for each emotion dimension. ")
-		TEXT("item_give: null, or a string item identifier if you give the player something specific.")
+		TEXT("Speak as this person speaks — within their knowledge, their distortions, their relationship to what happened.")
 	);
 
 	return P.ToString();

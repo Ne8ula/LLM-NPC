@@ -38,6 +38,25 @@ void ANPCGameMode::BeginPlay()
 		// Override the graph reference on the config asset (runtime only — does not save to disk).
 		NPC->NPCConfig->GraphDataAsset = ActiveGraph;
 
+		// Sync the DialogueComponent's NPCConfig to the character's NPCConfig.
+		// The DialogueComponent may have a stale NPCConfig set from Blueprint defaults
+		// (e.g., DA_NPC_Test). Overwriting it here before InitializeSubsystem() runs
+		// ensures it uses the correct per-NPC config, not the Blueprint class default.
+		if (NPC->DialogueComponent)
+		{
+			NPC->DialogueComponent->NPCConfig = NPC->NPCConfig;
+		}
+
+		// Runtime tuning — applied here so they affect all THRESHOLD NPCs without
+		// needing to edit each DA_Threshold_* asset individually.
+		// Emotion decay: very slow so a triggered emotion lasts the full conversation.
+		NPC->NPCConfig->EmotionDecayRate = 0.003f;   // ~300s from 1.0 to threshold
+		NPC->NPCConfig->NeutralThreshold = 0.03f;    // lowers the floor; emotion persists longer
+		// Response length: 150 tokens ~ 1–2 sentences.
+		NPC->NPCConfig->MaxResponseTokens = 150;
+		// Voice expressiveness: lower stability = more emotive, less monotone.
+		NPC->NPCConfig->VoiceStability = 0.3f;
+
 		// Resolve GraphNodeID by matching NPCConfig display name against graph node names.
 		if (NPC->DialogueComponent)
 		{

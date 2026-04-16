@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>THRESHOLD — Vertical Slice Progress</title>
+<style>
+  :root {
+    --bg:        #080a0e;
+    --surface:   #0e1117;
+    --border:    #1e2533;
+    --muted:     #3a4258;
+    --dim:       #6b7799;
+    --text:      #c8cfe0;
+    --bright:    #e8edf8;
+    --accent:    #4a7fa5;
+    --accent2:   #7ec8a0;
+    --gold:      #c9a84c;
+    --red:       #c06060;
+    --phase0:    #5a7fa0;
+    --phase1:    #6a9a78;
+    --phase2:    #8a7ab8;
+    --pending:   #3a4258;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ── Slide container ─────────────────────────────────── */
+  #deck {
+    width: 100vw;
+    height: 100vh;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 80px;
+    opacity: 0;
+    transform: translateX(40px);
+    transition: opacity 0.45s ease, transform 0.45s ease;
+    pointer-events: none;
+  }
+  .slide.active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: all;
+  }
+  .slide.exit {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+
+  /* ── Navigation ──────────────────────────────────────── */
+  #nav {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    z-index: 100;
+  }
+  #nav button {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--dim);
+    padding: 8px 22px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  #nav button:hover { color: var(--bright); border-color: var(--muted); }
+  #counter { color: var(--muted); font-size: 12px; letter-spacing: 0.1em; min-width: 60px; text-align: center; }
+
+  /* ── Dots ────────────────────────────────────────────── */
+  #dots {
+    position: fixed;
+    right: 28px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 100;
+  }
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+    cursor: pointer;
+    transition: background 0.2s, transform 0.2s;
+  }
+  .dot.active { background: var(--accent); transform: scale(1.4); }
+
+  /* ── Slide number ────────────────────────────────────── */
+  #slide-num {
+    position: fixed;
+    top: 24px;
+    right: 36px;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+    z-index: 100;
+  }
+
+  /* ── Typography ──────────────────────────────────────── */
+  .label {
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 14px;
+  }
+  h1 {
+    font-size: 64px;
+    font-weight: 300;
+    letter-spacing: 0.18em;
+    color: var(--bright);
+    line-height: 1.1;
+  }
+  h1 span { color: var(--accent); }
+  h2 {
+    font-size: 32px;
+    font-weight: 300;
+    letter-spacing: 0.08em;
+    color: var(--bright);
+    margin-bottom: 32px;
+  }
+  h2 span { color: var(--accent2); }
+  h3 {
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 10px;
+  }
+  p {
+    font-size: 15px;
+    line-height: 1.75;
+    color: var(--text);
+    max-width: 760px;
+  }
+  p.large {
+    font-size: 18px;
+    line-height: 1.8;
+    color: var(--text);
+  }
+  .em { color: var(--bright); font-weight: 500; }
+  .gold { color: var(--gold); }
+  .green { color: var(--accent2); }
+  .red { color: var(--red); }
+  .dim { color: var(--dim); }
+  code {
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px;
+    background: #111827;
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    border-radius: 3px;
+    color: #a8c4e0;
+  }
+
+  /* ── Layout helpers ──────────────────────────────────── */
+  .cols { display: flex; gap: 40px; width: 100%; max-width: 1100px; align-items: flex-start; }
+  .col { flex: 1; }
+  .col-wide { flex: 1.6; }
+  .col-narrow { flex: 0.8; }
+  .center { text-align: center; }
+  .full { width: 100%; max-width: 1100px; }
+
+  /* ── Divider ─────────────────────────────────────────── */
+  .rule {
+    width: 40px; height: 1px;
+    background: var(--accent);
+    margin: 20px 0;
+  }
+  .rule.center { margin: 20px auto; }
+
+  /* ── Cards ───────────────────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px 24px;
+    margin-bottom: 14px;
+  }
+  .card-title {
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 6px;
+  }
+  .card-body {
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--text);
+  }
+
+  /* ── Bullet list ─────────────────────────────────────── */
+  ul.clean {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  ul.clean li {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text);
+    padding: 4px 0;
+    padding-left: 18px;
+    position: relative;
+  }
+  ul.clean li::before {
+    content: '—';
+    position: absolute;
+    left: 0;
+    color: var(--muted);
+  }
+  ul.clean li.done::before { content: '✓'; color: var(--accent2); }
+  ul.clean li.todo::before { content: '○'; color: var(--muted); }
+  ul.clean li.next::before { content: '→'; color: var(--gold); }
+
+  /* ── NPC table ───────────────────────────────────────── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th {
+    text-align: left;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--dim);
+    padding: 0 12px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 11px 12px;
+    border-bottom: 1px solid #131823;
+    vertical-align: top;
+    line-height: 1.5;
+  }
+  td:first-child { color: var(--bright); font-weight: 500; }
+  tr:last-child td { border-bottom: none; }
+
+  /* ── Phase badges ────────────────────────────────────── */
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+  .badge-done  { background: #1a2e22; color: var(--accent2); border: 1px solid #2a4a38; }
+  .badge-next  { background: #2a2210; color: var(--gold);    border: 1px solid #4a3a18; }
+  .badge-todo  { background: #161a24; color: var(--muted);   border: 1px solid var(--border); }
+
+  /* ── Phase row ───────────────────────────────────────── */
+  .phase-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 20px;
+    padding: 14px 0;
+    border-bottom: 1px solid #10141e;
+  }
+  .phase-row:last-child { border-bottom: none; }
+  .phase-num {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    min-width: 70px;
+    padding-top: 3px;
+  }
+  .phase-content { flex: 1; }
+  .phase-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--bright);
+    margin-bottom: 4px;
+  }
+  .phase-desc {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--dim);
+  }
+
+  /* ── Flow diagram ────────────────────────────────────── */
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    width: 100%;
+    max-width: 1000px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .flow-node {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 20px;
+    text-align: center;
+    min-width: 130px;
+    flex-shrink: 0;
+  }
+  .flow-node .fn-label {
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 6px;
+  }
+  .flow-node .fn-val {
+    font-size: 13px;
+    color: var(--bright);
+    font-weight: 500;
+    line-height: 1.4;
+  }
+  .flow-node.accent { border-color: var(--accent); }
+  .flow-node.green  { border-color: var(--accent2); }
+  .flow-node.gold   { border-color: var(--gold); }
+  .flow-arrow {
+    color: var(--muted);
+    font-size: 18px;
+    padding: 0 6px;
+    flex-shrink: 0;
+  }
+
+  /* ── Title slide decoration ──────────────────────────── */
+  .title-sub {
+    font-size: 15px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-top: 18px;
+  }
+  .title-meta {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    margin-top: 10px;
+  }
+
+  /* ── Grid ────────────────────────────────────────────── */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    width: 100%;
+    max-width: 1100px;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+    width: 100%;
+    max-width: 1100px;
+  }
+
+  /* ── Stat block ──────────────────────────────────────── */
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 18px 20px;
+    text-align: center;
+  }
+  .stat-val {
+    font-size: 32px;
+    font-weight: 300;
+    color: var(--bright);
+    letter-spacing: 0.04em;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .stat-label {
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+
+  /* ── Quote ───────────────────────────────────────────── */
+  blockquote {
+    border-left: 2px solid var(--accent);
+    padding-left: 20px;
+    margin: 16px 0;
+    font-size: 16px;
+    line-height: 1.75;
+    color: var(--text);
+    font-style: italic;
+    max-width: 780px;
+  }
+
+  /* ── Keyboard shortcut hint ──────────────────────────── */
+  #hint {
+    position: fixed;
+    bottom: 72px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    opacity: 0.6;
+  }
+
+  /* ── Roadmap bar ─────────────────────────────────────── */
+  .roadmap {
+    width: 100%;
+    max-width: 1000px;
+  }
+  .rm-row {
+    display: flex;
+    align-items: stretch;
+    height: 44px;
+    margin-bottom: 10px;
+  }
+  .rm-label {
+    width: 130px;
+    flex-shrink: 0;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    color: var(--dim);
+    display: flex;
+    align-items: center;
+    padding-right: 14px;
+    justify-content: flex-end;
+  }
+  .rm-bar-wrap {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .rm-bar {
+    height: 28px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+  }
+  .rm-done { background: #1b3028; color: var(--accent2); border: 1px solid #2a4a38; }
+  .rm-next { background: #2a2212; color: var(--gold);    border: 1px solid #4a3818; }
+  .rm-todo { background: #111520; color: var(--muted);   border: 1px solid #1e2533; }
+
+  /* ── Landscape layout override for some slides ───────── */
+  .slide-wide { padding: 40px 60px; }
+</style>
+</head>
+<body>
+
+<div id="deck">
+
+  <!-- ─────────────── SLIDE 1 — TITLE ─────────────── -->
+  <div class="slide active" id="s1">
+    <div class="center">
+      <div class="label">Unreal Engine 5.7 · Anthropic Claude · Apr 2026</div>
+      <h1>THRESHOLD</h1>
+      <div class="title-sub">Vertical Slice Progress Report</div>
+      <div class="rule center"></div>
+      <p class="large center" style="max-width:580px; margin: 0 auto; color: var(--dim);">
+        A non-linear, replayable AI-native experience.<br>
+        Five minds. One compound. No script.
+      </p>
+      <div class="title-meta">Phases 0 · 1 · 2 Complete &nbsp;·&nbsp; Phases 2.5 – 7 Remaining</div>
+    </div>
+  </div>
+
+  <!-- ─────────────── SLIDE 2 — WHAT IS THRESHOLD ─────────────── -->
+  <div class="slide" id="s2">
+    <div class="full">
+      <div class="label">The Concept</div>
+      <h2>What is <span>THRESHOLD</span>?</h2>
+      <div class="cols">
+        <div class="col-wide">
+          <p class="large">
+            The player returns to a <span class="em">Chinese residential compound</span> they left years ago.
+            Five AI NPCs knew them. There is no plot, no objectives, no tutorial.
+          </p>
+          <div class="rule"></div>
+          <p>
+            The experience runs in <span class="em">13-minute cycles</span> — chosen deliberately (liminal, unlucky).
+            When the timer expires, the player wakes at the entrance again. The same people are still there.
+            They remember <span class="em">everything</span> from every prior cycle.
+          </p>
+          <br>
+          <p>
+            NPCs do not regenerate until the player triggers the <span class="gold">Return Statement</span>
+            — speaking into the empty courtyard, ending the run and beginning a new one with
+            a procedurally generated social graph.
+          </p>
+        </div>
+        <div class="col">
+          <div class="card">
+            <div class="card-title">Core Mechanic</div>
+            <div class="card-body"><span class="em">TESTIMONIAL</span> — the player is the only node connecting 5 AI minds.
+            They carry what one NPC says to another — live, in their own words, imperfectly.
+            Each receiving Claude instance responds to the player's specific phrasing unpredictably.</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Replayability</div>
+            <div class="card-body">Return Statement triggers procedural graph generation via Claude API.
+            Different graph = different people = different hidden truth. Every run is structurally distinct.</div>
+          </div>
+          <div class="card">
+            <div class="card-title">No Progression Lock</div>
+            <div class="card-body">Facial recognition and gesture layer are ambient — they shape NPC behaviour,
+            not gate it. The compound opens on arrival and never closes.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── SLIDE 3 — THE FIVE NPCs ─────────────── -->
+  <div class="slide" id="s3">
+    <div class="full">
+      <div class="label">The Social Graph</div>
+      <h2>The Five <span>NPCs</span></h2>
+      <table>
+        <thead>
+          <tr>
+            <th>NPC</th>
+            <th>Role</th>
+            <th>Emotion Baseline</th>
+            <th>Hidden Title <span class="dim">(post-run only)</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Āpó</td>
+            <td style="color:var(--dim)">Elder resident, ran compound's social calendar</td>
+            <td><span class="green">Trust 0.6</span></td>
+            <td style="color:var(--muted); font-style:italic">The One Who Made Peace With It</td>
+          </tr>
+          <tr>
+            <td>The Pragmatist</td>
+            <td style="color:var(--dim)">Retired housing official, processed emigration paperwork</td>
+            <td><span style="color:#c0884a">Disgust 0.4</span></td>
+            <td style="color:var(--muted); font-style:italic">The One Who Translated</td>
+          </tr>
+          <tr>
+            <td>The Friend</td>
+            <td style="color:var(--dim)">Childhood friend, runs ground-floor convenience store</td>
+            <td><span style="color:#7090b8">Sadness 0.5</span></td>
+            <td style="color:var(--muted); font-style:italic">The One Who Stayed</td>
+          </tr>
+          <tr>
+            <td>The Keeper</td>
+            <td style="color:var(--dim)">40-year maintenance worker, been inside every unit</td>
+            <td><span style="color:#a08080">Anticipation 0.4</span></td>
+            <td style="color:var(--muted); font-style:italic">The One Who Watches</td>
+          </tr>
+          <tr>
+            <td>The One Who Couldn't Forget</td>
+            <td style="color:var(--dim)">Graduate student, arrived for fieldwork, never left</td>
+            <td><span style="color:#a08080">Anticipation 0.5</span></td>
+            <td style="color:var(--muted); font-style:italic">The One Who Inherited the Story</td>
+          </tr>
+        </tbody>
+      </table>
+      <div style="margin-top: 24px;">
+        <p style="font-size:13px; color:var(--dim)">
+          All NPCs use they/them. Hidden titles are injected into system prompts as tonal instructions only —
+          the pattern is legible to the player exclusively post-run when all five titles appear simultaneously.
+          <code>VoiceGender</code> + <code>MetahumanVariantPool</code> randomly assigned per procedural run.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── SLIDE 4 — TECHNOLOGY INTEGRATION ─────────────── -->
+  <div class="slide" id="s4">
+    <div class="full">
+      <div class="label">Architecture</div>
+      <h2>Technology <span>Integration</span></h2>
+      <div class="grid-2" style="margin-bottom: 16px;">
+        <div class="card">
+          <div class="card-title">Anthropic Claude API</div>
+          <div class="card-body">
+            Each NPC is a separate <code>DialogueComponent</code> with its own conversation history.
+            System prompts are assembled at runtime from <code>UNPCGraphDataAsset</code> — identity, relationships,
+            withheld truths, memory distortions, tonal register. No hardcoded dialogue.
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">OpenAI Whisper STT</div>
+          <div class="card-body">
+            Player speaks via push-to-talk (V key). <code>WhisperSTTComponent</code> captures PCM via
+            Windows <code>waveIn</code> at 16kHz, encodes WAV, POSTs to Whisper, returns transcript.
+            Transcript becomes the TESTIMONIAL — the player's imperfect relay of what they heard.
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">ElevenLabs TTS</div>
+          <div class="card-body">
+            NPC response text is sent to ElevenLabs <code>/with-timestamps</code> endpoint.
+            Returns Base64 PCM + character-level alignment used by <code>NPCLipSyncComponent</code>.
+            Each graph node carries its own <code>ElevenLabsVoiceID</code> — voice is identity.
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Emotion + Vision</div>
+          <div class="card-body">
+            ONNX facial expression classifier (~10 FPS) detects player emotion from webcam.
+            Injected into Claude context as ambient annotation. NPC may comment on it.
+            Plutchik 8-emotion PAD state machine drives Metahuman FACS blend shapes.
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Social Graph (<code>UNPCGraphDataAsset</code>)</div>
+        <div class="card-body">
+          Handcrafted for vertical slice (<code>DA_Graph_ThresholdDefault</code>). Procedurally generated per run in Phase 5.
+          Stores NPC nodes (identity, knowledge, withheld truth, memory distortions) and directed relationship edges.
+          <code>NPCGameMode::BeginPlay()</code> pushes the active graph to all 5 NPCs and resolves each NPC's graph node by name-matching.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── SLIDE 5 — USER FLOW ─────────────── -->
+  <div class="slide" id="s5">
+    <div class="full">
+      <div class="label">Interaction Design</div>
+      <h2>Player Input → <span>NPC Output</span></h2>
+
+      <div style="margin-bottom: 32px;">
+        <h3>Input Channels</h3>
+        <div class="flow" style="justify-content:flex-start; gap: 10px; flex-wrap: wrap; margin-bottom: 24px;">
+          <div class="flow-node accent">
+            <div class="fn-label">Voice</div>
+            <div class="fn-val">Hold V<br><span style="font-size:11px; color:var(--dim)">Whisper STT</span></div>
+          </div>
+          <div class="flow-arrow">+</div>
+          <div class="flow-node accent">
+            <div class="fn-label">Text</div>
+            <div class="fn-val">Click + Type<br><span style="font-size:11px; color:var(--dim)">Fallback</span></div>
+          </div>
+          <div class="flow-arrow">+</div>
+          <div class="flow-node accent">
+            <div class="fn-label">Gesture</div>
+            <div class="fn-val">Pinch / Spread<br>Rotate / Spindle</div>
+          </div>
+          <div class="flow-arrow">+</div>
+          <div class="flow-node accent">
+            <div class="fn-label">Webcam</div>
+            <div class="fn-val">Player Emotion<br><span style="font-size:11px; color:var(--dim)">Ambient</span></div>
+          </div>
+        </div>
+
+        <h3>Processing</h3>
+        <div class="flow" style="justify-content:flex-start; gap: 6px; margin-bottom: 24px;">
+          <div class="flow-node" style="border-color:var(--muted);">
+            <div class="fn-label">Annotate</div>
+            <div class="fn-val"><code>BuildAnnotated<br>Content()</code></div>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node" style="border-color:var(--muted);">
+            <div class="fn-label">Assemble Prompt</div>
+            <div class="fn-val"><code>BuildSystem<br>PromptFromGraph()</code></div>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node" style="border-color:var(--muted);">
+            <div class="fn-label">Claude API</div>
+            <div class="fn-val"><code>claude-sonnet-4-6</code><br>150 tokens max</div>
+          </div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node" style="border-color:var(--muted);">
+            <div class="fn-label">Parse Response</div>
+            <div class="fn-val">text + emotion<br>+ item_id</div>
+          </div>
+        </div>
+
+        <h3>Output Channels (Parallel)</h3>
+        <div class="flow" style="justify-content:flex-start; gap: 10px;">
+          <div class="flow-node green">
+            <div class="fn-label">Voice</div>
+            <div class="fn-val">ElevenLabs<br>per-NPC voice ID</div>
+          </div>
+          <div class="flow-arrow">+</div>
+          <div class="flow-node green">
+            <div class="fn-label">Lip Sync</div>
+            <div class="fn-val">Char timestamps<br>→ visemes</div>
+          </div>
+          <div class="flow-arrow">+</div>
+          <div class="flow-node green">
+            <div class="fn-label">Emotion</div>
+            <div class="fn-val">FACS blend shapes<br>Strength 1.0</div>
+          </div>
+          <div class="flow-arrow">+</div>
+          <div class="flow-node green">
+            <div class="fn-label">HUD</div>
+            <div class="fn-val">Response text<br>NPC name header</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── SLIDE 6 — GESTURE LAYER ─────────────── -->
+  <div class="slide" id="s6">
+    <div class="full">
+      <div class="label">Input Layer Detail</div>
+      <h2>The Gesture <span>Layer</span></h2>
+      <div class="cols">
+        <div class="col">
+          <p>Gesture input modifies <span class="em">how testimony is received</span>, not what is said.
+          A pinch before relaying something signals the NPC that information is being withheld.
+          A spread signals openness. The NPC's Claude instance reads this annotation before the spoken message.</p>
+          <div class="rule"></div>
+          <p style="color:var(--dim); font-size:13px">
+            Injected as a prefix tag in <code>BuildAnnotatedContent()</code>:<br><br>
+            <code>[Player gesture: PINCH — withholding]</code><br>
+            <code>[Player gesture: SPREAD — open disclosure]</code><br>
+            <code>[Player gesture: ROTATE — skepticism]</code><br>
+            <code>[Player gesture: SPINDLE — connecting sources]</code>
+          </p>
+        </div>
+        <div class="col">
+          <div class="card">
+            <div class="card-title">Pinch → <code>EGestureIntent::Withhold</code></div>
+            <div class="card-body">Player signals they are holding something back. NPC may probe or respect the silence.</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Spread → <code>EGestureIntent::Disclose</code></div>
+            <div class="card-body">Player signals open, honest delivery. NPC may lower their guard in response.</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Rotate → <code>EGestureIntent::Doubt</code></div>
+            <div class="card-body">Player signals skepticism about what they are relaying. NPC reads the ambivalence.</div>
+          </div>
+          <div class="card">
+            <div class="card-title">Spindle → <code>EGestureIntent::Synthesise</code></div>
+            <div class="card-body">Player is visibly connecting multiple sources. NPC may recognise the triangulation.</div>
+          </div>
+          <p style="font-size:12px; color:var(--muted); margin-top: 8px;">
+            <span class="badge badge-next">Phase 3</span> &nbsp; Full wiring pending — currently always passes <code>EGestureIntent::None</code>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── SLIDE 7 — PHASE 0 ─────────────── -->
+  <div class="slide" id="s7">
+    <div class="full">
+      <div class="label">Phase 0 — Complete</div>
+      <h2>Type <span>Foundation</span></h2>
+      <div class="cols">
+        <div class="col-wide">
+          <ul class="clean">
+            <li class="done"><code>EGestureIntent</code> enum added to <code>NPCTypes.h</code> — None / Withhold / Disclose / Doubt / Synthesise. Maps physical gesture to TESTIMONIAL meta-communication intent.</li>
+            <li class="done"><code>UNPCGraphDataAsset</code> created (<code>NPCGraphDataAsset.h/.cpp</code>) — complete social graph container: <code>FNPCGraphNode</code> array, <code>FNPCGraphEdge</code> array, <code>EventSummary</code>, <code>GroundTruth</code>, <code>ReflectionReveal</code>.</li>
+            <li class="done"><code>FNPCGraphNode</code> fields: NPCID, NPCName, Role, EmotionBaseline, KnowsAboutEvent, WithheldTruth, MisrememberedDetail, PlayerRelationship, ElevenLabsVoiceID, VoiceGender, MetahumanVariantPool, ReflectionAspect, HiddenTitle.</li>
+            <li class="done"><code>FindNode(FName NPCID)</code> — C++ lookup helper on the data asset.</li>
+            <li class="done"><code>BuildReflectionReveal()</code> — marked <code>CallInEditor</code>; assembles Phase 2 hidden titles from all node <code>HiddenTitle</code> fields. Appears as a button in the Details panel.</li>
+            <li class="done"><code>NPCConfigDataAsset.h</code> updated — <code>SystemPrompt</code> soft-deprecated; <code>GraphDataAsset</code> (<code>TSoftObjectPtr</code>) reference added.</li>
+            <li class="done"><code>DA_NPC_Test.uasset</code> + existing single-NPC test scene unchanged and still functional.</li>
+          </ul>
+        </div>
+        <div class="col">
+          <div class="stat"><div class="stat-val green">7</div><div class="stat-label">New / modified files</div></div>
+          <br>
+          <div class="card">
+            <div class="card-title">Design intent</div>
+            <div class="card-body">Phase 0 establishes the type system without touching any runtime behaviour.
+            The graph asset exists, the enums exist, the config is extended — but nothing uses them yet.
+            This allows Phases 1 and 2 to build on a stable foundation without flag-day coupling.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── SLIDE 8 — PHASE 1 ─────────────── -->
+  <div class="slide" id="s8">
+    <div class="full">
+      <div class="label">Phase 1 — Complete</div>
+      <h2>Multi-NPC <span>Refactor</span></h2>
+      <div class="cols">
+        <div class="col-wide">
+          <ul class="clean">
+            <li class="done"><span class="em">Proximity focus</span> — <code>NPCPlayerController::UpdateNPCFocus()</code> runs every tick; distance² + dot product check selects the nearest NPC in a 300cm forward hemisphere.</li>
+            <li class="done"><span class="em">Dynamic delegate binding</span> — <code>NPCDialogueHUD::SetFocusedNPC()</code> removes old bindings and re-binds <code>OnDialogueResponseReceived</code> + <code>OnVoiceTranscript</code> on focus switch.</li>
+            <li class="done"><span class="em">HUD redesign</span> — compact 400×179px canvas panel, bottom-left. No movement lock. NPC name header. Click-to-focus text input (<code>bTextInputActive</code> flag, hit-test inside <code>DrawHUD</code> geometry). V key push-to-talk never captured as typed text.</li>
+            <li class="done"><span class="em">Voice recording indicator</span> — red ● REC while holding V; waiting indicator (…) while Claude responds.</li>
+            <li class="done"><span class="em">Gesture intent caching</span> — <code>PendingGestureIntent</code> on <code>NPCPlayerController</code>; cleared on Enter (submit) and on NPC focus switch.</li>
+            <li class="done"><span class="em">FacialRecognitionComponent</span> — Init/Shutdown per focused NPC (performance: only the active NPC's camera pipeline runs).</li>
+            <li class="done"><span class="em">Content</span> — <code>Threshold_Compound.umap</code> with 5 NPC spaces, central courtyard, Player Start, NavMesh. 5 <code>UNPCConfigDataAsset</code> instances in <code>Content/THRESHOLD/Config/</code>.</li>
+          </ul>
+        </div>
+        <div class="col">
+          <div class="stat"><div class="stat-val green">5</div><div class="stat-label">NPCs simultaneously live</div></div>
+          <br>
+          <div class="card">
+            <div class="card-title">Key constraint</div>
+            <div class="card-body">No <code>DisableInput</code> / <code>EnableInput</code> calls anywhere. Player always free to move.
+            The HUD input model is purely additive — text capture is gated on <code>IsTextInputActive()</code>,
+            never on game pause or input suppression.</div>
+          </div>
+          <br>
+          <div class="card">
+            <div class="card-title">What Phase 2.5 will extend here</div>
+            <div class="card-body"><code>NPCPlayerController::Tick</code> gains cycle timer decrement.
+            <code>NPCDialogueHUD</code> gains CYCLE N counter + countdown display.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── SLIDE 9 — PHASE 2 ─────────────── -->
+  <div class="slide" id="s9">
+    <div class="full">
+      <div class="label">Phase 2 — Complete</div>
+      <h2>Graph-Driven <span>Prompts</span></h2>
+      <div class="cols">
+        <div class="col-wide">
+          <ul class="clean">
+            <li class="done"><code>BuildSystemPromptFromGraph()</code> — 10-section runtime prompt: identity → player relationship → event ambient → knowledge → withheld constraint → memory distortion → outgoing relationship edges → tonal register → response brevity (1–2 sentences) → cycle-marker instruction → character boundary.</li>
+            <li class="done"><code>BuildAnnotatedContent()</code> — gesture annotation first, emotion annotation second, user message last. Gesture tags annotate intent; emotion tags annotate ambient player state.</li>
+            <li class="done"><code>GraphNodeID</code> UPROPERTY on <code>DialogueComponent</code> — set by <code>NPCGameMode</code>; lazy name-matching fallback in <code>InitializeSubsystem()</code>.</li>
+            <li class="done"><code>NPCGameMode::BeginPlay()</code> — pushes <code>ActiveGraph</code> to all NPCs; syncs stale <code>DialogueComponent->NPCConfig</code>; resolves <code>GraphNodeID</code>; applies runtime tuning: decay 0.003f, threshold 0.03f, 150 tokens, stability 0.3f.</li>
+            <li class="done">Graph node <code>ElevenLabsVoiceID</code> trumps <code>NPCConfig</code> voice ID — each NPC speaks in their own voice.</li>
+            <li class="done">Emotion signal strength raised to <code>1.0f</code> — full-intensity facial and body response to every Claude emotion update.</li>
+            <li class="done"><code>PendingRequestVersion</code> counter in <code>ElevenLabsTTSComponent</code> — stale TTS responses (from Blueprint + C++ double-call race) discarded before playback. Last caller wins.</li>
+            <li class="done"><code>DA_Graph_ThresholdDefault.uasset</code> — handcrafted graph: 5 nodes, 7 directed relationship edges, EventSummary, GroundTruth, ReflectionReveal.</li>
+            <li class="done"><code>BP_NPCGameMode</code> Blueprint subclass — exposes <code>ActiveGraph</code> in World Settings (UE inline editor only shows base class properties for C++ GameMode).</li>
+          </ul>
+        </div>
+        <div class="col">
+          <div class="stat"><div class="stat-val green">5</div><div class="stat-label">Distinct NPC voices</div></div>
+          <br>
+          <div class="stat" style="margin-top: 14px;"><div class="stat-val green">10</div><div class="stat-label">Prompt sections per NPC</div></div>
+          <br>
+          <div class="card" style="margin-top: 14px;">
+            <div class="card-title">Critical pitfall — JSON conflict</div>
+            <div class="card-body">
+              <code>ClaudeAPISubsystem::BuildRequestBody()</code> appends its own JSON format instruction.
+              A second format in the system prompt causes Claude to use wrong field names →
+              <code>ParseResponse()</code> fails → TTS speaks raw JSON aloud.
+              Solution: no format instruction in <code>BuildSystemPromptFromGraph()</code>.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── SLIDE 10 — WHAT'S WORKING ─────────────── -->
+  <div class="slide" id="s10">
+    <div class="full">
+      <div class="label">Current State</div>
+      <h2>What's <span>Working Now</span></h2>
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-title">Dialogue</div>
+          <div class="card-body">
+            All 5 NPCs respond via Claude using graph-assembled system prompts.
+            Conversation history persists per NPC across the session.
+            Responses capped at 1–2 sentences.
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Voice I/O</div>
+          <div class="card-body">
+            Player speaks via Whisper STT (hold V).
+            Each NPC responds in their own ElevenLabs voice.
+            Lip sync driven by character-level timestamps.
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Emotion Engine</div>
+          <div class="card-body">
+            Claude returns an emotion hint per response.
+            Full-strength signal drives FACS blend shapes.
+            Slow decay (0.003/s) — emotion holds across the conversation.
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Multi-NPC Focus</div>
+          <div class="card-body">
+            Player walks freely. Nearest NPC in forward hemisphere becomes active.
+            HUD rebinds dynamically. Only the focused NPC's camera pipeline runs.
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Social Graph</div>
+          <div class="card-body">
+            Handcrafted graph with 5 nodes + 7 edges loaded at startup.
+            Each NPC's prompt includes their knowledge, withheld truths, memory distortions,
+            and how they view every other NPC by name.
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Body + Face</div>
+          <div class="card-body">
+            Breathing, head drift, shoulder sway, nods.
+            Thinking pose (brow overlay) while waiting for Claude.
+            Full Metahuman FACS via RigLogic morph targets.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── SLIDE 11 — WHAT'S NEXT ─────────────── -->
+  <div class="slide" id="s11">
+    <div class="full">
+      <div class="label">Remaining Work</div>
+      <h2>What Still <span>Needs to Be Built</span></h2>
+      <div class="cols">
+        <div class="col">
+          <div class="phase-row">
+            <div class="phase-num"><span class="badge badge-next">2.5</span></div>
+            <div class="phase-content">
+              <div class="phase-title">Cycle Architecture</div>
+              <div class="phase-desc"><code>UCycleManagerSubsystem</code> — 13-min countdown, soft reset (teleport + cycle marker injected into NPC history), hard reset (Return Statement). Fade-to-black UX + "You find yourself at the gate again." Emotion PAD state persists across soft resets; resets to baseline only on hard reset.</div>
+            </div>
+          </div>
+          <div class="phase-row">
+            <div class="phase-num"><span class="badge badge-todo">3</span></div>
+            <div class="phase-content">
+              <div class="phase-title">Gesture Layer Wiring</div>
+              <div class="phase-desc">Wire <code>PendingGestureIntent</code> from <code>NPCPlayerController</code> into <code>DialogueComponent::SendUserMessage()</code>. Currently always passes <code>EGestureIntent::None</code> — the annotation builder and enum are complete, the pipe just needs connecting.</div>
+            </div>
+          </div>
+          <div class="phase-row">
+            <div class="phase-num"><span class="badge badge-todo">4</span></div>
+            <div class="phase-content">
+              <div class="phase-title">AI Notepad</div>
+              <div class="phase-desc"><code>UNPCNotebookSubsystem</code> + <code>WBP_Notebook</code> + <code>WBP_SocialGraph</code>. Separate Claude instance as "thinking partner". Outputs a probabilistic, hallucination-prone social graph the player can inspect. Wiped on hard reset.</div>
+            </div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="phase-row">
+            <div class="phase-num"><span class="badge badge-todo">5</span></div>
+            <div class="phase-content">
+              <div class="phase-title">Procedural Graph Generation</div>
+              <div class="phase-desc">Async Claude API call triggered by <code>OnReturnStatementTriggered</code> — runs during the reveal sequence. Generates a new <code>UNPCGraphDataAsset</code> JSON at runtime. Updates all 5 <code>UNPCConfigDataAsset</code> pointers before Cycle 1 of the new run.</div>
+            </div>
+          </div>
+          <div class="phase-row">
+            <div class="phase-num"><span class="badge badge-todo">6</span></div>
+            <div class="phase-content">
+              <div class="phase-title">Return Statement</div>
+              <div class="phase-desc">Physical courtyard trigger actor. Player speaks into empty space. Two-phase reveal: Ground Truth → hidden "The One Who..." titles. Then hard reset: clear all histories, wipe Notebook, reset emotions to baseline, regen graph, begin Cycle 1.</div>
+            </div>
+          </div>
+          <div class="phase-row">
+            <div class="phase-num"><span class="badge badge-todo">7</span></div>
+            <div class="phase-content">
+              <div class="phase-title">Environment + Polish</div>
+              <div class="phase-desc">Final <code>Threshold_Compound.umap</code> layout, lighting, ambient audio. Subtle per-cycle environmental shifts — lighting temperature drift across cycles to mark time passing without stating it.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── SLIDE 12 — ROADMAP ─────────────── -->
+  <div class="slide" id="s12">
+    <div class="full center">
+      <div class="label">Progress Overview</div>
+      <h2 style="margin-bottom: 28px;">Implementation <span>Roadmap</span></h2>
+      <div class="roadmap" style="margin: 0 auto;">
+        <div class="rm-row">
+          <div class="rm-label">Phase 0</div>
+          <div class="rm-bar-wrap">
+            <div class="rm-bar rm-done" style="width: 100%">Type Foundation — EGestureIntent · UNPCGraphDataAsset · NPCConfigDataAsset ✓</div>
+          </div>
+        </div>
+        <div class="rm-row">
+          <div class="rm-label">Phase 1</div>
+          <div class="rm-bar-wrap">
+            <div class="rm-bar rm-done" style="width: 100%">Multi-NPC Refactor — Proximity focus · Dynamic HUD · Compound map ✓</div>
+          </div>
+        </div>
+        <div class="rm-row">
+          <div class="rm-label">Phase 2</div>
+          <div class="rm-bar-wrap">
+            <div class="rm-bar rm-done" style="width: 100%">Graph-Driven Prompts — BuildSystemPromptFromGraph · 5 NPC voices · DA_Graph_ThresholdDefault ✓</div>
+          </div>
+        </div>
+        <div class="rm-row">
+          <div class="rm-label">Phase 2.5</div>
+          <div class="rm-bar-wrap">
+            <div class="rm-bar rm-next" style="width: 92%">Cycle Architecture — UCycleManagerSubsystem · 13-min timer · Soft / hard reset →</div>
+          </div>
+        </div>
+        <div class="rm-row">
+          <div class="rm-label">Phase 3</div>
+          <div class="rm-bar-wrap">
+            <div class="rm-bar rm-todo" style="width: 78%">Gesture Layer Wiring — PendingGestureIntent → SendUserMessage()</div>
+          </div>
+        </div>
+        <div class="rm-row">
+          <div class="rm-label">Phase 4</div>
+          <div class="rm-bar-wrap">
+            <div class="rm-bar rm-todo" style="width: 68%">Notebook Subsystem — UNPCNotebookSubsystem · WBP_SocialGraph</div>
+          </div>
+        </div>
+        <div class="rm-row">
+          <div class="rm-label">Phase 5</div>
+          <div class="rm-bar-wrap">
+            <div class="rm-bar rm-todo" style="width: 56%">Procedural Graph Generation — Async Claude call on Return Statement</div>
+          </div>
+        </div>
+        <div class="rm-row">
+          <div class="rm-label">Phase 6</div>
+          <div class="rm-bar-wrap">
+            <div class="rm-bar rm-todo" style="width: 44%">Return Statement — Physical trigger · Two-phase reveal · Hard reset</div>
+          </div>
+        </div>
+        <div class="rm-row">
+          <div class="rm-label">Phase 7</div>
+          <div class="rm-bar-wrap">
+            <div class="rm-bar rm-todo" style="width: 34%">Environment + Polish — Final map · Lighting · Ambient audio</div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; gap:20px; justify-content:center; margin-top: 24px;">
+        <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--dim)">
+          <div style="width:12px;height:12px;border-radius:2px;background:#1b3028;border:1px solid #2a4a38;"></div> Complete
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--dim)">
+          <div style="width:12px;height:12px;border-radius:2px;background:#2a2212;border:1px solid #4a3818;"></div> Next
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:var(--dim)">
+          <div style="width:12px;height:12px;border-radius:2px;background:#111520;border:1px solid #1e2533;"></div> Pending
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /deck -->
+
+<!-- ── Navigation UI ─────────────────────────────────────── -->
+<div id="slide-num">1 / 12</div>
+<div id="dots"></div>
+<div id="hint">← → arrow keys to navigate</div>
+<div id="nav">
+  <button id="btn-prev">← Prev</button>
+  <span id="counter">1 / 12</span>
+  <button id="btn-next">Next →</button>
+</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const total  = slides.length;
+  let current  = 0;
+
+  // Build dots
+  const dotsEl = document.getElementById('dots');
+  slides.forEach((_, i) => {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 0 ? ' active' : '');
+    d.addEventListener('click', () => goTo(i));
+    dotsEl.appendChild(d);
+  });
+
+  function goTo(n) {
+    if (n === current) return;
+    const prev = current;
+    current = Math.max(0, Math.min(total - 1, n));
+
+    slides[prev].classList.remove('active');
+    slides[prev].classList.add('exit');
+    setTimeout(() => slides[prev].classList.remove('exit'), 460);
+
+    slides[current].classList.add('active');
+
+    document.querySelectorAll('.dot').forEach((d, i) => {
+      d.classList.toggle('active', i === current);
+    });
+    const label = `${current + 1} / ${total}`;
+    document.getElementById('counter').textContent  = label;
+    document.getElementById('slide-num').textContent = label;
+  }
+
+  document.getElementById('btn-prev').addEventListener('click', () => goTo(current - 1));
+  document.getElementById('btn-next').addEventListener('click', () => goTo(current + 1));
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown')  goTo(current + 1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')    goTo(current - 1);
+  });
+</script>
+</body>
+</html>

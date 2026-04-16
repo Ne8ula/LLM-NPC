@@ -239,6 +239,17 @@ Claude response format (structured JSON):
 - Bug fixes: removed all `DisableInput`/`EnableInput` calls; removed `TryKey(EKeys::V)` from keyboard capture; `CachedScreenH` pattern for hit-testing geometry outside `DrawHUD`
 - Content: `Content/Maps/Threshold_Compound.umap` created with placeholder geometry, 5 NPC spaces around central courtyard, Player Start, NavMesh; `Content/THRESHOLD/Config/` with 5 `UNPCConfigDataAsset` instances (DA_Threshold_Apo, DA_Threshold_Pragmatist, DA_Threshold_Friend, DA_Threshold_Keeper, DA_Threshold_TOWCF)
 
+**THRESHOLD vertical slice — Phase 2 complete (Apr 2026):**
+- `DialogueComponent::BuildSystemPromptFromGraph()` — 10-section runtime prompt assembly from `UNPCGraphDataAsset`: identity → player relationship → event ambient → knowledge → withheld behavioural constraint → memory quality → outgoing relationship edges → tonal register (verbatim `ReflectionAspect`) → response brevity (1–2 sentences) → emotional register → cycle-marker instruction → hard character boundary. **No JSON format section** — `ClaudeAPISubsystem::BuildRequestBody()` appends its own format instruction; a second conflicting one causes Claude to use wrong field names, `ParseResponse()` fails, and TTS speaks raw JSON.
+- `DialogueComponent::BuildAnnotatedContent()` — gesture annotation first, emotion annotation second, user message last; Phase 3 will pass real `PendingGestureIntent`; Phase 2 passes `EGestureIntent::None`
+- `DialogueComponent::GraphNodeID` UPROPERTY — set by `NPCGameMode`, with lazy name-matching fallback in `InitializeSubsystem()`
+- `NPCGameMode::BeginPlay()` — pushes `ActiveGraph` to every `ANPCCharacter` in level; syncs `DialogueComponent->NPCConfig` to the character's `NPCConfig` (fixes stale Blueprint class default); resolves `GraphNodeID` by name-matching; applies runtime tuning to all THRESHOLD NPCs: `EmotionDecayRate = 0.003f`, `NeutralThreshold = 0.03f`, `MaxResponseTokens = 150`, `VoiceStability = 0.3f`
+- `NPCGraphDataAsset.h`: `BuildReflectionReveal()` marked `CallInEditor` so it appears as a button in the Details panel
+- **BP_NPCGameMode**: Blueprint subclass of `ANPCGameMode` required to expose `ActiveGraph` in World Settings — the inline editor only shows base class properties for C++ GameMode classes
+- `DialogueComponent::OnClaudeResponseReceived()`: emotion signal strength raised to `1.0f`; graph node `ElevenLabsVoiceID` trumps `NPCConfig->ElevenLabsVoiceID` when set
+- `ElevenLabsTTSComponent`: `PendingRequestVersion` counter — each `SpeakText()` call increments it and captures the version in the HTTP callback closure; stale responses (superseded by a newer call) are discarded before playback. Prevents double-playback when a Blueprint event graph handler and C++ both call `SpeakText()` on the same frame.
+- Content: `Content/THRESHOLD/DA_Graph_ThresholdDefault.uasset` — handcrafted social graph with 5 nodes (Āpó, The Pragmatist, The Friend, The Keeper, The One Who Couldn't Forget) and 7 directed relationship edges
+
 ---
 
 ## Active Test Assets
@@ -252,6 +263,8 @@ Claude response format (structured JSON):
 **THRESHOLD assets:**
 - **Map:** `Content/Maps/Threshold_Compound.umap` — 5 NPC spaces, central courtyard, Player Start, NavMesh
 - **Configs:** `Content/THRESHOLD/Config/` — DA_Threshold_Apo, DA_Threshold_Pragmatist, DA_Threshold_Friend, DA_Threshold_Keeper, DA_Threshold_TOWCF
+- **Social graph:** `Content/THRESHOLD/DA_Graph_ThresholdDefault.uasset` — set as `ActiveGraph` on `BP_NPCGameMode` class defaults
+- **GameMode:** `BP_NPCGameMode` Blueprint (wraps `ANPCGameMode`) — set as GameMode Override in Threshold_Compound World Settings; `ActiveGraph` configured in class defaults
 
 ---
 
@@ -261,7 +274,7 @@ Claude response format (structured JSON):
 2. ONNX model accuracy degrades under variable lighting / partial occlusion
 3. PAD emotional state is not persisted between sessions (no database layer)
 4. Voice cloning ethics + ElevenLabs licensing for shipped games
-5. Multi-NPC system functional (Phase 1 complete) — Phase 2 graph-driven prompts next
+5. Phases 0–2 complete — Phase 2.5 cycle architecture is next
 
 ---
 
@@ -338,7 +351,7 @@ Hidden titles are never shown during play. Each NPC's `ReflectionAspect` field i
 |-------|--------|-------|
 | 0 — Type Foundation | **Complete** | `EGestureIntent`, `UNPCGraphDataAsset`, soft-deprecated `SystemPrompt`; `FNPCGraphNode.EmotionBaseline` field is the hard-reset target used in Phase 6 |
 | 1 — Multi-NPC Refactor | **Complete** | `NPCPlayerController` proximity focus, `NPCDialogueHUD` dynamic binding, compact HUD, click-to-focus; **note:** Phase 2.5 will extend `NPCPlayerController::Tick` (timer) and `NPCDialogueHUD` (cycle UI + `ClearChatHistory()`); Phase 3 will modify `NPCDialogueHUD::SubmitChatMessage` (pass gesture intent) |
-| 2 — Graph-Driven Prompts | **Next** | `BuildSystemPromptFromGraph()`, handcrafted `DA_Graph_ThresholdDefault`; system prompt must include an instruction telling the NPC how to naturally interpret `[--- Cycle N ---]` history markers (treat as passage of time / repeated visit, never reference the mechanic directly) |
+| 2 — Graph-Driven Prompts | **Complete** | `BuildSystemPromptFromGraph()`, `BuildAnnotatedContent()`, `GraphNodeID` on `DialogueComponent`, `NPCGameMode::BeginPlay()` graph push + runtime tuning, `PendingRequestVersion` TTS dedup, `DA_Graph_ThresholdDefault` with 5 nodes + 7 edges |
 | 2.5 — Cycle Architecture | Pending | `UCycleManagerSubsystem` (13-min timer, soft/hard reset), `InjectCycleBreak()` in `DialogueComponent`, cycle counter + countdown in `NPCDialogueHUD`; **cycle transition UX**: fade-to-black + ambient audio sting + brief text ("You find yourself at the gate again.") on soft reset; **EmotionComponent PAD state persists across soft resets** (carry forward — NPCs' emotional trajectory toward the player continues between cycles), reset to `EmotionBaseline` only on hard reset |
 | 3 — Gesture Layer | Pending | `EGestureIntent` caching + injection in `DialogueComponent`; modifies `NPCDialogueHUD::SubmitChatMessage` (Phase 1 file) to pass `PendingGestureIntent` to `SendUserMessage()` |
 | 4 — Notebook Subsystem | Pending | `UNPCNotebookSubsystem`, `WBP_Notebook`, `WBP_SocialGraph`; Notebook graph state (player's accumulated social map) **persists across soft resets** and is **wiped on hard reset** (Return Statement) alongside NPC histories |

@@ -162,11 +162,21 @@ void UElevenLabsTTSComponent::SpeakText(const FString& Text, const FString& Voic
 	HttpRequest->SetHeader(TEXT("Accept"), TEXT("application/json"));
 	HttpRequest->SetContentAsString(RequestBody);
 
+	// Stamp this request with the current version. Any response that arrives
+	// after a newer SpeakText() call has been made will be discarded.
+	const int32 RequestVersion = ++PendingRequestVersion;
+
 	TWeakObjectPtr<UElevenLabsTTSComponent> WeakThis(this);
 	HttpRequest->OnProcessRequestComplete().BindLambda(
-		[WeakThis](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully)
+		[WeakThis, RequestVersion](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully)
 		{
 			if (!WeakThis.IsValid())
+			{
+				return;
+			}
+
+			// Discard stale responses — a newer SpeakText() call supersedes this one.
+			if (WeakThis->PendingRequestVersion != RequestVersion)
 			{
 				return;
 			}

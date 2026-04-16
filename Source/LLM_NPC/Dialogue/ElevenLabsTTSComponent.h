@@ -186,4 +186,13 @@ private:
 
 	/** Whether the API key is configured. */
 	bool bAPIKeyConfigured = false;
+
+	/**
+	 * Monotonically incrementing version counter for in-flight TTS requests.
+	 * Incremented on every SpeakText() call; captured in the HTTP callback closure.
+	 * If the response version doesn't match PendingRequestVersion the response is stale
+	 * (a newer SpeakText was called in the interim) and is discarded without playback.
+	 * Prevents double-playback when two callers both invoke SpeakText on the same frame.
+	 */
+	int32 PendingRequestVersion = 0;
 };
