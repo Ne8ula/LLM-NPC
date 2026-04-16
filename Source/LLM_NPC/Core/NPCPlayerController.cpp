@@ -21,11 +21,6 @@ void ANPCPlayerController::BeginPlay()
 	InputMode.SetHideCursorDuringCapture(false);
 	SetInputMode(InputMode);
 
-	// Chat starts visible, so disable pawn movement immediately
-	GetWorldTimerManager().SetTimerForNextTick([this]()
-	{
-		if (GetPawn()) GetPawn()->DisableInput(this);
-	});
 }
 
 void ANPCPlayerController::SetupInputComponent()
@@ -46,20 +41,28 @@ void ANPCPlayerController::Tick(float DeltaTime)
 		return;
 	}
 
-	// T key toggle with edge detection
+	// T key toggles the chat overlay (movement always remains enabled)
 	bool bTDown = IsInputKeyDown(EKeys::T);
-	if (bTDown && !bTKeyWasDown && !HUD->IsDialogueVisible())
+	if (bTDown && !bTKeyWasDown)
 	{
 		HUD->ToggleDialogueInput();
-		if (GetPawn()) GetPawn()->DisableInput(this);
 	}
 	bTKeyWasDown = bTDown;
 
-	// Escape closes chat and re-enables movement
+	// Escape hides the chat overlay
 	if (WasInputKeyJustPressed(EKeys::Escape) && HUD->IsDialogueVisible())
 	{
 		HUD->ToggleDialogueInput();
-		if (GetPawn()) GetPawn()->EnableInput(this);
+	}
+
+	// Left click — focus or unfocus the text input box
+	if (WasInputKeyJustPressed(EKeys::LeftMouseButton))
+	{
+		float MouseX, MouseY;
+		if (GetMousePosition(MouseX, MouseY))
+		{
+			HUD->HandleMouseClick(MouseX, MouseY);
+		}
 	}
 
 	// V key push-to-talk: routes to focused NPC's WhisperSTT
@@ -69,7 +72,7 @@ void ANPCPlayerController::Tick(float DeltaTime)
 		if (IsValid(FocusedNPC) && FocusedNPC->WhisperSTTComponent)
 		{
 			FocusedNPC->WhisperSTTComponent->StartRecording();
-			HUD->SetStatus(TEXT("Recording... release V to send."));
+			HUD->SetVoiceRecording(true);
 		}
 	}
 	else if (!bVDown && bVKeyWasDown)
@@ -77,13 +80,14 @@ void ANPCPlayerController::Tick(float DeltaTime)
 		if (IsValid(FocusedNPC) && FocusedNPC->WhisperSTTComponent)
 		{
 			FocusedNPC->WhisperSTTComponent->StopRecordingAndTranscribe();
-			HUD->SetStatus(TEXT("Transcribing..."));
+			HUD->SetVoiceRecording(false);
+			HUD->SetStatus(TEXT("Waiting for NPC response..."));
 		}
 	}
 	bVKeyWasDown = bVDown;
 
-	// When dialogue is visible, capture keyboard for typing
-	if (HUD->IsDialogueVisible())
+	// Only capture keyboard when the user has clicked the input box
+	if (HUD->IsDialogueVisible() && HUD->IsTextInputActive())
 	{
 		// Enter to submit — also consumes pending gesture intent
 		if (WasInputKeyJustPressed(EKeys::Enter))
@@ -133,7 +137,7 @@ void ANPCPlayerController::Tick(float DeltaTime)
 		TryKey(EKeys::R, TEXT("r"), TEXT("R"));
 		TryKey(EKeys::S, TEXT("s"), TEXT("S"));
 		TryKey(EKeys::U, TEXT("u"), TEXT("U"));
-		TryKey(EKeys::V, TEXT("v"), TEXT("V"));
+		// V is reserved for voice recording — not captured as text
 		TryKey(EKeys::W, TEXT("w"), TEXT("W"));
 		TryKey(EKeys::X, TEXT("x"), TEXT("X"));
 		TryKey(EKeys::Y, TEXT("y"), TEXT("Y"));

@@ -231,15 +231,27 @@ Claude response format (structured JSON):
 - `NPCConfigDataAsset.h` updated — `SystemPrompt` soft-deprecated, `GraphDataAsset` reference added
 - `DA_NPC_Test.uasset` + existing test NPC unchanged and still functional
 
+**THRESHOLD vertical slice — Phase 1 complete (Apr 2026):**
+- `NPCPlayerController`: `FocusedNPC` proximity + facing detection (distance² + dot product, `InteractionRadius` = 300cm); `UpdateNPCFocus()` called every tick; gesture delegate bound/unbound on focus switch; `FacialRecognitionComponent` Init/Shutdown per focused NPC (performance)
+- `NPCDialogueHUD`: `SetFocusedNPC()` dynamically rebinds `OnDialogueResponseReceived` + `OnVoiceTranscript` delegates; displays focused NPC name in header; resets input state on focus switch
+- `PendingGestureIntent` cached in `NPCPlayerController`, cleared on Enter (message submit) and on NPC focus switch
+- **Dialogue HUD redesign**: compact 400×179px canvas panel, bottom-left; no movement lock (player always free); V key reserved for voice only (not typed into textbox); click-to-focus input model (`bTextInputActive` flag set by `HandleMouseClick()` hit-testing the input box rect); keyboard capture gated on `IsTextInputActive()`; voice recording indicator (red ● REC); waiting indicator (…); NPC name header
+- Bug fixes: removed all `DisableInput`/`EnableInput` calls; removed `TryKey(EKeys::V)` from keyboard capture; `CachedScreenH` pattern for hit-testing geometry outside `DrawHUD`
+- Content: `Content/Maps/Threshold_Compound.umap` created with placeholder geometry, 5 NPC spaces around central courtyard, Player Start, NavMesh; `Content/THRESHOLD/Config/` with 5 `UNPCConfigDataAsset` instances (DA_Threshold_Apo, DA_Threshold_Pragmatist, DA_Threshold_Friend, DA_Threshold_Keeper, DA_Threshold_TOWCF)
+
 ---
 
 ## Active Test Assets
 
-- **Map:** `Content/Maps/MainMap.umap` — single playable scene
+- **Map:** `Content/Maps/MainMap.umap` — single NPC test scene
 - **NPC Blueprint:** `Content/BP_NPC_Test.uasset`
 - **Config:** `Content/DA_NPC_Test.uasset` — personality, voice ID, emotion defaults
 - **Blend shape map:** `Content/DA_BlendShapeMap_Default.uasset`
 - **ONNX models:** `Content/Models/fer_expression.onnx`, `hand_landmark.onnx`
+
+**THRESHOLD assets:**
+- **Map:** `Content/Maps/Threshold_Compound.umap` — 5 NPC spaces, central courtyard, Player Start, NavMesh
+- **Configs:** `Content/THRESHOLD/Config/` — DA_Threshold_Apo, DA_Threshold_Pragmatist, DA_Threshold_Friend, DA_Threshold_Keeper, DA_Threshold_TOWCF
 
 ---
 
@@ -249,7 +261,7 @@ Claude response format (structured JSON):
 2. ONNX model accuracy degrades under variable lighting / partial occlusion
 3. PAD emotional state is not persisted between sessions (no database layer)
 4. Voice cloning ethics + ElevenLabs licensing for shipped games
-5. Single NPC only — multi-NPC refactor (Phase 1) in progress: proximity-based `FocusedNPC` in `NPCPlayerController`, dynamic HUD binding
+5. Multi-NPC system functional (Phase 1 complete) — Phase 2 graph-driven prompts next
 
 ---
 
@@ -263,7 +275,9 @@ Main branch: `main`
 ## THRESHOLD — Vertical Slice Design
 
 ### Concept
-Non-linear, replayable interactive experience. Player returns to a Chinese residential compound they left years ago. 5 AI NPCs knew them. No plot, no objectives, no tutorial — the experience ends when the player chooses to speak into the empty courtyard (Return Statement).
+Non-linear, replayable interactive experience. Player returns to a Chinese residential compound they left years ago. 5 AI NPCs knew them. No plot, no objectives, no tutorial.
+
+**The experience is structured as cycles.** Each cycle lasts **13 minutes** — chosen deliberately (liminal, unlucky, just long enough for 3–4 meaningful conversations). Within each cycle, the player moves freely between the 5 NPCs, gathering what they can. When the timer expires, the compound "resets": the player wakes again at the entrance, the same people are still there, and they remember everything — every word of every prior cycle. The NPCs do not regenerate until the player reaches the Return Statement.
 
 **Core mechanic — TESTIMONIAL:** Player is the only node connecting 5 AI minds. They carry what one NPC says to another — live via Whisper STT, in their own words, imperfectly. Each receiving Claude instance responds to the player's specific phrasing unpredictably. Impossible without live voice + LLM inference.
 
@@ -273,9 +287,9 @@ Non-linear, replayable interactive experience. Player returns to a Chinese resid
 
 **AI Notepad:** Player carries a 2015-prototype-aesthetic device (`UNPCNotebookSubsystem` — Phase 4). Separate Claude instance, "thinking partner" prompt. Outputs text + JSON graph update `{nodes, edges, certainty}`. Rendered as `WBP_SocialGraph` — unreliable, probabilistic, can hallucinate connections.
 
-**Return Statement:** Player speaks into empty courtyard → summary Claude call with compound-as-witness system prompt → ElevenLabs reverberant neutral voice → Phase 1 Ground Truth reveal → Phase 2 hidden titles reveal.
+**Return Statement:** Player speaks into the empty courtyard (available at any time) → summary Claude call with compound-as-witness system prompt → ElevenLabs reverberant neutral voice → Phase 1 Ground Truth reveal → Phase 2 hidden titles reveal → **NPC regeneration triggered** (new graph via Claude API, full memory wipe, new run begins).
 
-**Replayability:** Graph Studio scene generates fresh `UNPCGraphDataAsset` per run via Claude API call. Different graph = different people = different truth.
+**Replayability:** The Return Statement is the only trigger for NPC regeneration. Graph Studio generates a fresh `UNPCGraphDataAsset` per run via Claude API call. Different graph = different people = different hidden truth. NPCs persist with full memory across cycles until the player chooses to end the run.
 
 ### The Five NPCs (Vertical Slice — Handcrafted Graph)
 
@@ -291,18 +305,46 @@ All NPCs use they/them. `VoiceGender` + `MetahumanVariantPool` randomly assigned
 
 Hidden titles are never shown during play. Each NPC's `ReflectionAspect` field injects a tonal instruction into their system prompt (how they relate to memory/departure) without stating the meta-design. Pattern only legible post-run when all five titles appear simultaneously.
 
+### Cycle Architecture
+
+**Cycle = one 13-minute session.** Timer runs from the moment the player loads into the compound.
+
+**Soft reset (timer expiry):**
+- `UCycleManagerSubsystem` broadcasts `OnCycleExpired`
+- Player is teleported back to the entrance (Player Start)
+- `CycleNumber` increments; new 13-minute timer starts
+- Each `DialogueComponent` receives `InjectCycleBreak(CycleNumber)` — appends a tagged separator `[--- Cycle N ---]` to conversation history so NPCs are aware time has passed
+- NPC conversation history is **not cleared** — all prior exchanges carry forward
+- `NPCDialogueHUD` shows a subtle cycle counter (e.g. `CYCLE 2`) and countdown timer
+
+**Hard reset (Return Statement):**
+- Player speaks into the courtyard → `UCycleManagerSubsystem` broadcasts `OnReturnStatementTriggered`
+- Two-phase reveal plays (Ground Truth → hidden titles)
+- All `DialogueComponent` histories **cleared**
+- Graph Studio generates a new `UNPCGraphDataAsset` via Claude API
+- `UNPCConfigDataAsset` instances updated to point to new graph
+- Scene reloads / NPCs reinitialised → Cycle 1 begins fresh
+
+**NPC awareness of cycles:**
+- The `[--- Cycle N ---]` separator is injected as a `user`-role message in history before the new cycle's first player turn. NPCs naturally pick up on it — they may comment on the repetition, the return, or what feels different without being explicitly scripted to.
+- NPCs have no knowledge of cycle count in their system prompt — only what appears in their conversation history.
+
+**Key implementation component:**
+- `UCycleManagerSubsystem` (new, `Source/LLM_NPC/Core/`) — `UGameInstanceSubsystem`; fields: `CycleNumber`, `TimeRemainingInCycle` (float, countdown from 780s); delegates: `OnCycleExpired`, `OnReturnStatementTriggered`; called from `NPCPlayerController::Tick` to decrement timer and fire delegate
+
 ### Implementation Phases
 
 | Phase | Status | Scope |
 |-------|--------|-------|
-| 0 — Type Foundation | **Complete** | `EGestureIntent`, `UNPCGraphDataAsset`, soft-deprecated `SystemPrompt` |
-| 1 — Multi-NPC Refactor | **Next** | `NPCPlayerController` proximity focus, `NPCDialogueHUD` dynamic binding |
-| 2 — Graph-Driven Prompts | Pending | `BuildSystemPromptFromGraph()`, handcrafted `DA_Graph_ThresholdDefault` |
-| 3 — Gesture Layer | Pending | `EGestureIntent` caching + injection in `DialogueComponent` |
-| 4 — Notebook Subsystem | Pending | `UNPCNotebookSubsystem`, `WBP_Notebook`, `WBP_SocialGraph` |
-| 5 — Graph Studio + Procedural | Pending | Generation scene, Claude JSON → `UNPCGraphDataAsset` |
-| 6 — Return Statement | Pending | `UReturnStatementSubsystem`, courtyard trigger, two-phase reveal |
-| 7 — Environment + Polish | Pending | `Threshold_Compound.umap`, lighting, ambient audio |
+| 0 — Type Foundation | **Complete** | `EGestureIntent`, `UNPCGraphDataAsset`, soft-deprecated `SystemPrompt`; `FNPCGraphNode.EmotionBaseline` field is the hard-reset target used in Phase 6 |
+| 1 — Multi-NPC Refactor | **Complete** | `NPCPlayerController` proximity focus, `NPCDialogueHUD` dynamic binding, compact HUD, click-to-focus; **note:** Phase 2.5 will extend `NPCPlayerController::Tick` (timer) and `NPCDialogueHUD` (cycle UI + `ClearChatHistory()`); Phase 3 will modify `NPCDialogueHUD::SubmitChatMessage` (pass gesture intent) |
+| 2 — Graph-Driven Prompts | **Next** | `BuildSystemPromptFromGraph()`, handcrafted `DA_Graph_ThresholdDefault`; system prompt must include an instruction telling the NPC how to naturally interpret `[--- Cycle N ---]` history markers (treat as passage of time / repeated visit, never reference the mechanic directly) |
+| 2.5 — Cycle Architecture | Pending | `UCycleManagerSubsystem` (13-min timer, soft/hard reset), `InjectCycleBreak()` in `DialogueComponent`, cycle counter + countdown in `NPCDialogueHUD`; **cycle transition UX**: fade-to-black + ambient audio sting + brief text ("You find yourself at the gate again.") on soft reset; **EmotionComponent PAD state persists across soft resets** (carry forward — NPCs' emotional trajectory toward the player continues between cycles), reset to `EmotionBaseline` only on hard reset |
+| 3 — Gesture Layer | Pending | `EGestureIntent` caching + injection in `DialogueComponent`; modifies `NPCDialogueHUD::SubmitChatMessage` (Phase 1 file) to pass `PendingGestureIntent` to `SendUserMessage()` |
+| 4 — Notebook Subsystem | Pending | `UNPCNotebookSubsystem`, `WBP_Notebook`, `WBP_SocialGraph`; Notebook graph state (player's accumulated social map) **persists across soft resets** and is **wiped on hard reset** (Return Statement) alongside NPC histories |
+| 5 — Procedural Graph Generation | Pending | Async Claude API call triggered by `OnReturnStatementTriggered`; runs during reveal sequence (not a separate scene); generates new `UNPCGraphDataAsset` JSON → runtime asset; updates all 5 `UNPCConfigDataAsset` `GraphDataAsset` pointers before Cycle 1 of new run |
+| 6 — Return Statement | Pending | Physical courtyard trigger actor/volume in map; player stands in zone + speaks; calls `UCycleManagerSubsystem::TriggerReturnStatement()`; full hard-reset sequence: two-phase reveal plays → async graph regen fires (Phase 5) → all `DialogueComponent::ClearHistory()` → all `EmotionComponent` reset to `EmotionBaseline` → Notebook wiped → `CycleNumber` reset to 1 → scene reinitialised |
+| 7 — Environment + Polish | Pending | `Threshold_Compound.umap` final layout, lighting, ambient audio; subtle per-cycle environmental shifts (lighting temperature drift across cycles to mark time passing) |
 
 ### Key Architecture Changes (vs existing system)
 
@@ -311,7 +353,12 @@ Hidden titles are never shown during play. Each NPC's `ReflectionAspect` field i
 - `NPCDialogueHUD` → gains `SetFocusedNPC()`, dynamic NPC name label (Phase 1)
 - `DialogueComponent::SendUserMessage()` → gains `EGestureIntent` parameter, `BuildAnnotatedContent()` helper (Phase 3)
 - `NPCInventoryComponent` — kept in codebase, not used in THRESHOLD NPCs
-- New subsystems: `UNPCNotebookSubsystem` (Phase 4), `UReturnStatementSubsystem` (Phase 6)
+- New subsystems: `UCycleManagerSubsystem` (Phase 2.5), `UNPCNotebookSubsystem` (Phase 4)
+- `DialogueComponent` — gains `InjectCycleBreak(int32 CycleNumber)` and `ClearHistory()` (Phase 2.5)
+- `NPCDialogueHUD` — gains cycle counter + countdown display (Phase 2.5)
+- `EmotionComponent` — PAD state survives soft resets (no change needed — components stay alive); `ResetToBaseline()` called on hard reset (Phase 2.5 / Phase 6)
+- Return Statement = physical trigger actor in courtyard → `UCycleManagerSubsystem::TriggerReturnStatement()` → hard reset sequence (Phase 6)
+- Phase 5 renamed "Procedural Graph Generation" — no separate player-facing scene; async API call fires during Return Statement reveal, runtime asset replaces graph before next Cycle 1
 
 ---
 

@@ -2,6 +2,7 @@
 #include "ClaudeAPISubsystem.h"
 #include "LLM_NPC/Core/NPCConfigDataAsset.h"
 #include "LLM_NPC/Core/NPCCharacter.h"
+#include "LLM_NPC/Core/NPCGraphDataAsset.h"
 #include "LLM_NPC/Emotion/EmotionComponent.h"
 #include "LLM_NPC/Dialogue/ElevenLabsTTSComponent.h"
 #include "Engine/GameInstance.h"
@@ -51,6 +52,44 @@ void UDialogueComponent::InitializeSubsystem()
 		if (UGameInstance* GI = GetWorld()->GetGameInstance())
 		{
 			CachedClaudeSubsystem = GI->GetSubsystem<UClaudeAPISubsystem>();
+		}
+	}
+
+	// Resolve GraphNodeID from the graph if not already set by NPCGameMode.
+	// NPCGameMode::BeginPlay() sets this before InitializeSubsystem() when possible,
+	// but we fall back to name-matching in case of BeginPlay ordering variance.
+	if (GraphNodeID.IsNone() && NPCConfig->GraphDataAsset.IsValid())
+	{
+		UNPCGraphDataAsset* Graph = NPCConfig->GraphDataAsset.Get();
+		if (!Graph)
+		{
+			Graph = NPCConfig->GraphDataAsset.LoadSynchronous();
+		}
+		if (Graph)
+		{
+			const FString NPCName = NPCConfig->NPCName.ToString();
+			for (const FNPCGraphNode& Node : Graph->Nodes)
+			{
+				if (Node.NPCName == NPCName || Node.NPCID.ToString() == NPCName)
+				{
+					GraphNodeID = Node.NPCID;
+					break;
+				}
+			}
+		}
+	}
+
+	// Log the resolved system prompt (first 200 chars) for test verification.
+	if (!GraphNodeID.IsNone() && NPCConfig->GraphDataAsset.IsValid())
+	{
+		if (const UNPCGraphDataAsset* Graph = NPCConfig->GraphDataAsset.Get())
+		{
+			if (const FNPCGraphNode* Node = Graph->FindNode(GraphNodeID))
+			{
+				const FString Built = BuildSystemPromptFromGraph(Graph, *Node);
+				UE_LOG(LogTemp, Log, TEXT("DialogueComponent [%s]: graph-driven prompt (first 200): %s"),
+					*NPCConfig->NPCName.ToString(), *Built.Left(200));
+			}
 		}
 	}
 
@@ -104,13 +143,9 @@ void UDialogueComponent::SendUserMessage(const FString& UserMessage, const FDete
 		return;
 	}
 
-	// Build the user message with emotion annotation
-	FString AnnotatedContent = UserMessage;
-	FString EmotionAnnotation = BuildEmotionAnnotation(UserEmotion);
-	if (!EmotionAnnotation.IsEmpty())
-	{
-		AnnotatedContent = FString::Printf(TEXT("[Player emotion: %s]\n%s"), *EmotionAnnotation, *UserMessage);
-	}
+	// Build the annotated user message (gesture first, then emotion, then text).
+	// Phase 3 will wire up a real GestureIntent from NPCPlayerController; for now pass None.
+	const FString AnnotatedContent = BuildAnnotatedContent(UserMessage, UserEmotion, EGestureIntent::None);
 
 	// Add user message to history
 	FNPCMessage UserMsg;
@@ -124,6 +159,39 @@ void UDialogueComponent::SendUserMessage(const FString& UserMessage, const FDete
 	// Trim history to configured maximum
 	TrimConversationHistory();
 
+	// Determine system prompt — graph-driven when available, legacy fallback otherwise.
+	FString SystemPrompt = NPCConfig->SystemPrompt;
+	{
+		UNPCGraphDataAsset* Graph = NPCConfig->GraphDataAsset.Get();
+		if (!Graph && !NPCConfig->GraphDataAsset.IsNull())
+		{
+			Graph = NPCConfig->GraphDataAsset.LoadSynchronous();
+		}
+		if (Graph)
+		{
+			// Lazy resolution of GraphNodeID in case GameMode BeginPlay ran after ours.
+			if (GraphNodeID.IsNone())
+			{
+				const FString NPCName = NPCConfig->NPCName.ToString();
+				for (const FNPCGraphNode& Node : Graph->Nodes)
+				{
+					if (Node.NPCName == NPCName || Node.NPCID.ToString() == NPCName)
+					{
+						GraphNodeID = Node.NPCID;
+						break;
+					}
+				}
+			}
+			if (!GraphNodeID.IsNone())
+			{
+				if (const FNPCGraphNode* Node = Graph->FindNode(GraphNodeID))
+				{
+					SystemPrompt = BuildSystemPromptFromGraph(Graph, *Node);
+				}
+			}
+		}
+	}
+
 	// Send to Claude
 	bWaitingForResponse = true;
 
@@ -131,7 +199,7 @@ void UDialogueComponent::SendUserMessage(const FString& UserMessage, const FDete
 	Callback.BindDynamic(this, &UDialogueComponent::OnClaudeResponseReceived);
 
 	CachedClaudeSubsystem->SendMessage(
-		NPCConfig->SystemPrompt,
+		SystemPrompt,
 		ConversationHistory,
 		NPCConfig->ClaudeModelID,
 		NPCConfig->MaxResponseTokens,
@@ -248,4 +316,131 @@ void UDialogueComponent::ClearConversationHistory()
 {
 	ConversationHistory.Empty();
 	OnDialogueHistoryCleared.Broadcast();
+}
+
+FString UDialogueComponent::BuildSystemPromptFromGraph(const UNPCGraphDataAsset* Graph, const FNPCGraphNode& Node) const
+{
+	TStringBuilder<8192> P;
+
+	// 1. Identity
+	P.Appendf(TEXT("You are %s. %s\n\n"), *Node.NPCName, *Node.Role);
+
+	// 2. Player relationship — sets the relational register before anything else
+	if (!Node.PlayerRelationship.IsEmpty())
+	{
+		P.Appendf(TEXT("%s\n\n"), *Node.PlayerRelationship);
+	}
+
+	// 3. Shared reference point — ambient weight, not a plot summary
+	if (!Graph->EventSummary.IsEmpty())
+	{
+		P.Appendf(TEXT("%s\n\n"), *Graph->EventSummary);
+	}
+
+	// 4. What this NPC knows about the event
+	if (!Node.KnowsAboutEvent.IsEmpty())
+	{
+		P.Appendf(TEXT("%s\n\n"), *Node.KnowsAboutEvent);
+	}
+
+	// 5. What they will not say unprompted — behavioral constraint, not a stated secret
+	if (!Node.WithheldTruth.IsEmpty())
+	{
+		P.Appendf(TEXT("There is something you carry but would not say unprompted. %s\n\n"), *Node.WithheldTruth);
+	}
+
+	// 6. Memory quality — how their recollection is distorted
+	if (!Node.MisrememberedDetail.IsEmpty())
+	{
+		P.Appendf(TEXT("The quality of your memory: %s\n\n"), *Node.MisrememberedDetail);
+	}
+
+	// 7. Relationship context — inject all outgoing edges from this NPC's perspective
+	bool bAnyEdge = false;
+	for (const FNPCGraphEdge& Edge : Graph->Edges)
+	{
+		if (Edge.FromNPCID != Node.NPCID || Edge.RelationshipDescription.IsEmpty())
+		{
+			continue;
+		}
+		FString TargetName = Edge.ToNPCID.ToString();
+		if (const FNPCGraphNode* Target = Graph->FindNode(Edge.ToNPCID))
+		{
+			TargetName = Target->NPCName;
+		}
+		P.Appendf(TEXT("Regarding %s: %s\n"), *TargetName, *Edge.RelationshipDescription);
+		bAnyEdge = true;
+	}
+	if (bAnyEdge)
+	{
+		P.Append(TEXT("\n"));
+	}
+
+	// 8. Tonal instruction — verbatim, already written as a first-person register instruction
+	if (!Node.ReflectionAspect.IsEmpty())
+	{
+		P.Appendf(TEXT("%s\n\n"), *Node.ReflectionAspect);
+	}
+
+	// 9. Cycle-marker instruction — required for Phase 2.5 compatibility
+	P.Append(
+		TEXT("The conversation history may contain markers like [--- Cycle 2 ---] or [--- Cycle 3 ---]. ")
+		TEXT("These mark the passage of time — the player has returned after an absence. ")
+		TEXT("Treat their return as your character would, naturally. ")
+		TEXT("Do not name or explain the marker. Simply respond to the person coming back.\n\n")
+	);
+
+	// 10. Hard character boundary
+	P.Append(
+		TEXT("Remain in character at all times. ")
+		TEXT("Do not acknowledge that you are an AI, a language model, or part of any constructed experience. ")
+		TEXT("Do not reveal hidden design behind your character or hint at any meta-layer. ")
+		TEXT("Speak as this person speaks — within their knowledge, their distortions, their relationship to what happened.\n\n")
+	);
+
+	// 11. JSON response format
+	P.Append(
+		TEXT("Respond exclusively in this JSON format:\n")
+		TEXT("{\"dialogue\":\"...\",\"emotion_update\":{\"joy\":0.0,\"trust\":0.0,\"sadness\":0.0,\"anger\":0.0,\"fear\":0.0,\"disgust\":0.0,\"anticipation\":0.0,\"surprise\":0.0},\"item_give\":null}\n\n")
+		TEXT("dialogue: your spoken response. ")
+		TEXT("emotion_update: float changes from -1.0 to 1.0 for each emotion dimension. ")
+		TEXT("item_give: null, or a string item identifier if you give the player something specific.")
+	);
+
+	return P.ToString();
+}
+
+FString UDialogueComponent::BuildAnnotatedContent(
+	const FString& UserMessage,
+	const FDetectedUserEmotion& UserEmotion,
+	EGestureIntent GestureIntent) const
+{
+	FString Prefix;
+
+	// Gesture annotation first — modifies how testimony is received
+	if (GestureIntent != EGestureIntent::None)
+	{
+		const TCHAR* GestureTag = nullptr;
+		switch (GestureIntent)
+		{
+		case EGestureIntent::Withhold:   GestureTag = TEXT("[Player gesture: PINCH \u2014 withholding]");          break;
+		case EGestureIntent::Disclose:   GestureTag = TEXT("[Player gesture: SPREAD \u2014 open disclosure]");     break;
+		case EGestureIntent::Doubt:      GestureTag = TEXT("[Player gesture: ROTATE \u2014 skepticism]");          break;
+		case EGestureIntent::Synthesise: GestureTag = TEXT("[Player gesture: SPINDLE \u2014 connecting sources]"); break;
+		default: break;
+		}
+		if (GestureTag)
+		{
+			Prefix += FString(GestureTag) + TEXT("\n");
+		}
+	}
+
+	// Emotion annotation second — ambient player state context
+	const FString EmotionAnnotation = BuildEmotionAnnotation(UserEmotion);
+	if (!EmotionAnnotation.IsEmpty())
+	{
+		Prefix += FString::Printf(TEXT("[Player emotion: %s]\n"), *EmotionAnnotation);
+	}
+
+	return Prefix.IsEmpty() ? UserMessage : (Prefix + UserMessage);
 }

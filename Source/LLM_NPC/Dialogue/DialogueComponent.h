@@ -7,6 +7,8 @@
 
 class UClaudeAPISubsystem;
 class UNPCConfigDataAsset;
+class UNPCGraphDataAsset;
+struct FNPCGraphNode;
 struct FClaudeAPIResponse;
 
 /** Delegate fired when a dialogue response is received from Claude. */
@@ -79,6 +81,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Dialogue")
 	TObjectPtr<UNPCConfigDataAsset> NPCConfig;
 
+	/**
+	 * NPCID of this NPC's node in the active UNPCGraphDataAsset.
+	 * Set by ANPCGameMode::BeginPlay() before InitializeSubsystem() when using graph-driven prompts.
+	 * Falls back to name-matching against NPCConfig->NPCName if not set.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Dialogue")
+	FName GraphNodeID;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -86,6 +96,21 @@ private:
 	/** Callback when Claude API responds. */
 	UFUNCTION()
 	void OnClaudeResponseReceived(const FClaudeAPIResponse& Response);
+
+	/**
+	 * Assemble a full system prompt from graph data for a specific NPC node.
+	 * Called by SendUserMessage() when NPCConfig->GraphDataAsset is valid.
+	 * Falls back to NPCConfig->SystemPrompt if graph is not available.
+	 */
+	FString BuildSystemPromptFromGraph(const UNPCGraphDataAsset* Graph, const FNPCGraphNode& Node) const;
+
+	/**
+	 * Build the annotated user message content.
+	 * Prepends gesture annotation (if any), then emotion annotation (if confidence >= 0.3),
+	 * then the raw user message. Phase 3 will pass the real GestureIntent from NPCPlayerController;
+	 * Phase 2 always passes EGestureIntent::None.
+	 */
+	FString BuildAnnotatedContent(const FString& UserMessage, const FDetectedUserEmotion& UserEmotion, EGestureIntent GestureIntent) const;
 
 	/** Build a user emotion annotation string for the system context. */
 	FString BuildEmotionAnnotation(const FDetectedUserEmotion& UserEmotion) const;

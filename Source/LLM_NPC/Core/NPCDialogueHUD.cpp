@@ -8,14 +8,22 @@
 #include "Engine/Font.h"
 #include "Kismet/GameplayStatics.h"
 
+// Chat line colors — defined once, used in all Add() calls
+static const FLinearColor ColSystem (0.38f, 0.38f, 0.46f, 1.0f);
+static const FLinearColor ColFocus  (0.48f, 0.48f, 0.72f, 1.0f);
+static const FLinearColor ColPlayer (0.45f, 0.82f, 1.00f, 1.0f);
+static const FLinearColor ColNPC    (0.28f, 0.90f, 0.52f, 1.0f);
+static const FLinearColor ColError  (1.00f, 0.35f, 0.35f, 1.0f);
+static const FLinearColor ColGold   (1.00f, 0.80f, 0.30f, 1.0f);
+
 void ANPCDialogueHUD::BeginPlay()
 {
 	Super::BeginPlay();
 
-	ChatLines.Add({TEXT("[System]: Chat ready. Type or hold V to speak."), FLinearColor(0.5f, 0.5f, 0.5f)});
+	ChatLines.Add({TEXT("[System]: Chat ready. Type or hold V to speak."), ColSystem});
 
 	// Bind to first NPC in world as initial focus.
-	// NPCPlayerController::UpdateNPCFocus() will take over proximity tracking on its first tick.
+	// NPCPlayerController::UpdateNPCFocus() takes over proximity tracking on its first tick.
 	TArray<AActor*> NPCActors;
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), ANPCCharacter::StaticClass(), NPCActors);
 	for (AActor* Actor : NPCActors)
@@ -30,20 +38,16 @@ void ANPCDialogueHUD::BeginPlay()
 
 void ANPCDialogueHUD::SetFocusedNPC(ANPCCharacter* NPC)
 {
-	// No-op if already focused on this NPC
 	if (NPC == FocusedNPCActor)
 	{
 		return;
 	}
 
-	// Unbind from old dialogue
 	if (BoundDialogue)
 	{
 		BoundDialogue->OnDialogueResponseReceived.RemoveDynamic(this, &ANPCDialogueHUD::OnNPCResponse);
 		BoundDialogue = nullptr;
 	}
-
-	// Unbind from old STT
 	if (BoundSTT)
 	{
 		BoundSTT->OnTranscriptReady.RemoveDynamic(this, &ANPCDialogueHUD::OnVoiceTranscript);
@@ -52,36 +56,33 @@ void ANPCDialogueHUD::SetFocusedNPC(ANPCCharacter* NPC)
 
 	FocusedNPCActor = NPC;
 	FocusedNPCName.Empty();
+	bIsVoiceRecording = false;
+	bTextInputActive = false;
 
 	if (!IsValid(NPC))
 	{
-		StatusMessage = TEXT("Walk near an NPC to begin.");
+		StatusMessage = TEXT("idle");
 		return;
 	}
 
-	// Bind new dialogue component
 	if (NPC->DialogueComponent)
 	{
 		BoundDialogue = NPC->DialogueComponent;
 		BoundDialogue->OnDialogueResponseReceived.AddDynamic(this, &ANPCDialogueHUD::OnNPCResponse);
 		UE_LOG(LogTemp, Log, TEXT("NPCDialogueHUD: Bound to DialogueComponent of %s"), *NPC->GetName());
 	}
-
-	// Bind new STT component
 	if (NPC->WhisperSTTComponent)
 	{
 		BoundSTT = NPC->WhisperSTTComponent;
 		BoundSTT->OnTranscriptReady.AddDynamic(this, &ANPCDialogueHUD::OnVoiceTranscript);
 	}
 
-	// Resolve display name: prefer NPCConfig name, fall back to actor name
 	FocusedNPCName = (NPC->NPCConfig && !NPC->NPCConfig->NPCName.IsEmpty())
 		? NPC->NPCConfig->NPCName.ToString()
 		: NPC->GetName();
 
-	StatusMessage = TEXT("Type or hold V to speak.");
-	ChatLines.Add({FString::Printf(TEXT("[System]: Now speaking with %s."), *FocusedNPCName),
-		FLinearColor(0.5f, 0.5f, 0.8f)});
+	StatusMessage = TEXT("idle");
+	ChatLines.Add({FString::Printf(TEXT("Now speaking with %s."), *FocusedNPCName), ColFocus});
 }
 
 void ANPCDialogueHUD::DrawHUD()
@@ -93,108 +94,155 @@ void ANPCDialogueHUD::DrawHUD()
 		return;
 	}
 
-	const float ScreenW = Canvas->SizeX;
-	const float ScreenH = Canvas->SizeY;
-	const float Padding = 20.0f;
-	const float LineHeight = 22.0f;
-	const float InputBoxHeight = 30.0f;
-	const float ChatAreaHeight = FMath::Min(250.0f, ScreenH * 0.4f);
-
 	UFont* Font = GEngine->GetSmallFont();
 	if (!Font)
 	{
 		return;
 	}
 
-	const float ChatTop = ScreenH - ChatAreaHeight - InputBoxHeight - Padding * 3;
+	const float ScreenH = Canvas->SizeY;
+	CachedScreenH = ScreenH;  // used by HandleMouseClick for hit-testing
 
-	// ---- NPC name label (above chat box) ----
+	// ── Panel geometry ───────────────────────────────────────
+	const float PanelX  = 20.0f;
+	const float PanelW  = 400.0f;
+	const float LineH   = 21.0f;
+	const float Pad     = 10.0f;
+	const float HeaderH = 30.0f;
+	const float SepH    = 1.0f;
+	const int32 MaxLines = 5;
+	const float ChatH   = MaxLines * LineH + Pad;
+	const float InputH  = 32.0f;
+	const float PanelH  = HeaderH + SepH + ChatH + SepH + InputH;
+	const float PanelY  = ScreenH - PanelH - 20.0f;
+
+	// ── Draw helpers ─────────────────────────────────────────
+	auto Rect = [&](float X, float Y, float W, float H, FLinearColor C)
+	{
+		FCanvasTileItem Item(FVector2D(X, Y), FVector2D(W, H), C);
+		Item.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(Item);
+	};
+
+	auto Txt = [&](const FString& S, float X, float Y, FLinearColor C, float Sc = 1.12f)
+	{
+		FCanvasTextItem Item(FVector2D(X, Y), FText::FromString(S), Font, C);
+		Item.Scale = FVector2D(Sc, Sc);
+		Canvas->DrawItem(Item);
+	};
+
+	auto Clip = [](const FString& S, int32 Max) -> FString
+	{
+		return S.Len() > Max ? S.Left(Max - 1) + TEXT("\u2026") : S;
+	};
+
+	// ── Color palette ────────────────────────────────────────
+	const FLinearColor cBG    (0.04f, 0.04f, 0.07f, 0.92f);
+	const FLinearColor cHead  (0.06f, 0.06f, 0.11f, 1.00f);
+	const FLinearColor cSep   (0.14f, 0.14f, 0.22f, 1.00f);
+	const FLinearColor cInput (bTextInputActive ? 0.09f : 0.05f,
+	                           bTextInputActive ? 0.09f : 0.05f,
+	                           bTextInputActive ? 0.14f : 0.09f, 1.00f);
+	const FLinearColor cName  (0.90f, 0.90f, 0.96f, 1.00f);
+	const FLinearColor cHint  (0.27f, 0.27f, 0.34f, 1.00f);
+	const FLinearColor cCaret (0.72f, 0.72f, 0.80f, 1.00f);
+	const FLinearColor cRec   (1.00f, 0.25f, 0.25f, 1.00f);
+	const FLinearColor cWait  (0.50f, 0.50f, 0.60f, 1.00f);
+
+	// ── Panel background ─────────────────────────────────────
+	Rect(PanelX, PanelY, PanelW, PanelH, cBG);
+
+	// ── Header ───────────────────────────────────────────────
+	Rect(PanelX, PanelY, PanelW, HeaderH, cHead);
+
 	if (!FocusedNPCName.IsEmpty())
 	{
-		FCanvasTextItem NameItem(
-			FVector2D(Padding + 10.0f, ChatTop - LineHeight - 4.0f),
-			FText::FromString(FString::Printf(TEXT("— %s —"), *FocusedNPCName)),
-			Font,
-			FLinearColor(0.8f, 0.8f, 0.8f)
-		);
-		NameItem.Scale = FVector2D(1.3f, 1.3f);
-		Canvas->DrawItem(NameItem);
+		Txt(FString::Printf(TEXT(" \u25CF  %s"), *FocusedNPCName),
+			PanelX + 6.0f, PanelY + 7.0f, cName, 1.15f);
+	}
+	else
+	{
+		Txt(TEXT(" No one nearby"), PanelX + 6.0f, PanelY + 7.0f, cHint, 1.05f);
 	}
 
-	// ---- Chat background ----
-	FCanvasTileItem BG(
-		FVector2D(Padding, ChatTop),
-		FVector2D(ScreenW - Padding * 2, ChatAreaHeight + InputBoxHeight + Padding * 2),
-		FLinearColor(0.0f, 0.0f, 0.0f, 0.7f)
-	);
-	BG.BlendMode = SE_BLEND_Translucent;
-	Canvas->DrawItem(BG);
+	// ── Header / chat separator ───────────────────────────────
+	const float ChatTop = PanelY + HeaderH;
+	Rect(PanelX, ChatTop, PanelW, SepH, cSep);
 
-	// ---- Chat lines ----
-	float Y = ChatTop + 10.0f;
-	int32 StartLine = FMath::Max(0, ChatLines.Num() - (int32)(ChatAreaHeight / LineHeight));
-	for (int32 i = StartLine; i < ChatLines.Num(); ++i)
+	// ── Chat lines ────────────────────────────────────────────
+	const int32 FirstLine = FMath::Max(0, ChatLines.Num() - MaxLines);
+	float TY = ChatTop + SepH + Pad * 0.5f;
+	for (int32 i = FirstLine; i < ChatLines.Num(); ++i)
 	{
-		FCanvasTextItem TextItem(
-			FVector2D(Padding + 10.0f, Y),
-			FText::FromString(ChatLines[i].Text),
-			Font,
-			ChatLines[i].Color
-		);
-		TextItem.Scale = FVector2D(1.2f, 1.2f);
-		Canvas->DrawItem(TextItem);
-		Y += LineHeight;
-
-		if (Y > ChatTop + ChatAreaHeight)
-		{
-			break;
-		}
+		Txt(Clip(ChatLines[i].Text, 54), PanelX + Pad, TY, ChatLines[i].Color, 1.10f);
+		TY += LineH;
 	}
 
-	// ---- Status text ----
-	float StatusY = ChatTop + ChatAreaHeight + 5.0f;
+	// ── Chat / input separator ────────────────────────────────
+	const float InputTop = ChatTop + SepH + ChatH;
+	Rect(PanelX, InputTop, PanelW, SepH, cSep);
+
+	// ── Input bar ─────────────────────────────────────────────
+	Rect(PanelX, InputTop + SepH, PanelW, InputH, cInput);
+	const float TxtY = InputTop + SepH + 8.0f;
+
+	if (!BoundDialogue)
 	{
-		FCanvasTextItem StatusItem(
-			FVector2D(Padding + 10.0f, StatusY),
-			FText::FromString(StatusMessage),
-			Font,
-			FLinearColor(0.6f, 0.6f, 0.6f)
-		);
-		StatusItem.Scale = FVector2D(1.0f, 1.0f);
-		Canvas->DrawItem(StatusItem);
+		Txt(TEXT(" Walk near someone"), PanelX + Pad, TxtY, cHint, 1.05f);
 	}
-
-	// ---- Input box (only when an NPC is focused) ----
-	if (BoundDialogue)
+	else if (bIsVoiceRecording)
 	{
-		float InputY = StatusY + LineHeight + 5.0f;
-
-		FCanvasTileItem InputBG(
-			FVector2D(Padding + 10.0f, InputY),
-			FVector2D(ScreenW - Padding * 2 - 20.0f, InputBoxHeight),
-			FLinearColor(0.15f, 0.15f, 0.15f, 0.9f)
-		);
-		InputBG.BlendMode = SE_BLEND_Translucent;
-		Canvas->DrawItem(InputBG);
-
-		FString DisplayText = InputBuffer.IsEmpty()
-			? TEXT("Type here...")
-			: InputBuffer + TEXT("|");
-
-		FCanvasTextItem InputItem(
-			FVector2D(Padding + 15.0f, InputY + 5.0f),
-			FText::FromString(DisplayText),
-			Font,
-			InputBuffer.IsEmpty() ? FLinearColor(0.4f, 0.4f, 0.4f) : FLinearColor::White
-		);
-		InputItem.Scale = FVector2D(1.2f, 1.2f);
-		Canvas->DrawItem(InputItem);
+		Txt(TEXT(" \u25CF  REC  \u2014  release V to send"), PanelX + Pad, TxtY, cRec, 1.10f);
+	}
+	else if (StatusMessage == TEXT("Waiting for NPC response..."))
+	{
+		Txt(TEXT(" \u2026"), PanelX + Pad, TxtY, cWait, 1.20f);
+	}
+	else if (!InputBuffer.IsEmpty())
+	{
+		Txt(TEXT(" ") + Clip(InputBuffer, 50) + TEXT("|"), PanelX + Pad, TxtY, cCaret, 1.10f);
+	}
+	else
+	{
+		FString Placeholder = bTextInputActive
+			? TEXT(" Type here...")
+			: TEXT(" Click to type  \u00B7  hold V to speak");
+		Txt(Placeholder, PanelX + Pad, TxtY, cHint, 1.05f);
 	}
 }
 
 void ANPCDialogueHUD::ToggleDialogueInput()
 {
 	bDialogueVisible = !bDialogueVisible;
+	if (!bDialogueVisible)
+	{
+		bTextInputActive = false;
+	}
+}
+
+void ANPCDialogueHUD::HandleMouseClick(float MouseX, float MouseY)
+{
+	if (!BoundDialogue || !bDialogueVisible || CachedScreenH <= 0.0f)
+	{
+		bTextInputActive = false;
+		return;
+	}
+
+	// Mirror the geometry constants from DrawHUD
+	const float PanelX  = 20.0f;
+	const float PanelW  = 400.0f;
+	const float HeaderH = 30.0f;
+	const float SepH    = 1.0f;
+	const float ChatH   = 5 * 21.0f + 10.0f;  // MaxLines * LineH + Pad
+	const float InputH  = 32.0f;
+	const float PanelH  = HeaderH + SepH + ChatH + SepH + InputH;
+	const float PanelY  = CachedScreenH - PanelH - 20.0f;
+
+	const float InputBoxY = PanelY + HeaderH + SepH + ChatH + SepH;
+
+	bTextInputActive =
+		MouseX >= PanelX && MouseX <= PanelX + PanelW &&
+		MouseY >= InputBoxY && MouseY <= InputBoxY + InputH;
 }
 
 void ANPCDialogueHUD::AppendToInput(const FString& Char)
@@ -217,7 +265,7 @@ void ANPCDialogueHUD::SubmitChatMessage(const FString& Message)
 		return;
 	}
 
-	ChatLines.Add({FString::Printf(TEXT("[You]: %s"), *Message), FLinearColor(0.4f, 0.8f, 1.0f)});
+	ChatLines.Add({FString::Printf(TEXT("[You]  %s"), *Message), ColPlayer});
 	InputBuffer.Empty();
 	StatusMessage = TEXT("Waiting for NPC response...");
 
@@ -230,22 +278,20 @@ void ANPCDialogueHUD::SubmitChatMessage(const FString& Message)
 	}
 	else
 	{
-		ChatLines.Add({TEXT("[System]: No NPC in range. Walk near an NPC to begin."),
-			FLinearColor(1.0f, 0.3f, 0.3f)});
+		ChatLines.Add({TEXT("[System]  No NPC in range."), ColError});
 	}
 }
 
 void ANPCDialogueHUD::OnNPCResponse(const FString& ResponseText, EEmotionType NPCEmotionHint,
 	bool bShouldGiveItem, FName ItemID)
 {
-	FString NPCLabel = FocusedNPCName.IsEmpty() ? TEXT("NPC") : FocusedNPCName;
-	ChatLines.Add({FString::Printf(TEXT("[%s]: %s"), *NPCLabel, *ResponseText), FLinearColor(0.2f, 1.0f, 0.4f)});
-	StatusMessage = TEXT("Type or hold V to speak.");
+	FString Label = FocusedNPCName.IsEmpty() ? TEXT("NPC") : FocusedNPCName;
+	ChatLines.Add({FString::Printf(TEXT("[%s]  %s"), *Label, *ResponseText), ColNPC});
+	StatusMessage = TEXT("idle");
 
 	if (bShouldGiveItem)
 	{
-		ChatLines.Add({FString::Printf(TEXT("[System]: * %s gives you: %s *"), *NPCLabel, *ItemID.ToString()),
-			FLinearColor(1.0f, 0.8f, 0.2f)});
+		ChatLines.Add({FString::Printf(TEXT("[Item]  %s"), *ItemID.ToString()), ColGold});
 	}
 }
 

@@ -34,6 +34,15 @@ public:
 	/** Rebind all delegates to a new focused NPC. Pass nullptr to enter null-focus state. */
 	void SetFocusedNPC(ANPCCharacter* NPC);
 
+	/** Called by NPCPlayerController on V press/release to drive the recording indicator. */
+	void SetVoiceRecording(bool bRecording) { bIsVoiceRecording = bRecording; }
+
+	/** Called by NPCPlayerController on left mouse click. Focuses input if click is inside the input box. */
+	void HandleMouseClick(float MouseX, float MouseY);
+
+	/** True only when the user has clicked the input box — keyboard capture is gated on this. */
+	bool IsTextInputActive() const { return bTextInputActive; }
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void DrawHUD() override;
@@ -72,4 +81,10 @@ private:
 	void OnVoiceTranscript(const FString& Transcript);
 
 	bool bIsVoiceRecording = false;
+
+	/** True when the user has clicked the input box. Cleared on click-outside, focus switch, or overlay hide. */
+	bool bTextInputActive = false;
+
+	/** Cached from the last DrawHUD call — used to compute input box bounds in HandleMouseClick. */
+	float CachedScreenH = 0.0f;
 };
