@@ -10,7 +10,8 @@
       "Bash(py -m pip install python-pptx -q)",
       "Bash(py -m pip install python-pptx)",
       "Bash(py -c \"from pptx import Presentation; print\\('OK'\\)\")",
-      "Bash(py make_deck.py)"
+      "Bash(py make_deck.py)",
+      "mcp__notebooklm-mcp__list_notebooks"
     ]
   }
 }
