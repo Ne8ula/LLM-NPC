@@ -12,6 +12,8 @@
 
 **Active vertical slice:** THRESHOLD — a non-linear, replayable interactive experience with 5 AI NPCs in a Chinese residential compound. Core mechanic: TESTIMONIAL (player verbally relays what one NPC said to another via live Whisper STT; each Claude instance responds to the player's imperfect recollection in real-time). Social graph between NPCs is procedurally generated per run.
 
+**Final deliverable scope (professor feedback, Apr 2026):** Single-NPC vertical slice focused on **The Friend** — Asian female Metahuman, mid-to-late 20s, runs a ground-floor convenience store inside the compound. Sadness 0.5 baseline, hidden title: "The One Who Stayed." Two new mechanics added for the deliverable: **Speaker Identification** (MFCC voice fingerprinting, up to 4 speakers, NPC responds differently per speaker) and **Object Inspection** (player aims at 3D props, presses E, NPC responds from her personal relationship to that object). Staging area: 7 inspectable props in her back-room store space. No exterior sightlines — fully enclosed Chinese compound interior.
+
 ---
 
 ## Tech Stack
@@ -25,6 +27,7 @@
 | Emotion Model | Plutchik's Wheel + PAD (Pleasure-Arousal-Dominance) continuous space |
 | Vision | OpenCV 4.x DNN + ONNX Runtime (facial expression CNN + hand landmark regression) |
 | Character | Metahuman with RigLogic (morph targets) + procedural full-body FK |
+| Body Animation | NVIDIA Kimodo (`nvidia/Kimodo-SMPL-X-RP-v1.1`) — offline text-to-motion diffusion; generates mocap clip libraries retargeted to Metahuman via UE5 IK Retargeter |
 | Third-Party Libs | whisper.cpp, OpenCV 4.x, ONNX Runtime |
 
 ---
@@ -200,7 +203,7 @@ Claude response format (structured JSON):
 - `EGestureIntent` (enum): None / Withhold / Disclose / Doubt / Synthesise — maps EGestureType to TESTIMONIAL meta-communication intent; injected into Claude context before voice message
 - `FEmotionSignal`: TargetEmotion, Strength, Source
 - `FNPCMessage`: Role ("user"/"assistant"), Content, Timestamp, DetectedUserEmotion
-- `FNPCGraphNode`: NPCID, NPCName, Role, EmotionBaseline, KnowsAboutEvent, WithheldTruth, MisrememberedDetail, PlayerRelationship, ElevenLabsVoiceID, VoiceGender, MetahumanVariantPool, ReflectionAspect (hidden tonal instruction), HiddenTitle ("The One Who..." — post-run reveal only)
+- `FNPCGraphNode`: NPCID, NPCName, Role, EmotionBaseline, KnowsAboutEvent, WithheldTruth, MisrememberedDetail, PlayerRelationship, ElevenLabsVoiceID, VoiceGender, MetahumanVariantPool, ReflectionAspect (hidden tonal instruction), HiddenTitle ("The One Who..." — post-run reveal only), `ItemKnowledgeSummary` (NEW — prose paragraph of NPC's emotional relationship to nearby physical objects; injected as system prompt section 7.5; filled only for The Friend's node in the single-NPC deliverable)
 - `FNPCGraphEdge`: FromNPCID, ToNPCID, RelationshipDescription, TrustLevel
 
 ---
@@ -274,7 +277,7 @@ Claude response format (structured JSON):
 2. ONNX model accuracy degrades under variable lighting / partial occlusion
 3. PAD emotional state is not persisted between sessions (no database layer)
 4. Voice cloning ethics + ElevenLabs licensing for shipped games
-5. Phases 0–2 complete — Phase 2.5 cycle architecture is next
+5. Phases 0–2 complete — immediate priority is Final Review Vertical Slice (The Friend, single-NPC); Phase 2.5 cycle architecture + Phase 7.5 Kimodo animation library are the next full-THRESHOLD milestones
 
 ---
 
@@ -352,26 +355,74 @@ Hidden titles are never shown during play. Each NPC's `ReflectionAspect` field i
 | 0 — Type Foundation | **Complete** | `EGestureIntent`, `UNPCGraphDataAsset`, soft-deprecated `SystemPrompt`; `FNPCGraphNode.EmotionBaseline` field is the hard-reset target used in Phase 6 |
 | 1 — Multi-NPC Refactor | **Complete** | `NPCPlayerController` proximity focus, `NPCDialogueHUD` dynamic binding, compact HUD, click-to-focus; **note:** Phase 2.5 will extend `NPCPlayerController::Tick` (timer) and `NPCDialogueHUD` (cycle UI + `ClearChatHistory()`); Phase 3 will modify `NPCDialogueHUD::SubmitChatMessage` (pass gesture intent) |
 | 2 — Graph-Driven Prompts | **Complete** | `BuildSystemPromptFromGraph()`, `BuildAnnotatedContent()`, `GraphNodeID` on `DialogueComponent`, `NPCGameMode::BeginPlay()` graph push + runtime tuning, `PendingRequestVersion` TTS dedup, `DA_Graph_ThresholdDefault` with 5 nodes + 7 edges |
-| 2.5 — Cycle Architecture | Pending | `UCycleManagerSubsystem` (13-min timer, soft/hard reset), `InjectCycleBreak()` in `DialogueComponent`, cycle counter + countdown in `NPCDialogueHUD`; **cycle transition UX**: fade-to-black + ambient audio sting + brief text ("You find yourself at the gate again.") on soft reset; **EmotionComponent PAD state persists across soft resets** (carry forward — NPCs' emotional trajectory toward the player continues between cycles), reset to `EmotionBaseline` only on hard reset |
-| 3 — Gesture Layer | Pending | `EGestureIntent` caching + injection in `DialogueComponent`; modifies `NPCDialogueHUD::SubmitChatMessage` (Phase 1 file) to pass `PendingGestureIntent` to `SendUserMessage()` |
-| 4 — Notebook Subsystem | Pending | `UNPCNotebookSubsystem`, `WBP_Notebook`, `WBP_SocialGraph`; Notebook graph state (player's accumulated social map) **persists across soft resets** and is **wiped on hard reset** (Return Statement) alongside NPC histories |
-| 5 — Procedural Graph Generation | Pending | Async Claude API call triggered by `OnReturnStatementTriggered`; runs during reveal sequence (not a separate scene); generates new `UNPCGraphDataAsset` JSON → runtime asset; updates all 5 `UNPCConfigDataAsset` `GraphDataAsset` pointers before Cycle 1 of new run |
-| 6 — Return Statement | Pending | Physical courtyard trigger actor/volume in map; player stands in zone + speaks; calls `UCycleManagerSubsystem::TriggerReturnStatement()`; full hard-reset sequence: two-phase reveal plays → async graph regen fires (Phase 5) → all `DialogueComponent::ClearHistory()` → all `EmotionComponent` reset to `EmotionBaseline` → Notebook wiped → `CycleNumber` reset to 1 → scene reinitialised |
-| 7 — Environment + Polish | Pending | `Threshold_Compound.umap` final layout, lighting, ambient audio; subtle per-cycle environmental shifts (lighting temperature drift across cycles to mark time passing) |
+| **A — The Friend's Staging Area** | **Pending (Final Deliverable)** | Dress The Friend's back-room convenience store space in `Threshold_Compound.umap`; 7 `AInspectableItem` actors placed in scene (Ledger, Phone, Photograph, Instant Noodles, Key, Plant, Cardboard Box); no exterior sightlines; Asian female Metahuman asset assigned to `BP_NPC_Friend` |
+| **B — InspectableItem NPC Knowledge** | **Pending (Final Deliverable)** | Add `ItemDisplayName`, `ItemWorldDescription`, `NPCKnowledgeText` to `AInspectableItem`; change constructor collision from `NoCollision` to `QueryOnly ECC_Visibility`; add `ItemKnowledgeSummary` to `FNPCGraphNode`; fill The Friend's node in `DA_Graph_ThresholdDefault` |
+| **C — Object Inspection Mechanic** | **Pending (Final Deliverable)** | E-key line trace (300cm, `ECC_Visibility`) → `DialogueComponent::SendObjectInspectMessage(AInspectableItem*)` → inject `[Player is examining: {Name} — {Desc}]` as user message; `NPCDialogueHUD::SetInspectHint()` draws examine prompt; `NPCBodyMotionComponent::TriggerReactToItem()` turns NPC head toward item |
+| **D — Speaker Identification** | **Pending (Final Deliverable)** | New `USpeakerIdentificationComponent` — MFCC spectral fingerprinting (13 coefficients, 256-pt FFT, 26 mel bins, cosine similarity threshold 0.85); auto-enroll up to 4 speakers as Speaker_A/B/C/D; `WhisperSTTComponent::OnPCMCaptured` delegate broadcasts raw PCM before WAV encode; `DialogueComponent::BuildAnnotatedContent()` prefixes `[Speaker: Speaker_A is speaking]`; The Friend's system prompt instructs her to respond differently to different visitors |
+| **E — Animation Variety** | **Pending (Final Deliverable)** | Add `Reacting` 4th state to `NPCBodyMotionComponent` FSM (head turns dynamically toward `ReactItemWorldLocation`, ±45° clamp, auto-expires after 1.5s); `IdlePoseVariants` array + `SetIdleVariant()` (sitting-behind-counter, standing-near-shelves); Thinking/Speaking pose differentiation review |
+| 2.5 — Cycle Architecture | Future | `UCycleManagerSubsystem` (13-min timer, soft/hard reset), `InjectCycleBreak()` in `DialogueComponent`, cycle counter + countdown in `NPCDialogueHUD`; cycle transition UX: fade-to-black + "You find yourself at the gate again." + audio sting; EmotionComponent PAD state persists across soft resets, reset to `EmotionBaseline` only on hard reset |
+| 3 — Gesture Layer | Future | `EGestureIntent` caching + injection in `DialogueComponent`; modifies `NPCDialogueHUD::SubmitChatMessage` to pass `PendingGestureIntent` to `SendUserMessage()` |
+| 4 — Notebook Subsystem | Future | `UNPCNotebookSubsystem`, `WBP_Notebook`, `WBP_SocialGraph`; persists across soft resets, wiped on hard reset |
+| 5 — Procedural Graph Generation | Future | Async Claude API call → new `UNPCGraphDataAsset` JSON → runtime asset; updates all 5 `UNPCConfigDataAsset` pointers before Cycle 1 of new run |
+| 6 — Return Statement | Future | Courtyard trigger → `UCycleManagerSubsystem::TriggerReturnStatement()`; two-phase reveal → graph regen → full hard reset |
+| 7 — Environment + Polish | Future | `Threshold_Compound.umap` final layout, lighting, ambient audio; per-cycle environmental shifts |
+| 7.5 — Kimodo Body Animation Library | Future | **Offline asset pipeline** — `nvidia/Kimodo-SMPL-X-RP-v1.1` diffusion model → mocap clips → UE5 IK Retarget to Metahuman; replaces procedural sine-wave micro-motions in `NPCBodyMotionComponent`. **Use SMPL-X variant, not SOMA-RP** — SOMA is a proprietary 30-joint skeleton with no UE5 retargeter; SMPL-X outputs AMASS format with full cross-platform support. **Hardware:** ~17GB VRAM (RTX 3090/4090 min); if unavailable use HuggingFace browser demo at `huggingface.co/spaces/nvidia/Kimodo` (no GPU required). **Inference:** 2–5s per clip — strictly offline, never runtime. CLI: `kimodo_gen --text "..." --duration 60 --output clip.npz`. **The Friend priority:** Idle ("person behind a counter, weight shifted, hand resting on surface"), Thinking ("pausing, gaze unfocused, breath held"), Speaking ("talking warmly but with restraint, small gestures"). ~15 clips per state, young adult feminine movement quality. |
+
+### Final Review Vertical Slice — The Friend (Single-NPC Scope)
+
+**Deliverable:** Fully playable single-NPC interaction scene with The Friend for academic/portfolio final review. Scoped down from the full 5-NPC THRESHOLD experience per professor feedback (Apr 2026) — demonstrates the complete AI stack in depth on one character, with two new unique mechanics.
+
+**Character:** Asian female Metahuman, mid-to-late 20s. Detailed sourced Metahuman asset assigned to `BP_NPC_Friend`. Childhood friend of the player; stayed behind while the player emigrated; now runs a ground-floor convenience store inside the compound. Sadness 0.5 baseline, low cost to Anticipation when conversation goes somewhere honest. Hidden title: "The One Who Stayed."
+
+**In scope:**
+- Single NPC: **The Friend** — graph-driven system prompt via `BuildSystemPromptFromGraph()` using her node in `DA_Graph_ThresholdDefault`
+- Full dialogue pipeline: Whisper STT → Claude API → ElevenLabs TTS
+- Emotion engine: full PAD state + decay + GOAP transition costs; FACS facial animation; thinking pose overlay
+- Lip sync: ElevenLabs character timestamps → visemes → `NPCLipSyncComponent`
+- Body motion: `NPCBodyMotionComponent` FSM — **4 states** (Idle / Thinking / Speaking / **Reacting**); idle pose variants (sitting-behind-counter, standing-near-shelves); Kimodo clip library (Phase 7.5) if ready, otherwise procedural micro-motions
+- Facial recognition: player emotion injected into Claude context (ambient, non-gating)
+- **[NEW] Object Inspection (Phase C):** Player aims at 3D props, presses E → NPC responds from her personal relationship to that object. 7 inspectable items in staging area: Store Ledger, Phone (face-down), Photograph (of player and her), Instant Noodles, Key, Plant, Cardboard Box (half-unpacked, 4 years). Items have `ItemWorldDescription` (injected into Claude) + `NPCKnowledgeText` (woven into system prompt via `ItemKnowledgeSummary`)
+- **[NEW] Speaker Identification (Phase D):** `USpeakerIdentificationComponent` — MFCC fingerprinting, up to 4 auto-enrolled speakers; `[Speaker: Speaker_A is speaking]` prefix in every Claude call; The Friend responds differently to the returning player vs. new visitors to the store
+- Graceful degradation: text fallback HUD
+- **Staging area (Phase A):** The Friend's back-room convenience store space — warm, slightly cramped, no exterior sightlines. ~500cm × 400cm, low ceiling, counter + shelving + corner nook separated by a beaded curtain or shelving unit
+
+**Out of scope for final review (full THRESHOLD features deferred to future):**
+- Multi-NPC proximity focus (Phase 1 infrastructure present but only one NPC active)
+- Cycle architecture / 13-minute timer / soft reset (Phase 2.5)
+- Gesture intent layer (Phase 3)
+- AI Notepad / social graph widget (Phase 4)
+- Procedural graph generation (Phase 5)
+- Return Statement hard reset (Phase 6)
+- Full 5-NPC compound environment + per-cycle lighting shifts (Phase 7)
+
+**The Friend — Kimodo clip brief (Phase 7.5 priority):**
+
+| State | Prompt guidance | Movement quality |
+|-------|----------------|-----------------|
+| Idle | "person standing behind a counter, weight shifted to one side, occasional glance away, hand resting on surface" | Grounded, slightly inward; young adult, feminine movement quality |
+| Thinking | "person pausing mid-conversation, chin slightly lowered, gaze unfocused, breath held" | Still, inward — carries quiet grief |
+| Speaking | "person talking warmly but with restraint, small hand gestures, no excess expressiveness" | Warm but contained; grief underneath the warmth |
+
+Generate ~15 clips per state. Age variant: young adult (late-20s). Retarget via UE5 IK Retargeter to Metahuman female skeleton before importing.
+
+---
 
 ### Key Architecture Changes (vs existing system)
 
 - `SystemPrompt` field in `UNPCConfigDataAsset` → **replaced** by `DialogueComponent::BuildSystemPromptFromGraph(UNPCGraphDataAsset*, FNPCGraphNode&)` (Phase 2)
-- `NPCPlayerController` → gains `FocusedNPC`, `UpdateNPCFocus()`, `PendingGestureIntent` (Phase 1)
-- `NPCDialogueHUD` → gains `SetFocusedNPC()`, dynamic NPC name label (Phase 1)
-- `DialogueComponent::SendUserMessage()` → gains `EGestureIntent` parameter, `BuildAnnotatedContent()` helper (Phase 3)
+- `NPCPlayerController` → gains `FocusedNPC`, `UpdateNPCFocus()`, `PendingGestureIntent` (Phase 1); gains `PendingInspectItem`, `TraceForInspectableItem()`, E-key block (Phase C)
+- `NPCDialogueHUD` → gains `SetFocusedNPC()`, dynamic NPC name label (Phase 1); gains `SetInspectHint()`, inspect prompt in `DrawHUD()` (Phase C)
+- `DialogueComponent` → gains `SendObjectInspectMessage(AInspectableItem*)`, `BuildObjectInspectAnnotation()`, `ItemKnowledgeSummary` section in `BuildSystemPromptFromGraph()`, speaker awareness paragraph, `CachedSpeakerID` weak pointer (Phase C/D)
+- `AInspectableItem` → gains `ItemDisplayName`, `ItemWorldDescription`, `NPCKnowledgeText`; collision changed to `QueryOnly ECC_Visibility` (Phase B)
+- `FNPCGraphNode` → gains `ItemKnowledgeSummary` (Phase B)
+- `WhisperSTTComponent` → gains `FOnPCMCaptured` delegate, broadcasts raw PCM before WAV encode (Phase D)
+- **New component:** `USpeakerIdentificationComponent` (`Source/LLM_NPC/Dialogue/`) — MFCC fingerprinting, `FSpeakerProfile`, `IdentifyFromPCM()`, `OnSpeakerIdentified` delegate; added to `ANPCCharacter` (Phase D)
+- `NPCBodyMotionComponent` → gains `Reacting` 4th state, `TriggerReactToItem()`, `IdlePoseVariants`, `SetIdleVariant()` (Phase E)
 - `NPCInventoryComponent` — kept in codebase, not used in THRESHOLD NPCs
-- New subsystems: `UCycleManagerSubsystem` (Phase 2.5), `UNPCNotebookSubsystem` (Phase 4)
-- `DialogueComponent` — gains `InjectCycleBreak(int32 CycleNumber)` and `ClearHistory()` (Phase 2.5)
-- `NPCDialogueHUD` — gains cycle counter + countdown display (Phase 2.5)
-- `EmotionComponent` — PAD state survives soft resets (no change needed — components stay alive); `ResetToBaseline()` called on hard reset (Phase 2.5 / Phase 6)
-- Return Statement = physical trigger actor in courtyard → `UCycleManagerSubsystem::TriggerReturnStatement()` → hard reset sequence (Phase 6)
-- Phase 5 renamed "Procedural Graph Generation" — no separate player-facing scene; async API call fires during Return Statement reveal, runtime asset replaces graph before next Cycle 1
+- **Future:** `UCycleManagerSubsystem` (Phase 2.5), `UNPCNotebookSubsystem` (Phase 4)
+- **Future:** `DialogueComponent` gains `InjectCycleBreak(int32)` and `ClearHistory()` (Phase 2.5)
+- **Future:** `EmotionComponent` gains `ResetToBaseline()` for hard reset (Phase 6)
+- **Future:** Return Statement = courtyard trigger → `UCycleManagerSubsystem::TriggerReturnStatement()` (Phase 6)
 
 ---
 

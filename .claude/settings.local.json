@@ -11,7 +11,13 @@
       "Bash(py -m pip install python-pptx)",
       "Bash(py -c \"from pptx import Presentation; print\\('OK'\\)\")",
       "Bash(py make_deck.py)",
-      "mcp__notebooklm-mcp__list_notebooks"
+      "mcp__notebooklm-mcp__list_notebooks",
+      "WebSearch",
+      "WebFetch(domain:research.nvidia.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:arxiv.org)",
+      "Skill(claude-md-management:revise-claude-md)",
+      "Skill(claude-md-management:revise-claude-md:*)"
     ]
   }
 }
