@@ -64,6 +64,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Animation", meta = (ClampMin = "0.1"))
 	float InterpolationSpeed = 4.0f;
 
+	/**
+	 * When true, emotion state drives FACS curves (legacy path — mouthSmile_L,
+	 * browDown, etc. set per emotion). When false, emotional expression comes
+	 * from the MetaHuman template animations driven by
+	 * UTemplateAnimationDriverComponent and this component only handles lip
+	 * sync + jaw + blink + thinking overlay. Default off: the template path
+	 * is the primary pipeline; the curve path is preserved for fallback.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Animation")
+	bool bUseCurveBasedEmotions = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Animation", meta = (ClampMin = "0.1"))
 	float LipSyncInterpolationSpeed = 12.0f;
 

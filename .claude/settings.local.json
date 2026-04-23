@@ -17,7 +17,8 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:arxiv.org)",
       "Skill(claude-md-management:revise-claude-md)",
-      "Skill(claude-md-management:revise-claude-md:*)"
+      "Skill(claude-md-management:revise-claude-md:*)",
+      "Bash(git check-ignore *)"
     ]
   }
 }

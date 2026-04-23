@@ -8,6 +8,7 @@
 #include "LLM_NPC/Animation/MetahumanAnimComponent.h"
 #include "LLM_NPC/Animation/NPCLipSyncComponent.h"
 #include "LLM_NPC/Animation/NPCBodyMotionComponent.h"
+#include "LLM_NPC/Animation/TemplateAnimationDriverComponent.h"
 #include "LLM_NPC/Dialogue/WhisperSTTComponent.h"
 #include "LLM_NPC/Dialogue/ElevenLabsTTSComponent.h"
 #include "LLM_NPC/Fallback/FallbackManagerComponent.h"
@@ -26,6 +27,7 @@ ANPCCharacter::ANPCCharacter()
 	MetahumanAnimComponent = CreateDefaultSubobject<UMetahumanAnimComponent>(TEXT("MetahumanAnimComponent"));
 	LipSyncComponent = CreateDefaultSubobject<UNPCLipSyncComponent>(TEXT("LipSyncComponent"));
 	BodyMotionComponent = CreateDefaultSubobject<UNPCBodyMotionComponent>(TEXT("BodyMotionComponent"));
+	TemplateAnimationDriverComponent = CreateDefaultSubobject<UTemplateAnimationDriverComponent>(TEXT("TemplateAnimationDriverComponent"));
 	WhisperSTTComponent = CreateDefaultSubobject<UWhisperSTTComponent>(TEXT("WhisperSTTComponent"));
 	ElevenLabsTTSComponent = CreateDefaultSubobject<UElevenLabsTTSComponent>(TEXT("ElevenLabsTTSComponent"));
 	FallbackManagerComponent = CreateDefaultSubobject<UFallbackManagerComponent>(TEXT("FallbackManagerComponent"));

@@ -288,6 +288,20 @@ void UNPCBodyMotionComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	ThinkingAlpha = FMath::FInterpTo(ThinkingAlpha, ThinkingTarget, DeltaTime, StateBlendSpeed);
 	SpeakingAlpha = FMath::FInterpTo(SpeakingAlpha, SpeakingTarget, DeltaTime, StateBlendSpeed);
 
+	// Head-turn Reacting overlay: expire the target alpha once the duration
+	// elapses. Actual Head-bone application happens in OnBoneTransformsFinalized.
+	if (HeadTurnTargetAlpha > 0.0f)
+	{
+		if (const UWorld* World = GetWorld())
+		{
+			if (World->GetTimeSeconds() >= HeadTurnExpireTime)
+			{
+				HeadTurnTargetAlpha = 0.0f;
+			}
+		}
+	}
+	HeadTurnAlpha = FMath::FInterpTo(HeadTurnAlpha, HeadTurnTargetAlpha, DeltaTime, HeadTurnBlendSpeed);
+
 	// PIE-restart safety: re-acquire the mesh + delegate if invalidated.
 	if (!CachedBodyMesh.IsValid())
 	{
@@ -541,23 +555,65 @@ void UNPCBodyMotionComponent::OnBoneTransformsFinalized()
 		ApplyBoneLayer(Mesh, RefSkel, CS, Idx, FQuat(LocalRot));
 	};
 
-	// Top-down order so later calls read parents that include earlier rots.
-	// Pelvis → trunk chain → left arm chain → right arm chain → legs.
-	Apply(EBodyMotionBone::Pelvis,    PelvisIdx);
-	Apply(EBodyMotionBone::Spine01,   Spine01Idx);
-	Apply(EBodyMotionBone::Spine03,   Spine03Idx);
-	Apply(EBodyMotionBone::Neck,      NeckIdx);
-	Apply(EBodyMotionBone::Head,      HeadIdx);
-	Apply(EBodyMotionBone::ClavicleL, ClavLIdx);
-	Apply(EBodyMotionBone::UpperArmL, UArmLIdx);
-	Apply(EBodyMotionBone::LowerArmL, LArmLIdx);
-	Apply(EBodyMotionBone::HandL,     HandLIdx);
-	Apply(EBodyMotionBone::ClavicleR, ClavRIdx);
-	Apply(EBodyMotionBone::UpperArmR, UArmRIdx);
-	Apply(EBodyMotionBone::LowerArmR, LArmRIdx);
-	Apply(EBodyMotionBone::HandR,     HandRIdx);
-	Apply(EBodyMotionBone::ThighL,    ThighLIdx);
-	Apply(EBodyMotionBone::ThighR,    ThighRIdx);
+	// Full-body procedural FK — gated so the MetaHuman template body animation
+	// (driven by UTemplateAnimationDriverComponent) can play unobstructed in
+	// the default deployment. Flip bProceduralFKEnabled on to revert to the
+	// legacy procedural-only path.
+	if (bProceduralFKEnabled)
+	{
+		// Top-down order so later calls read parents that include earlier rots.
+		// Pelvis → trunk chain → left arm chain → right arm chain → legs.
+		Apply(EBodyMotionBone::Pelvis,    PelvisIdx);
+		Apply(EBodyMotionBone::Spine01,   Spine01Idx);
+		Apply(EBodyMotionBone::Spine03,   Spine03Idx);
+		Apply(EBodyMotionBone::Neck,      NeckIdx);
+		Apply(EBodyMotionBone::Head,      HeadIdx);
+		Apply(EBodyMotionBone::ClavicleL, ClavLIdx);
+		Apply(EBodyMotionBone::UpperArmL, UArmLIdx);
+		Apply(EBodyMotionBone::LowerArmL, LArmLIdx);
+		Apply(EBodyMotionBone::HandL,     HandLIdx);
+		Apply(EBodyMotionBone::ClavicleR, ClavRIdx);
+		Apply(EBodyMotionBone::UpperArmR, UArmRIdx);
+		Apply(EBodyMotionBone::LowerArmR, LArmRIdx);
+		Apply(EBodyMotionBone::HandR,     HandRIdx);
+		Apply(EBodyMotionBone::ThighL,    ThighLIdx);
+		Apply(EBodyMotionBone::ThighR,    ThighRIdx);
+	}
+
+	// Head-turn Reacting overlay — Head bone only, additive on top of whatever
+	// pose is currently there (template animation or procedural FK above).
+	// Computed in component space from the current Head CS transform and the
+	// world-space target; clamped to ±HeadTurnMaxDeg so the NPC never
+	// pops her head behind her.
+	if (HeadTurnAlpha > KINDA_SMALL_NUMBER && HeadIdx != INDEX_NONE && HeadIdx < CS.Num())
+	{
+		const FTransform CompToWorld = Mesh->GetComponentTransform();
+		const FTransform HeadCS = CS[HeadIdx];
+		const FVector HeadWorldLoc = CompToWorld.TransformPosition(HeadCS.GetLocation());
+		const FVector ToTargetWorld = HeadTurnTargetWorldLoc - HeadWorldLoc;
+
+		if (!ToTargetWorld.IsNearlyZero())
+		{
+			// Express the aim direction in the Head bone's component-space frame.
+			const FVector ToTargetComp = CompToWorld.InverseTransformVectorNoScale(ToTargetWorld).GetSafeNormal();
+
+			// Head forward in the ref pose: MetaHuman head's local-forward tends
+			// to be -Y or +X depending on the rig; we derive it from the current
+			// Head CS rotation's X axis so this stays rig-agnostic.
+			const FVector HeadForwardComp = HeadCS.GetRotation().GetAxisX();
+
+			// Yaw (horizontal) + pitch (vertical) toward target.
+			const float TargetYawRad   = FMath::Atan2(ToTargetComp.Y, ToTargetComp.X) - FMath::Atan2(HeadForwardComp.Y, HeadForwardComp.X);
+			const float TargetPitchRad = FMath::Asin(ToTargetComp.Z) - FMath::Asin(HeadForwardComp.Z);
+
+			const float MaxRad = FMath::DegreesToRadians(HeadTurnMaxDeg);
+			const float Yaw    = FMath::Clamp(TargetYawRad,   -MaxRad, MaxRad) * HeadTurnAlpha;
+			const float Pitch  = FMath::Clamp(TargetPitchRad, -MaxRad, MaxRad) * HeadTurnAlpha;
+
+			const FRotator HeadDelta(FMath::RadiansToDegrees(Pitch), FMath::RadiansToDegrees(Yaw), 0.0f);
+			ApplyBoneLayer(Mesh, RefSkel, CS, HeadIdx, FQuat(HeadDelta));
+		}
+	}
 }
 
 // -----------------------------------------------------------------------------
@@ -791,4 +847,14 @@ void UNPCBodyMotionComponent::HandleSpeechError(int32 ResponseCode, const FStrin
 		ResponseCode, *ErrorBody);
 	TargetState = EBodyState::Idle;
 	ThinkingWatchdog = 0.0f;
+}
+
+void UNPCBodyMotionComponent::TriggerReactToItem(const FVector& WorldLoc, float DurationSec)
+{
+	HeadTurnTargetWorldLoc = WorldLoc;
+	HeadTurnTargetAlpha = 1.0f;
+	if (const UWorld* World = GetWorld())
+	{
+		HeadTurnExpireTime = World->GetTimeSeconds() + FMath::Max(DurationSec, 0.1f);
+	}
 }

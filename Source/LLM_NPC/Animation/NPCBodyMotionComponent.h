@@ -266,6 +266,40 @@ public:
 		meta = (ClampMin = "1.0", ClampMax = "60.0"))
 	float ThinkingTimeoutSeconds = 15.0f;
 
+	// --- Procedural FK gate ---
+
+	/**
+	 * When true, the component writes procedural FK deltas to all 15 tracked
+	 * bones (full-body idle/thinking/speaking blend). When false, procedural
+	 * FK is disabled and the MetaHuman template body animation (driven by
+	 * UTemplateAnimationDriverComponent) plays unobstructed. The head-turn
+	 * Reacting overlay still runs regardless of this flag — it only writes
+	 * the Head bone as an additive on top of the template pose.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|BodyMotion")
+	bool bProceduralFKEnabled = false;
+
+	// --- Reacting (head-turn-toward-item) overlay ---
+
+	/**
+	 * Turn the NPC's head toward a world-space location (e.g. an object the
+	 * player is inspecting). Yaw/pitch clamped to ±HeadTurnMaxDeg. Decays
+	 * back to neutral over DurationSec once called. Only writes the Head
+	 * bone — compatible with template body animations driving the rest.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "NPC|BodyMotion|Reacting")
+	void TriggerReactToItem(const FVector& WorldLoc, float DurationSec = 1.5f);
+
+	/** Max degrees the head will rotate to track the reacting target. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|BodyMotion|Reacting",
+		meta = (ClampMin = "5.0", ClampMax = "60.0"))
+	float HeadTurnMaxDeg = 35.0f;
+
+	/** Speed (1/s) at which HeadTurnAlpha interpolates toward its target. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|BodyMotion|Reacting",
+		meta = (ClampMin = "1.0", ClampMax = "20.0"))
+	float HeadTurnBlendSpeed = 5.0f;
+
 private:
 	enum class EBodyState : uint8
 	{
@@ -282,6 +316,12 @@ private:
 
 	float TimeAccum = 0.0f;
 	float ThinkingWatchdog = 0.0f;
+
+	/** Reacting head-turn state (head-only overlay — independent of FSM). */
+	FVector HeadTurnTargetWorldLoc = FVector::ZeroVector;
+	float HeadTurnAlpha = 0.0f;           // current blend weight, 0..1
+	float HeadTurnTargetAlpha = 0.0f;     // target weight driven by expiry timer
+	float HeadTurnExpireTime = 0.0f;      // world time at which target flips to 0
 
 	/** Cached sibling pipeline components. */
 	TWeakObjectPtr<USkeletalMeshComponent>  CachedBodyMesh;

@@ -686,12 +686,20 @@ void UMetahumanAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	// Build target curve values from emotion mappings
 	TMap<FName, float> TargetCurves;
 
-	// Look up emotion curves
-	if (const auto* Curves = EmotionCurveMappings.Find(CurrentEmotion))
+	// Look up emotion curves. When bUseCurveBasedEmotions is false, the
+	// MetaHuman template animations (driven by UTemplateAnimationDriverComponent)
+	// carry the emotional expression — running the curve path here would
+	// double-drive and fight the template. We still build the (empty) TargetCurves
+	// so the decay loop below can zero any residual curves from a previous frame
+	// when the flag flipped or emotion decayed.
+	if (bUseCurveBasedEmotions)
 	{
-		for (const auto& Pair : *Curves)
+		if (const auto* Curves = EmotionCurveMappings.Find(CurrentEmotion))
 		{
-			TargetCurves.Add(Pair.Key, Pair.Value * Intensity);
+			for (const auto& Pair : *Curves)
+			{
+				TargetCurves.Add(Pair.Key, Pair.Value * Intensity);
+			}
 		}
 	}
 
@@ -772,10 +780,12 @@ void UMetahumanAnimComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	{
 		float JawTarget = LipSyncJawOpenValue;
 
-		// Emotion jaw open (for surprise, etc.) takes max with lip sync
-		if (const auto* Curves = EmotionCurveMappings.Find(CurrentEmotion))
+		// Emotion jaw open (for surprise, etc.) takes max with lip sync.
+		// Gated on bUseCurveBasedEmotions: when templates drive emotion,
+		// the Surprise template already opens the jaw visually and an
+		// additional curve write here stacks on top and looks exaggerated.
+		if (bUseCurveBasedEmotions)
 		{
-			// Check if emotion wants jaw open
 			if (CurrentEmotion == EEmotionType::Surprise)
 			{
 				JawTarget = FMath::Max(JawTarget, 0.5f * Intensity);

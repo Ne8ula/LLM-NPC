@@ -14,6 +14,7 @@ class UNPCInventoryComponent;
 class UMetahumanAnimComponent;
 class UNPCLipSyncComponent;
 class UNPCBodyMotionComponent;
+class UTemplateAnimationDriverComponent;
 class UFallbackManagerComponent;
 class UWhisperSTTComponent;
 class UElevenLabsTTSComponent;
@@ -62,6 +63,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
 	TObjectPtr<UNPCBodyMotionComponent> BodyMotionComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
+	TObjectPtr<UTemplateAnimationDriverComponent> TemplateAnimationDriverComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
 	TObjectPtr<UWhisperSTTComponent> WhisperSTTComponent;
