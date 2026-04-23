@@ -275,9 +275,14 @@ public:
 	 * UTemplateAnimationDriverComponent) plays unobstructed. The head-turn
 	 * Reacting overlay still runs regardless of this flag — it only writes
 	 * the Head bone as an additive on top of the template pose.
+	 *
+	 * Default on: classic MetaHumans in this project have no Body AnimBP
+	 * assigned (CharacterMesh0 Anim=<none>), so the template path has nothing
+	 * to play against. Procedural FK drives body micro-motions directly via
+	 * bone transforms, which works with or without an AnimBP.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|BodyMotion")
-	bool bProceduralFKEnabled = false;
+	bool bProceduralFKEnabled = true;
 
 	// --- Reacting (head-turn-toward-item) overlay ---
 

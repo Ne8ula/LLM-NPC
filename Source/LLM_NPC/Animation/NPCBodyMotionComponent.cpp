@@ -169,12 +169,24 @@ void UNPCBodyMotionComponent::InitializeSubsystem()
 		}
 
 		UClass* ExistingAnimClass = CachedBodyMesh->GetAnimClass();
+		UAnimInstance* ExistingPostProc = CachedBodyMesh->GetPostProcessInstance();
 		UE_LOG(LogTemp, Warning,
-			TEXT("BodyMotion: Body mesh '%s' existing AnimClass: %s"),
+			TEXT("BodyMotion: Body mesh '%s' AnimClass=%s PostProcess=%s"),
 			*CachedBodyMesh->GetName(),
-			ExistingAnimClass ? *ExistingAnimClass->GetName() : TEXT("<none>"));
+			ExistingAnimClass ? *ExistingAnimClass->GetName() : TEXT("<none>"),
+			ExistingPostProc ? *ExistingPostProc->GetClass()->GetName() : TEXT("<none>"));
 
-		if (!ExistingAnimClass)
+		// UAF MetaHumans (UE 5.7+) ship WITHOUT a primary AnimClass — their
+		// body is driven solely by a post-process AnimBP (e.g.
+		// ABP_Body_PostProcess_C). Assigning UNPCBodyIdleAnimInstance on top
+		// of that forces the primary output to the reference pose (T-pose),
+		// which the post-process can't recover from → character T-poses.
+		//
+		// Only assign our stub when BOTH primary AND post-process are absent
+		// (truly no animation pipeline at all). Otherwise leave the mesh
+		// alone — its post-process handles the idle pose and the anim
+		// pipeline ticks via that path.
+		if (!ExistingAnimClass && !ExistingPostProc)
 		{
 			UE_LOG(LogTemp, Warning,
 				TEXT("BodyMotion: Assigning UNPCBodyIdleAnimInstance to body mesh so the anim pipeline runs"));

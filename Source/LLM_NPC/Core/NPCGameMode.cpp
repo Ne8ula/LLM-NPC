@@ -4,7 +4,13 @@
 #include "NPCCharacter.h"
 #include "NPCGraphDataAsset.h"
 #include "LLM_NPC/Dialogue/DialogueComponent.h"
+#include "LLM_NPC/Effects/GlitchPresenceComponent.h"
+#include "Components/MeshComponent.h"
 #include "Kismet/GameplayStatics.h"
+
+#if WITH_EDITOR
+#include "Editor.h"
+#endif
 
 ANPCGameMode::ANPCGameMode()
 {
@@ -15,6 +21,8 @@ ANPCGameMode::ANPCGameMode()
 void ANPCGameMode::BeginPlay()
 {
 	Super::BeginPlay();
+
+	ApplyGlitchPresenceByTag();
 
 	if (!ActiveGraph)
 	{
@@ -80,5 +88,64 @@ void ANPCGameMode::BeginPlay()
 					*NPCName);
 			}
 		}
+	}
+}
+
+void ANPCGameMode::ApplyGlitchPresenceByTag()
+{
+	if (GlitchPresenceTag.IsNone())
+	{
+		return;
+	}
+
+	UWorld* World = GetWorld();
+
+#if WITH_EDITOR
+	// When called from the Details panel button, 'this' is the CDO and GetWorld() is null.
+	// Resolve the active editor world so the scan can run in the viewport preview.
+	if ((!World || !World->IsGameWorld()) && GEditor)
+	{
+		World = GEditor->GetEditorWorldContext().World();
+	}
+#endif
+
+	if (!World)
+	{
+		return;
+	}
+
+	TArray<AActor*> TaggedActors;
+	UGameplayStatics::GetAllActorsWithTag(World, GlitchPresenceTag, TaggedActors);
+
+	int32 Added = 0;
+	for (AActor* Actor : TaggedActors)
+	{
+		if (!Actor)
+		{
+			continue;
+		}
+		if (Actor->FindComponentByClass<UGlitchPresenceComponent>())
+		{
+			continue;
+		}
+		if (!Actor->FindComponentByClass<UMeshComponent>())
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("NPCGameMode: Actor '%s' has tag '%s' but no UMeshComponent — glitch skipped."),
+				*Actor->GetName(), *GlitchPresenceTag.ToString());
+			continue;
+		}
+
+		UGlitchPresenceComponent* Comp = NewObject<UGlitchPresenceComponent>(Actor);
+		Comp->RegisterComponent();
+		Actor->AddInstanceComponent(Comp);
+		++Added;
+	}
+
+	if (Added > 0)
+	{
+		UE_LOG(LogTemp, Log,
+			TEXT("NPCGameMode: Added UGlitchPresenceComponent to %d actor(s) tagged '%s'."),
+			Added, *GlitchPresenceTag.ToString());
 	}
 }

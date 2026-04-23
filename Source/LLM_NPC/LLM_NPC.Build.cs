@@ -30,6 +30,12 @@ public class LLM_NPC : ModuleRules
 			"RHI"
 		});
 
+		// Editor-only dependency — needed for GEditor / Editor.h used by CallInEditor functions.
+		if (Target.Type == TargetType.Editor)
+		{
+			PrivateDependencyModuleNames.Add("UnrealEd");
+		}
+
 		// Windows multimedia library for direct microphone capture (waveIn API)
 		if (Target.Platform == UnrealTargetPlatform.Win64)
 		{

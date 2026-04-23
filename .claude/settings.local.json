@@ -18,7 +18,12 @@
       "WebFetch(domain:arxiv.org)",
       "Skill(claude-md-management:revise-claude-md)",
       "Skill(claude-md-management:revise-claude-md:*)",
-      "Bash(git check-ignore *)"
+      "Bash(git check-ignore *)",
+      "Read(//c/Program Files/Epic Games/UE_5.7/Engine/Binaries/Win64/**)",
+      "Read(//c/Program Files \\(x86\\)/Epic Games/Launcher/Engine/Binaries/Win64/**)",
+      "Read(//c/Program Files/Epic Games/**)",
+      "Read(//c/Program Files \\(x86\\)/Epic Games/**)",
+      "Bash(xargs grep *)"
     ]
   }
 }

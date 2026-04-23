@@ -69,11 +69,13 @@ public:
 	 * browDown, etc. set per emotion). When false, emotional expression comes
 	 * from the MetaHuman template animations driven by
 	 * UTemplateAnimationDriverComponent and this component only handles lip
-	 * sync + jaw + blink + thinking overlay. Default off: the template path
-	 * is the primary pipeline; the curve path is preserved for fallback.
+	 * sync + jaw + blink + thinking overlay. Default on: classic RigLogic
+	 * MetaHumans (Face_AnimBP_C) have no Template Animation enum for the
+	 * reflection path, so FACS curve emotions are the working pipeline. Flip
+	 * off only when the MetaHuman is rebuilt via MetaHuman Creator.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Animation")
-	bool bUseCurveBasedEmotions = false;
+	bool bUseCurveBasedEmotions = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Animation", meta = (ClampMin = "0.1"))
 	float LipSyncInterpolationSpeed = 12.0f;
