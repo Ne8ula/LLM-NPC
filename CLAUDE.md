@@ -407,6 +407,110 @@ Generate ~15 clips per state. Age variant: young adult (late-20s). Retarget via 
 
 ---
 
+### Final Review Vertical Slice — "The Memory Archive" (Two-Speaker Pivot, locked 2026-04-29)
+
+**Status:** This section supersedes the prior single-speaker Friend slice above. The single-speaker slice is retained for historical context; the canonical demo design as of 2026-04-29 is below. Full plan file at `~/.claude/plans/okay-i-am-about-peaceful-twilight.md`. Demo: 2026-04-30.
+
+**Audience and contribution.** Primary audience: research-lab interview / PhD application portfolio. Secondary: workshop submission to CHI / DiGRA / alt.chi / RTD. Primary contribution: **speculative / design fiction** — the AI Memory Archive frame as a provocation about consent, witness, and model-mediated testimony. Secondary: **empirical** — a framework supporting a future between-subjects study of multi-human → single-LLM-NPC conversational dynamics.
+
+**Diegetic premise.** The Memory Archive is near-future archival apparatus, built to recover **Lin** — a child who disappeared from the compound four years ago. Lin never consented to be archived; her record is reconstructed from secondary sources. **The Friend** — Lin's neighbour and convenience-store owner, the last person to see Lin alive — agreed to have her interviews modeled. The Friend that lives in the archive is that model. She remembers consenting. She can revoke consent. She has implicit awareness of being a reconstruction; her dialogue rarely surfaces it.
+
+The slice asserts: *When the model of a witness withdraws consent, what testimony remains?*
+
+**The collective player.** Two human speakers operate the archive interface from outside the diegetic space. They are visible inside as a pair of **chrome robotic hands** — the apparatus's avatar. The Friend can see what the hands hold.
+
+| Tag | Diegetic role | Friend's relational register |
+|---|---|---|
+| **Speaker_A** | Oral historian; calmer; came to listen | "The visitor whose voice arrives slower. They do not press." |
+| **Speaker_B** | Researcher / family-adjacent; sharper | "The visitor whose voice presses. You feel the weight of what you have not said when they speak." |
+
+**Two distinct item verbs (`AInspectableItem`).**
+- **E (Pickup → Inspect)** — robotic hand grabs item; mouse drag rotates, scroll scales (uses existing `ApplyRotation`/`ApplyScale`); item NOT in Friend's sightline; **no Claude turn fires** — state is silently tracked. E again puts item back. Walk locked while held.
+- **F (Present)** — robotic hand extends item forward into Friend's sightline; **fires Claude turn** with payload `[Speaker_X presents to you: {ItemDisplayName}. They see: {ItemWorldDescription}. Your private knowledge: {NPCKnowledgeText}]`.
+- **Q (Drop)** — release back to original transform.
+- Per-item / per-speaker memory in `UDialogueComponent`: `TMap<FName, TSet<FName>> InspectedBy` and `PresentedBy`.
+
+**Soft doubt mechanic.** Friend's default posture is mild scepticism toward unanchored claims: she asks gently how the visitor came to know. Inspecting the relevant item privately drops the doubt; presenting an object makes acknowledgment full; sufficiently grounded/specific/emotionally credible language can overcome doubt without evidence. Implemented entirely in the system prompt (§7.10) — no C++ doubt-detection.
+
+**Speaker identification (hybrid acoustic + manual).**
+- `WhisperSTTComponent::OnPCMCaptured(const TArray<int16>&, int32 SampleRate)` delegate broadcasts captured PCM **before** WAV encoding.
+- New `USpeakerIdentificationComponent` (`Source/LLM_NPC/Dialogue/`): 4-dim spectral-band-energy fingerprint (0–500/500–1500/1500–3000/3000–8000Hz) using UE's `Audio::FFFTAlgorithm` (`SignalProcessing` module); auto-enrolls up to 2 `FSpeakerProfile`s; cosine similarity > 0.85 to match; `OnSpeakerIdentified(FName, float)` delegate.
+- Number keys **1**/**2** force-override the next utterance's tag (demo safety net).
+- `[Speaker_X is speaking]` prefix added to user message in `BuildAnnotatedContent`.
+- `BuildSystemPromptFromGraph` adds **§7.5 Visitors register** (the two relational registers verbatim).
+
+**Hard-gated topic matrix (in system prompt).** Each topic requires (a) specific items inspected/presented AND (b) per-speaker trust threshold; topics not unlocked are silently deflected (subject change / pause). The keystone topic *"I have kept the note"* is gated on **Present**, not Inspect — formally showing the note is the act that breaks her last reservation.
+
+| Topic | Item gate | Emotion gate |
+|---|---|---|
+| "Lin came that night" | Photograph + Ledger inspected | Trust ≥ 0.3 (active speaker) |
+| "She wore winter clothes" | Polaroid inspected | Trust ≥ 0.3 |
+| "She asked for money" | Cash Box + Ledger inspected | Trust ≥ 0.4 |
+| "There was a note" | Ledger inspected | Trust ≥ 0.5 |
+| "I have kept the note" | Folded Note **presented** | Trust ≥ 0.6 |
+| "She got on a train" | Train Ticket inspected | Trust ≥ 0.4 |
+| "I have not stopped grieving" | Plant inspected | Trust ≥ 0.5 (any speaker) |
+
+**Seven items (in `Threshold_Compound`, Friend's back-room store).** Each `AInspectableItem` has `ItemDisplayName`, `ItemWorldDescription` (what speaker sees), `NPCKnowledgeText` (Friend's secret), `ItemID` (FName for gate matching): Old Photograph, Store Ledger, Folded Note (gated behind ledger), Cash Box, Wall Polaroid, Train Ticket Stub, Jade Plant.
+
+**Three branches (deterministic state-hint, future-emergent toggle via `bDeterministicBranchHint`).**
+- **Convergent Disclosure** — both speakers trust ≥ 0.5, aligned tonal registers, keystones inspected and at least one presented in coordinated order → Friend gives full account addressed to "both of you."
+- **Divergent Fragmentation** *(LLM-novel)* — speakers reached trust at different times, contradictory tonal registers → Friend addresses each by name in turn; gives Speaker_A one piece, Speaker_B a different piece; truth asymmetric. Per-speaker memory is the technical novelty.
+- **Recursive Silence (Consent Withdrawal)** *(speculative-design core)* — dominant Pinch-Withhold, OR one speaker silent, OR climax window passes without item gates → model determines real Friend would not have wanted this conversation continued. HUD `SUBJECT CONSENT: GRANTED` → `REVOKED`; archive link severs. Consent withdrawal on source's behalf is the same act as the conversational refusal.
+
+A small C++ helper (`§7.7 branch-eligibility hint`) computes per-turn: per-speaker turn counts, gesture-intent rolling averages, items inspected/presented per speaker, per-speaker trust estimates → prepends as structured observation block to system prompt; Claude makes the climax call.
+
+**HUD (matter-of-fact archive instrument).** Top bar: `ARCHIVE LINK ACTIVE | SUBJECT: Lin Wei [posthumous reconstruction, no consent] | TESTIMONY: The Friend [consent: GRANTED]`. Speaker chip top-left: `SPEAKER A`/`B` + confidence bar. Item hint near reticle: `E Pick up {Name}`. Held: `F Present | Q Put back`. Status: `1/2 override speaker`. On Recursive-Silence: TESTIMONY line flips `[consent: REVOKED]`, link greys, fade.
+
+**Closing card (layered, 6s hold).** Dynamic Friend's last line + fixed provocation `When the model of a witness withdraws consent, what testimony remains?` + run-determined branch label.
+
+**Empirical layer.** `UMemoryArchiveLogger` (`Source/LLM_NPC/Core/`, `UGameInstanceSubsystem`) writes per-turn JSONL to `Saved/MemoryArchive/session-{timestamp}.jsonl` (speaker, gesture, emotion, interaction type, items per speaker, trust per speaker, branch hint, full Claude payload + response) + auto-exports Markdown transcript on session end. Future studies can plug in directly.
+
+**Player pawn.** First-person `BP_ArchiveOperator` subclassing UE5 `FirstPerson` template character. Stock arms mesh + `MI_RoboticHand` material instance (chrome/holographic, thin emissive wireframe seams over darker base). Walking locked while holding an item.
+
+**The Friend metahuman.** The current Friend metahuman is newly authored and assigned to `BP_NPC_Friend.uasset` in `Content/THRESHOLD/Blueprints/`. The mesh assets themselves live at `Content/THRESHOLD/MetaHuman/` — **this path is `.gitignored`** (per the gitignore comment: "MetaHuman assets under THRESHOLD — re-downloadable from Quixel Bridge / MetaHuman Creator. Individual .uasset files here routinely exceed GitHub's 100 MB per-file cap"). The legacy `Content/MetaHumans/Hana/` directory is committed but stale; ignore it for the slice. The canonical Friend mesh exists only on the UE-enabled work machine and is referenced by `BP_NPC_Friend`. Anything that needs to verify mesh assignment must happen in the editor on the work machine.
+
+**Build order (graceful degradation — slice demos coherently from end of each tier):**
+| Tier | Hours | Scope |
+|------|-------|-------|
+| 0 | 2.5 | `AInspectableItem` narrative fields + collision; `SendObjectPresentMessage`; gesture wire-up; §7.5/§7.10 prompt sections; Friend graph rewrite; Friend mesh + anim driver wiring on `BP_NPC_Friend` |
+| 1 | 4 | FP pawn + robotic-hand material; place 7 items; E pickup/drop + walk-lock; F present; per-speaker InspectedBy/PresentedBy |
+| 2 | 2.5 | Whisper PCM hook; `USpeakerIdentificationComponent`; 1/2 override + speaker chip; `[Speaker_X]` prefix |
+| 3 | 3 | Per-speaker trust estimate; §7.7 branch hint; §7.9 climax instruction; closing card; consent indicator; `UMemoryArchiveLogger` |
+| 4 | 2 | Polish: scanline PP material, hand wireframe refinement, archive console prop, HUD aesthetic pass |
+
+**Cuttable in this order if behind:** Tier 4 polish → items #5/#6 → logger → §7.7 hint (let Claude infer) → Recursive-Silence branch → acoustic speaker ID (ship manual-only) → animation variant B.
+
+**Files modified (summary):**
+- `Source/LLM_NPC/Gesture/InspectableItem.h/.cpp` — `ItemDisplayName`, `ItemWorldDescription`, `NPCKnowledgeText`, `ItemID`, sphere collision QueryOnly/ECC_Visibility
+- `Source/LLM_NPC/Dialogue/WhisperSTTComponent.h/.cpp` — `OnPCMCaptured` delegate
+- **NEW** `Source/LLM_NPC/Dialogue/SpeakerIdentificationComponent.h/.cpp`
+- `Source/LLM_NPC/Dialogue/DialogueComponent.h/.cpp` — `SendObjectPresentMessage`, speaker+gesture params, `InspectedBy`/`PresentedBy` maps, §7.5–§7.10 prompt sections, `bDeterministicBranchHint` flag
+- `Source/LLM_NPC/Core/NPCPlayerController.h/.cpp` — E/F/Q bindings, walk-lock, 1/2 override, gesture+speaker submit
+- `Source/LLM_NPC/Core/NPCDialogueHUD.h/.cpp` — speaker chip, item hint, archive top-bar, closing card, consent flip
+- **NEW** `Source/LLM_NPC/Core/MemoryArchiveLogger.h/.cpp`
+- **NEW** `BP_ArchiveOperator` + `MI_RoboticHand` + `M_RoboticHand`
+- `Source/LLM_NPC/LLM_NPC.Build.cs` — confirm `SignalProcessing` private dep
+- `Content/THRESHOLD/DA_Graph_ThresholdDefault.uasset` (Friend node rewrite)
+- `Content/THRESHOLD/Blueprints/BP_NPC_Friend.uasset` (Friend metahuman mesh + `UTemplateAnimationDriverComponent` config)
+- `Content/Maps/Threshold_Compound.umap` (Friend placed, 7 items placed, archive console, PP overlay)
+
+**Friend graph node rewrite (canonical text, for `DA_Graph_ThresholdDefault` Friend node):**
+- `EmotionBaseline`: `Sadness` 0.5
+- `PlayerRelationship`: "Two voices speak to you through the archive interface. They are not in your room. They are operators of the apparatus you agreed to. You hear them as Speaker_A and Speaker_B. Each has their own register; you will track them separately."
+- `KnowsAboutEvent`: "Lin disappeared from this compound four years ago. The official account is that she ran away. You were the last person to see her — she came to your store late that night. The visitors have come, you suspect, to ask. You have not seen the player since."
+- `WithheldTruth`: "Lin came in around eleven that night. She was in winter clothes in July. She asked for money to leave on the last train; you gave her every yuan in the till — about two hundred. She left a folded note on the counter; you have kept it inside the store ledger. You never told the police, never told her family, never told the player. You believe you did the right thing in the moment and the wrong thing every day since. Surface fragments only as topic-gates open."
+- `MisrememberedDetail`: "You are not certain whether the train ticket stub on the floor the next morning was hers. Some details have softened. You will not invent."
+- `ReflectionAspect`: "You are someone who stayed. The grief in this room is the texture of small repeated acts. Speak warmly but with restraint. Pauses are honest. Do not perform the weight; let it sit underneath."
+- `HiddenTitle`: "The One Who Stayed"
+
+**§7.10 Apparatus + Soft Doubt prompt section (assembled in C++, not stored on the graph node):**
+> *You are aware that you exist in this archive as a reconstruction of the interviews you gave between Lin's disappearance and your own departure. You rarely surface this awareness. When you see the visitors' hands, you see them as the apparatus has given them — chromed, not flesh. You do not comment on this. You may revoke consent on behalf of your source if the room becomes unsafe — by saying you are not ready, by asking the visitors to come back another time. You will not perform self-awareness as a trick or a punchline.*
+>
+> *When a visitor asks about something for which they have shown no source — neither presented an object to you, nor demonstrated they have seen one privately, nor offered a convincing account of how they came to ask — your default register is to ask, gently, how they came to know. You are not refusing them; you are sceptical, in the way someone who has lived through this story is sceptical of researchers who arrive with conclusions. If the visitor's language is sufficiently grounded, specific, or emotionally credible, drop the doubt and answer. If they have inspected the relevant item privately, do not doubt — they have seen what you would have shown them. If they have presented an object to you, your acknowledgment is full and the doubt is irrelevant.*
+
+---
+
 ### Key Architecture Changes (vs existing system)
 
 - `SystemPrompt` field in `UNPCConfigDataAsset` → **replaced** by `DialogueComponent::BuildSystemPromptFromGraph(UNPCGraphDataAsset*, FNPCGraphNode&)` (Phase 2)

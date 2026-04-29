@@ -8,6 +8,7 @@
 class UClaudeAPISubsystem;
 class UNPCConfigDataAsset;
 class UNPCGraphDataAsset;
+class AInspectableItem;
 struct FNPCGraphNode;
 struct FClaudeAPIResponse;
 
@@ -44,14 +45,35 @@ public:
 	virtual bool IsSubsystemAvailable() const override;
 
 	/**
-	 * Send a user message to the NPC, including detected user emotion context.
+	 * Send a user message to the NPC, including detected user emotion and gesture context.
 	 * Assembles the full conversation context and routes through ClaudeAPISubsystem.
 	 *
 	 * @param UserMessage    The player's text input.
 	 * @param UserEmotion    Detected emotion from the player (facial recognition or default).
+	 * @param GestureIntent  Meta-communicative intent of any concurrent gesture, mapped from
+	 *                       EGestureType by NPCPlayerController. Defaults to None for callers
+	 *                       that do not yet pass a gesture (e.g. text input).
 	 */
 	UFUNCTION(BlueprintCallable, Category = "NPC|Dialogue")
-	void SendUserMessage(const FString& UserMessage, const FDetectedUserEmotion& UserEmotion);
+	void SendUserMessage(const FString& UserMessage, const FDetectedUserEmotion& UserEmotion,
+		EGestureIntent GestureIntent = EGestureIntent::None);
+
+	/**
+	 * Send a presentation message to the NPC: the player has extended a held item into the NPC's
+	 * sightline. Fires a Claude turn with payload describing what the item is and what the NPC
+	 * privately knows about it. The NPC's response is generated against the rest of the system
+	 * prompt + this turn's anchored context.
+	 *
+	 * Only the Present verb fires a turn; the Pickup/Inspect verb is silent state-tracking by
+	 * the controller and does NOT call this method (per the slice's two-verb design).
+	 *
+	 * @param Item           The item being presented. Must be non-null and have ItemDisplayName set.
+	 * @param UserEmotion    Detected emotion from the player at present time.
+	 * @param GestureIntent  Optional gesture intent applied to this turn.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "NPC|Dialogue")
+	void SendObjectPresentMessage(AInspectableItem* Item, const FDetectedUserEmotion& UserEmotion,
+		EGestureIntent GestureIntent = EGestureIntent::None);
 
 	/** Clear all conversation history. */
 	UFUNCTION(BlueprintCallable, Category = "NPC|Dialogue")

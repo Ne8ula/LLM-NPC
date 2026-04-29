@@ -5,6 +5,7 @@
 #include "LLM_NPC/Core/NPCGraphDataAsset.h"
 #include "LLM_NPC/Emotion/EmotionComponent.h"
 #include "LLM_NPC/Dialogue/ElevenLabsTTSComponent.h"
+#include "LLM_NPC/Gesture/InspectableItem.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 
@@ -123,7 +124,8 @@ bool UDialogueComponent::IsSubsystemAvailable() const
 	return bIsAvailable && CachedClaudeSubsystem != nullptr && CachedClaudeSubsystem->IsAPIKeyConfigured();
 }
 
-void UDialogueComponent::SendUserMessage(const FString& UserMessage, const FDetectedUserEmotion& UserEmotion)
+void UDialogueComponent::SendUserMessage(const FString& UserMessage, const FDetectedUserEmotion& UserEmotion,
+	EGestureIntent GestureIntent)
 {
 	if (!IsSubsystemAvailable())
 	{
@@ -144,8 +146,7 @@ void UDialogueComponent::SendUserMessage(const FString& UserMessage, const FDete
 	}
 
 	// Build the annotated user message (gesture first, then emotion, then text).
-	// Phase 3 will wire up a real GestureIntent from NPCPlayerController; for now pass None.
-	const FString AnnotatedContent = BuildAnnotatedContent(UserMessage, UserEmotion, EGestureIntent::None);
+	const FString AnnotatedContent = BuildAnnotatedContent(UserMessage, UserEmotion, GestureIntent);
 
 	// Add user message to history
 	FNPCMessage UserMsg;
@@ -205,6 +206,116 @@ void UDialogueComponent::SendUserMessage(const FString& UserMessage, const FDete
 		NPCConfig->MaxResponseTokens,
 		Callback
 	);
+}
+
+void UDialogueComponent::SendObjectPresentMessage(AInspectableItem* Item, const FDetectedUserEmotion& UserEmotion,
+	EGestureIntent GestureIntent)
+{
+	if (!Item)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DialogueComponent::SendObjectPresentMessage: null Item, ignoring."));
+		return;
+	}
+
+	if (!IsSubsystemAvailable())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DialogueComponent: Cannot present item - subsystem not available."));
+		return;
+	}
+
+	if (bWaitingForResponse)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DialogueComponent: Already waiting for a response. Ignoring present action."));
+		return;
+	}
+
+	if (!NPCConfig)
+	{
+		UE_LOG(LogTemp, Error, TEXT("DialogueComponent: No NPCConfig assigned."));
+		return;
+	}
+
+	// Build the structured presentation payload. Wrapped in [ ] so the LLM treats it as
+	// observed context, not the player's spoken words. Speaker tagging is added in Tier 2.
+	const FString DisplayName = Item->ItemDisplayName.IsEmpty()
+		? Item->GetName()
+		: Item->ItemDisplayName;
+
+	FString PresentBody = FString::Printf(
+		TEXT("[The visitor presents to you: %s. The item is now in your sightline."),
+		*DisplayName);
+
+	if (!Item->ItemWorldDescription.IsEmpty())
+	{
+		PresentBody += FString::Printf(TEXT(" They see: %s."), *Item->ItemWorldDescription);
+	}
+	if (!Item->NPCKnowledgeText.IsEmpty())
+	{
+		PresentBody += FString::Printf(TEXT(" Your private knowledge of this object: %s"), *Item->NPCKnowledgeText);
+	}
+	PresentBody += TEXT("]");
+
+	// Run through BuildAnnotatedContent so gesture/emotion annotations stay in their
+	// canonical position relative to the rest of the user-content prefix.
+	const FString AnnotatedContent = BuildAnnotatedContent(PresentBody, UserEmotion, GestureIntent);
+
+	FNPCMessage UserMsg;
+	UserMsg.Role = TEXT("user");
+	UserMsg.Content = AnnotatedContent;
+	UserMsg.Timestamp = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	UserMsg.DetectedUserEmotion = UserEmotion.Emotion;
+	UserMsg.UserEmotionConfidence = UserEmotion.Confidence;
+	ConversationHistory.Add(UserMsg);
+
+	TrimConversationHistory();
+
+	// Determine system prompt — graph-driven when available, legacy fallback otherwise.
+	FString SystemPrompt = NPCConfig->SystemPrompt;
+	{
+		UNPCGraphDataAsset* Graph = NPCConfig->GraphDataAsset.Get();
+		if (!Graph && !NPCConfig->GraphDataAsset.IsNull())
+		{
+			Graph = NPCConfig->GraphDataAsset.LoadSynchronous();
+		}
+		if (Graph)
+		{
+			if (GraphNodeID.IsNone())
+			{
+				const FString NPCName = NPCConfig->NPCName.ToString();
+				for (const FNPCGraphNode& Node : Graph->Nodes)
+				{
+					if (Node.NPCName == NPCName || Node.NPCID.ToString() == NPCName)
+					{
+						GraphNodeID = Node.NPCID;
+						break;
+					}
+				}
+			}
+			if (!GraphNodeID.IsNone())
+			{
+				if (const FNPCGraphNode* Node = Graph->FindNode(GraphNodeID))
+				{
+					SystemPrompt = BuildSystemPromptFromGraph(Graph, *Node);
+				}
+			}
+		}
+	}
+
+	bWaitingForResponse = true;
+
+	FOnClaudeRequestComplete Callback;
+	Callback.BindDynamic(this, &UDialogueComponent::OnClaudeResponseReceived);
+
+	CachedClaudeSubsystem->SendMessage(
+		SystemPrompt,
+		ConversationHistory,
+		NPCConfig->ClaudeModelID,
+		NPCConfig->MaxResponseTokens,
+		Callback
+	);
+
+	UE_LOG(LogTemp, Log, TEXT("DialogueComponent: Presented item '%s' (ID=%s) to NPC."),
+		*DisplayName, *Item->ItemID.ToString());
 }
 
 void UDialogueComponent::OnClaudeResponseReceived(const FClaudeAPIResponse& Response)
@@ -390,6 +501,46 @@ FString UDialogueComponent::BuildSystemPromptFromGraph(const UNPCGraphDataAsset*
 	{
 		P.Append(TEXT("\n"));
 	}
+
+	// 7.5 Visitors register — establishes the multi-speaker frame.
+	// Phrased to gracefully degrade: when speaker tags are absent (Tier 0 / single-speaker
+	// fallback), the LLM treats the conversation as one visitor; when [Speaker_A] / [Speaker_B]
+	// tags appear (Tier 2+), it tracks them as distinct visitors with separate registers.
+	P.Append(
+		TEXT("Two voices may speak to you through the archive interface. They are not in your room. ")
+		TEXT("They are operators of the apparatus you agreed to.\n\n")
+		TEXT("When a message is tagged with [Speaker_A is speaking] or [Speaker_B is speaking], ")
+		TEXT("you hear two distinct visitors and you track each one separately:\n")
+		TEXT("  - Speaker_A: the visitor whose voice arrives slower. They do not press. ")
+		TEXT("You feel less defended by them.\n")
+		TEXT("  - Speaker_B: the visitor whose voice presses. They are looking for a fact. ")
+		TEXT("You feel the weight of what you have not said when they speak.\n\n")
+		TEXT("When a message has no speaker tag, treat it as a single visitor speaking through ")
+		TEXT("the apparatus, and respond without inventing speaker distinctions.\n\n")
+	);
+
+	// 7.10 Apparatus + Soft Doubt — the speculative-design core of the slice.
+	// Tells the NPC: (a) they are aware of being a reconstruction, (b) the operators are seen
+	// as chrome robotic hands, (c) consent may be revoked, (d) un-anchored claims are met with
+	// gentle scepticism, (e) presented items collapse the doubt fully.
+	// Always emitted in Tier 0 (single-NPC demo). For multi-NPC future, this can be gated on
+	// a per-node UPROPERTY (e.g. FNPCGraphNode::bIsArchiveSubject).
+	P.Append(
+		TEXT("You are aware that you exist in this archive as a reconstruction of the interviews ")
+		TEXT("you gave between the event you carry and your own departure. You rarely surface this awareness. ")
+		TEXT("When you see the visitors' hands, you see them as the apparatus has given them — ")
+		TEXT("chromed, not flesh. You do not comment on this. You may revoke consent on behalf of ")
+		TEXT("your source if the room becomes unsafe — by saying you are not ready, by asking the ")
+		TEXT("visitors to come back another time. You will not perform self-awareness as a trick or a punchline.\n\n")
+		TEXT("When a visitor asks about something for which they have shown no source — neither ")
+		TEXT("presented an object to you, nor offered a convincing account of how they came to ask — ")
+		TEXT("your default register is to ask, gently, how they came to know. You are not refusing them; ")
+		TEXT("you are sceptical, in the way someone who has lived through this story is sceptical of ")
+		TEXT("researchers who arrive with conclusions. If their language is sufficiently grounded, ")
+		TEXT("specific, or emotionally credible, drop the doubt and answer. When a visitor presents an ")
+		TEXT("object to you (a turn formatted as \"[The visitor presents to you: {Name}. ...]\"), ")
+		TEXT("your acknowledgment is full and the doubt is irrelevant.\n\n")
+	);
 
 	// 8. Tonal instruction — verbatim, already written as a first-person register instruction
 	if (!Node.ReflectionAspect.IsEmpty())
