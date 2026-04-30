@@ -57,8 +57,10 @@ void ANPCGameMode::BeginPlay()
 
 		// Runtime tuning — applied here so they affect all THRESHOLD NPCs without
 		// needing to edit each DA_Threshold_* asset individually.
-		// Emotion decay: very slow so a triggered emotion lasts the full conversation.
-		NPC->NPCConfig->EmotionDecayRate = 0.003f;   // ~300s from 1.0 to threshold
+		// Emotion decay: fast enough that a triggered state fades during a long
+		// silence (so she doesn't keep crying without input), slow enough that
+		// it persists across turn-by-turn pauses inside an active conversation.
+		NPC->NPCConfig->EmotionDecayRate = 0.015f;   // ~65s from 1.0 to threshold
 		NPC->NPCConfig->NeutralThreshold = 0.03f;    // lowers the floor; emotion persists longer
 		// Response length: 150 tokens ~ 1–2 sentences.
 		NPC->NPCConfig->MaxResponseTokens = 150;

@@ -34,6 +34,14 @@ struct LLM_NPC_API FClaudeAPIResponse
 	UPROPERTY(BlueprintReadOnly, Category = "Claude")
 	FString ItemID;
 
+	/**
+	 * Memory Archive branch_resolution (Tier 3). Empty on every non-climax turn.
+	 * "convergent" / "recursive_silence" only on the climax turn — DialogueComponent
+	 * parses and broadcasts OnBranchResolved.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Claude")
+	FString BranchResolution;
+
 	/** Whether the request was successful. */
 	UPROPERTY(BlueprintReadOnly, Category = "Claude")
 	bool bSuccess = false;

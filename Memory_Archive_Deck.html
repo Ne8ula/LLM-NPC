@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>The Memory Archive — Vertical Slice</title>
+<style>
+  :root {
+    --phosphor:        #33fa72;
+    --phosphor-bright: #66ff8c;
+    --phosphor-dim:    #1aa047;
+    --phosphor-faint:  #0f5028;
+    --warn:            #ffa733;
+    --alert:           #ff5252;
+    --bg:              #050a07;
+    --panel:           #0a120c;
+    --border:          #1a8c3d;
+    --content:         #ebf2ec;
+    --content-dim:     #8a9d8e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--content); }
+  body {
+    font-family: "JetBrains Mono", "Consolas", "Menlo", ui-monospace, monospace;
+    font-size: 14px;
+    line-height: 1.55;
+    scroll-snap-type: y mandatory;
+    overflow-y: scroll;
+    height: 100vh;
+  }
+  .slide {
+    min-height: 100vh;
+    padding: 48px 64px;
+    scroll-snap-align: start;
+    display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid var(--phosphor-faint);
+    position: relative;
+  }
+  .topbar {
+    display: flex;
+    gap: 24px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    padding: 8px 16px;
+    font-size: 12px;
+    color: var(--phosphor-dim);
+    margin-bottom: 32px;
+    align-items: center;
+  }
+  .topbar .brand { color: var(--phosphor-bright); letter-spacing: 0.08em; }
+  .topbar .sep   { color: var(--phosphor-faint); }
+  .topbar .meta  { color: var(--content-dim); }
+  .topbar .pageno{ margin-left: auto; color: var(--phosphor); }
+
+  h1 {
+    font-size: 42px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    margin: 16px 0 4px;
+    color: var(--phosphor-bright);
+  }
+  h1 small {
+    display: block;
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--content-dim);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  h2 {
+    font-size: 18px;
+    color: var(--phosphor);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin: 32px 0 12px;
+    border-bottom: 1px solid var(--phosphor-faint);
+    padding-bottom: 6px;
+  }
+  p { margin: 0 0 14px; max-width: 78ch; }
+  .lead {
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--content);
+    border-left: 2px solid var(--phosphor);
+    padding-left: 16px;
+    max-width: 78ch;
+    margin: 0 0 24px;
+  }
+  .provocation {
+    font-size: 22px;
+    color: var(--phosphor-bright);
+    font-style: italic;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    padding: 24px 28px;
+    margin: 24px 0;
+    max-width: 78ch;
+  }
+  .provocation::before { content: "“"; color: var(--phosphor-dim); margin-right: 4px; }
+  .provocation::after  { content: "”"; color: var(--phosphor-dim); margin-left: 4px;  }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+
+  .panel {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    padding: 16px 20px;
+  }
+  .panel h3 {
+    font-size: 13px;
+    margin: 0 0 10px;
+    color: var(--phosphor);
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+  }
+  .panel ul { margin: 0; padding-left: 18px; }
+  .panel li { margin-bottom: 6px; color: var(--content); }
+  .panel .small { color: var(--content-dim); font-size: 12px; }
+
+  /* pipeline diagram (single line) */
+  .pipeline {
+    display: grid;
+    grid-template-columns: repeat(7, auto);
+    align-items: center;
+    gap: 12px;
+    margin: 16px 0 24px;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+  }
+  .pipeline .node {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    padding: 10px 14px;
+    color: var(--phosphor-bright);
+    text-align: center;
+  }
+  .pipeline .node small { display:block; color: var(--content-dim); font-size: 10px; letter-spacing: 0.04em; }
+  .pipeline .arrow { color: var(--phosphor-dim); font-size: 16px; }
+
+  /* trust formula box */
+  .formula {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    padding: 16px 20px;
+    font-family: "JetBrains Mono", monospace;
+    font-size: 14px;
+    color: var(--content);
+    line-height: 1.7;
+    max-width: 78ch;
+  }
+  .formula .label { color: var(--phosphor-dim); }
+  .formula .num   { color: var(--phosphor-bright); }
+
+  /* branch cards */
+  .branch {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    min-height: 280px;
+  }
+  .branch .tier-label {
+    font-size: 11px;
+    letter-spacing: 0.10em;
+    color: var(--phosphor-dim);
+    margin-bottom: 4px;
+  }
+  .branch .tier-name {
+    font-size: 18px;
+    color: var(--phosphor-bright);
+    margin-bottom: 12px;
+    letter-spacing: 0.04em;
+  }
+  .branch.timeout .tier-name { color: var(--alert); }
+  .branch .gate {
+    font-size: 12px;
+    color: var(--content-dim);
+    border-bottom: 1px dashed var(--phosphor-faint);
+    padding-bottom: 8px;
+    margin-bottom: 12px;
+  }
+  .branch .what {
+    flex: 1;
+    color: var(--content);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .branch .quote {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--phosphor-faint);
+    font-style: italic;
+    color: var(--phosphor);
+    font-size: 12px;
+  }
+
+  /* keys */
+  kbd {
+    display: inline-block;
+    border: 1px solid var(--phosphor);
+    color: var(--phosphor-bright);
+    background: rgba(51,250,114,0.06);
+    padding: 1px 8px;
+    font-size: 12px;
+    border-radius: 2px;
+    font-family: inherit;
+    letter-spacing: 0.04em;
+  }
+
+  .footer {
+    margin-top: auto;
+    padding-top: 24px;
+    color: var(--content-dim);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    display: flex;
+    justify-content: space-between;
+  }
+  .footer .right { color: var(--phosphor-dim); }
+
+  /* print friendly */
+  @media print {
+    body { height: auto; overflow: visible; }
+    .slide { page-break-after: always; min-height: auto; padding: 32px 40px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================== SLIDE 1 ============================== -->
+<section class="slide">
+  <div class="topbar">
+    <span class="brand">ARCHIVE LINK ACTIVE</span>
+    <span class="sep">│</span>
+    <span class="meta">SUBJECT ASHLEY WEI <span class="sep">·</span> posthumous reconstruction, no consent</span>
+    <span class="pageno">01 / 03</span>
+  </div>
+
+  <h1>
+    <small>VERTICAL SLICE — UE 5.7</small>
+    The Memory Archive
+  </h1>
+
+  <p class="lead">
+    A near-future archival apparatus built to recover Ashley — a child who disappeared from a
+    Chinese residential compound four years ago. Ashley never consented. Her record is reconstructed
+    from secondary sources. The Friend — her neighbour, the last person to see her — agreed to be
+    modeled. The Friend that lives in the archive is that model. She remembers consenting. She can
+    revoke it.
+  </p>
+
+  <div class="provocation">
+    When the model of a witness withdraws consent, what testimony remains?
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <h3>Premise</h3>
+      <p class="small">
+        You operate the archive from outside the diegetic space. You speak to The Friend through
+        a live conversational pipeline — your voice routes through Whisper, the model's response
+        routes back through ElevenLabs. No scripted dialogue. Every line is generated, every turn.
+      </p>
+    </div>
+    <div class="panel">
+      <h3>Contribution</h3>
+      <p class="small">
+        <strong>Speculative design</strong> — the archive frame as a provocation about consent, witness,
+        and model-mediated testimony.
+        <br><br>
+        <strong>Empirical scaffold</strong> — a runtime that supports between-subjects study of
+        single-LLM-NPC conversational dynamics under emotional pressure.
+      </p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>UE 5.7 · Claude API · OpenAI Whisper · ElevenLabs v3 · Plutchik PAD</span>
+    <span class="right">demo · 2026-04-30</span>
+  </div>
+</section>
+
+<!-- ============================== SLIDE 2 ============================== -->
+<section class="slide">
+  <div class="topbar">
+    <span class="brand">MECHANICS &amp; STACK</span>
+    <span class="sep">│</span>
+    <span class="meta">single-speaker · 4-minute session</span>
+    <span class="pageno">02 / 03</span>
+  </div>
+
+  <h1>
+    <small>HOW IT WORKS</small>
+    Two verbs. One trust score. One timer.
+  </h1>
+
+  <h2>Live conversational pipeline</h2>
+  <div class="pipeline">
+    <div class="node">VOICE<small>microphone</small></div>
+    <div class="arrow">▶</div>
+    <div class="node">WHISPER<small>STT</small></div>
+    <div class="arrow">▶</div>
+    <div class="node">CLAUDE<small>graph-driven prompt</small></div>
+    <div class="arrow">▶</div>
+    <div class="node">ELEVENLABS<small>v3 TTS · Friend speaks</small></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <h3>The two interactions</h3>
+      <ul>
+        <li><kbd>E</kbd> — pick up an item. Silently registers it as <em>inspected</em>.
+            No model turn fires. The Friend does not see it.</li>
+        <li><kbd>F</kbd> — present the held item to the Friend. Fires a Claude turn with
+            the item's description and her private knowledge of it.</li>
+      </ul>
+      <p class="small" style="margin-top:10px;">
+        7 inspectable items in her back-room store: photograph, phone book, letter, cash,
+        jade pendant, chessboard, bonsai. Each carries a piece of what she has not said.
+      </p>
+    </div>
+    <div class="panel">
+      <h3>Trust — the gate to the climax</h3>
+      <div class="formula">
+        <span class="label">trust =</span><br>
+        &nbsp;&nbsp;<span class="num">0.10</span> · items inspected<br>
+        + <span class="num">0.15</span> · items presented<br>
+        + <span class="num">0.05</span> · spoken / typed turns
+      </div>
+      <p class="small" style="margin-top:10px;">
+        Read into Claude's system prompt every turn (§7.7), so the model paces the climax
+        against deterministic ground truth — not vibes.
+      </p>
+    </div>
+  </div>
+
+  <h2>The session</h2>
+  <div class="grid-2">
+    <div class="panel">
+      <h3>Time budget</h3>
+      <p class="small">
+        Hard 4-minute window from your first turn. The HUD's archive bar counts down.
+        If you reach the keystone gate (letter presented) in time, you trigger one of two
+        Convergent climaxes. If you don't, the Friend revokes consent — Recursive Silence.
+      </p>
+    </div>
+    <div class="panel">
+      <h3>What's on screen</h3>
+      <p class="small">
+        Top archive bar — link state, subject, timer, trust, item counts, climax readiness.
+        Visitor panel — your speaker tag (acoustic ID) and confidence.
+        Friend panel — her live Plutchik emotion, intensity, and PAD vector.
+        Chat overlay — visible only when you press <kbd>T</kbd>.
+      </p>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>graph-driven prompts · per-NPC ground truth · tiered system-prompt assembly</span>
+    <span class="right">~12 components · ~12K LOC C++</span>
+  </div>
+</section>
+
+<!-- ============================== SLIDE 3 ============================== -->
+<section class="slide">
+  <div class="topbar">
+    <span class="brand">CLIMAX RESOLUTION</span>
+    <span class="sep">│</span>
+    <span class="meta">three branches · one closing card</span>
+    <span class="pageno">03 / 03</span>
+  </div>
+
+  <h1>
+    <small>HOW IT ENDS</small>
+    The shape of what she gives you.
+  </h1>
+
+  <p class="lead">
+    The keystone act is presenting the letter. What she says next is determined entirely by how
+    you got there — what you inspected, what you said, how long it took. The closing card waits
+    for her to finish speaking, then names what just happened.
+  </p>
+
+  <div class="grid-3">
+    <div class="branch">
+      <div class="tier-label">TRUST 0.50 – 0.70</div>
+      <div class="tier-name">Convergent — Departure Only</div>
+      <div class="gate">letter presented · keystones inspected · trust ≥ 0.50</div>
+      <div class="what">
+        She admits she has kept the letter. She tells you Ashley left — alive, by choice. She
+        speaks of the direction and the feeling of it. She does not name a city. The visitor has
+        not quite earned that detail.
+      </div>
+      <div class="quote">"She admitted the leaving. She kept the place for herself."</div>
+    </div>
+
+    <div class="branch">
+      <div class="tier-label">TRUST ≥ 0.70</div>
+      <div class="tier-name">Convergent — Destination Disclosed</div>
+      <div class="gate">same gates · plus higher trust threshold</div>
+      <div class="what">
+        She gives you the full account. She names the place — Kunming, in Yunnan, the small hostel
+        near Cuihu Lake. She tells you the one anchoring detail you would only know if you had
+        earned it.
+      </div>
+      <div class="quote">"She named the place. The visitor earned the full record."</div>
+    </div>
+
+    <div class="branch timeout">
+      <div class="tier-label">TIME EXPIRED</div>
+      <div class="tier-name">Recursive Silence</div>
+      <div class="gate">4-minute window closes · keystone not met</div>
+      <div class="what">
+        The model determines the real Friend would not have wanted this conversation continued.
+        She declines, gently. Her final sentence revokes consent on Ashley's behalf. The archive
+        link greys.
+      </div>
+      <div class="quote">"The witness model declined to continue. The session is over."</div>
+    </div>
+  </div>
+
+  <h2>Closing card</h2>
+  <p>
+    Three layers, six-second hold: the Friend's last spoken line in quotes, the fixed provocation
+    underneath, and the run-determined branch label at the bottom — so the audience sees what
+    happened without having to re-watch.
+  </p>
+
+  <div class="provocation">
+    When the model of a witness withdraws consent, what testimony remains?
+  </div>
+
+  <div class="footer">
+    <span>each branch is the same architecture answering a different question about what was earned</span>
+    <span class="right">end · 03 / 03</span>
+  </div>
+</section>
+
+</body>
+</html>

@@ -1,26 +1,54 @@
 #include "NPCDialogueHUD.h"
 #include "NPCCharacter.h"
 #include "NPCConfigDataAsset.h"
+#include "NPCPlayerController.h"
 #include "LLM_NPC/Dialogue/DialogueComponent.h"
+#include "LLM_NPC/Dialogue/ElevenLabsTTSComponent.h"
 #include "LLM_NPC/Dialogue/WhisperSTTComponent.h"
+#include "LLM_NPC/Emotion/EmotionComponent.h"
+#include "LLM_NPC/Gesture/InspectableItem.h"
+#include "LLM_NPC/Vision/FacialRecognitionComponent.h"
 #include "LLM_NPC/Core/NPCTypes.h"
 #include "Engine/Canvas.h"
 #include "Engine/Font.h"
 #include "Kismet/GameplayStatics.h"
+#include "TimerManager.h"
 
-// Chat line colors — defined once, used in all Add() calls
-static const FLinearColor ColSystem (0.38f, 0.38f, 0.46f, 1.0f);
-static const FLinearColor ColFocus  (0.48f, 0.48f, 0.72f, 1.0f);
-static const FLinearColor ColPlayer (0.45f, 0.82f, 1.00f, 1.0f);
-static const FLinearColor ColNPC    (0.28f, 0.90f, 0.52f, 1.0f);
-static const FLinearColor ColError  (1.00f, 0.35f, 0.35f, 1.0f);
-static const FLinearColor ColGold   (1.00f, 0.80f, 0.30f, 1.0f);
+// Archive instrument palette (matrix-green phosphor on near-black).
+// Body content (chat text, NPC name, last line) stays high-contrast white-ish so
+// the script reads cleanly; ALL framing/labels/numerals are phosphor-green.
+static const FLinearColor cPhosphor      (0.20f, 0.98f, 0.45f, 1.00f);  // primary green
+static const FLinearColor cPhosphorDim   (0.10f, 0.62f, 0.28f, 1.00f);  // dim labels
+static const FLinearColor cPhosphorBright(0.40f, 1.00f, 0.55f, 1.00f);  // active state
+static const FLinearColor cPanelBG       (0.00f, 0.04f, 0.02f, 0.86f);  // panel bg
+static const FLinearColor cPanelBorder   (0.10f, 0.55f, 0.24f, 1.00f);  // bevel/edge
+static const FLinearColor cContent       (0.92f, 0.96f, 0.92f, 1.00f);  // body text
+static const FLinearColor cContentDim    (0.55f, 0.66f, 0.58f, 1.00f);  // hint text
+static const FLinearColor cWarn          (1.00f, 0.65f, 0.20f, 1.00f);  // amber accent
+static const FLinearColor cAlert         (1.00f, 0.32f, 0.32f, 1.00f);  // alert/REC
+
+// Chat line colors (player + NPC + system)
+static const FLinearColor ColSystem (cPhosphorDim);
+static const FLinearColor ColFocus  (cPhosphor);
+static const FLinearColor ColPlayer (0.85f, 0.95f, 1.00f, 1.00f);  // visitor lines: cool white
+static const FLinearColor ColNPC    (cContent);                    // Friend's lines: warm white
+static const FLinearColor ColError  (cAlert);
+static const FLinearColor ColGold   (cWarn);
 
 void ANPCDialogueHUD::BeginPlay()
 {
 	Super::BeginPlay();
 
-	ChatLines.Add({TEXT("[System]: Chat ready. Type or hold V to speak."), ColSystem});
+	ChatLines.Add({TEXT("[archive] link established. type T or step closer to begin."), ColSystem});
+
+	// Demo instrumentation: count inspectable items in the level so the archive bar
+	// can render "INSPECTED N/M" without hardcoding a 7. Done once at BeginPlay; the
+	// level layout is static during a session.
+	{
+		TArray<AActor*> Items;
+		UGameplayStatics::GetAllActorsOfClass(GetWorld(), AInspectableItem::StaticClass(), Items);
+		TotalInspectableItems = Items.Num();
+	}
 
 	// Bind to first NPC in world as initial focus.
 	// NPCPlayerController::UpdateNPCFocus() takes over proximity tracking on its first tick.
@@ -46,12 +74,23 @@ void ANPCDialogueHUD::SetFocusedNPC(ANPCCharacter* NPC)
 	if (BoundDialogue)
 	{
 		BoundDialogue->OnDialogueResponseReceived.RemoveDynamic(this, &ANPCDialogueHUD::OnNPCResponse);
+		BoundDialogue->OnBranchResolved.RemoveDynamic(this, &ANPCDialogueHUD::OnArchiveBranchResolved);
 		BoundDialogue = nullptr;
 	}
 	if (BoundSTT)
 	{
 		BoundSTT->OnTranscriptReady.RemoveDynamic(this, &ANPCDialogueHUD::OnVoiceTranscript);
 		BoundSTT = nullptr;
+	}
+	if (BoundFacialRec)
+	{
+		BoundFacialRec->OnUserEmotionDetected.RemoveDynamic(this, &ANPCDialogueHUD::OnUserEmotionDetected);
+		BoundFacialRec = nullptr;
+	}
+	if (BoundTTS)
+	{
+		BoundTTS->OnSpeechFinished.RemoveDynamic(this, &ANPCDialogueHUD::OnFriendSpeechFinished);
+		BoundTTS = nullptr;
 	}
 
 	FocusedNPCActor = NPC;
@@ -69,6 +108,7 @@ void ANPCDialogueHUD::SetFocusedNPC(ANPCCharacter* NPC)
 	{
 		BoundDialogue = NPC->DialogueComponent;
 		BoundDialogue->OnDialogueResponseReceived.AddDynamic(this, &ANPCDialogueHUD::OnNPCResponse);
+		BoundDialogue->OnBranchResolved.AddDynamic(this, &ANPCDialogueHUD::OnArchiveBranchResolved);
 		UE_LOG(LogTemp, Log, TEXT("NPCDialogueHUD: Bound to DialogueComponent of %s"), *NPC->GetName());
 	}
 	if (NPC->WhisperSTTComponent)
@@ -76,20 +116,30 @@ void ANPCDialogueHUD::SetFocusedNPC(ANPCCharacter* NPC)
 		BoundSTT = NPC->WhisperSTTComponent;
 		BoundSTT->OnTranscriptReady.AddDynamic(this, &ANPCDialogueHUD::OnVoiceTranscript);
 	}
+	if (NPC->FacialRecognitionComponent)
+	{
+		BoundFacialRec = NPC->FacialRecognitionComponent;
+		BoundFacialRec->OnUserEmotionDetected.AddDynamic(this, &ANPCDialogueHUD::OnUserEmotionDetected);
+	}
+	if (NPC->ElevenLabsTTSComponent)
+	{
+		BoundTTS = NPC->ElevenLabsTTSComponent;
+		BoundTTS->OnSpeechFinished.AddDynamic(this, &ANPCDialogueHUD::OnFriendSpeechFinished);
+	}
 
 	FocusedNPCName = (NPC->NPCConfig && !NPC->NPCConfig->NPCName.IsEmpty())
 		? NPC->NPCConfig->NPCName.ToString()
 		: NPC->GetName();
 
 	StatusMessage = TEXT("idle");
-	ChatLines.Add({FString::Printf(TEXT("Now speaking with %s."), *FocusedNPCName), ColFocus});
+	ChatLines.Add({FString::Printf(TEXT("[archive] subject in range: %s"), *FocusedNPCName), ColFocus});
 }
 
 void ANPCDialogueHUD::DrawHUD()
 {
 	Super::DrawHUD();
 
-	if (!Canvas || !bDialogueVisible)
+	if (!Canvas)
 	{
 		return;
 	}
@@ -100,119 +150,361 @@ void ANPCDialogueHUD::DrawHUD()
 		return;
 	}
 
-	const float ScreenH = Canvas->SizeY;
-	CachedScreenH = ScreenH;  // used by HandleMouseClick for hit-testing
-
-	// ── Panel geometry ───────────────────────────────────────
-	const float PanelX  = 20.0f;
-	const float PanelW  = 400.0f;
-	const float LineH   = 21.0f;
-	const float Pad     = 10.0f;
-	const float HeaderH = 30.0f;
-	const float SepH    = 1.0f;
-	const int32 MaxLines = 5;
-	const float ChatH   = MaxLines * LineH + Pad;
-	const float InputH  = 32.0f;
-	const float PanelH  = HeaderH + SepH + ChatH + SepH + InputH;
-	const float PanelY  = ScreenH - PanelH - 20.0f;
-
-	// ── Draw helpers ─────────────────────────────────────────
+	// Draw helpers shared across the closing card and the live HUD.
 	auto Rect = [&](float X, float Y, float W, float H, FLinearColor C)
 	{
 		FCanvasTileItem Item(FVector2D(X, Y), FVector2D(W, H), C);
 		Item.BlendMode = SE_BLEND_Translucent;
 		Canvas->DrawItem(Item);
 	};
-
-	auto Txt = [&](const FString& S, float X, float Y, FLinearColor C, float Sc = 1.12f)
+	auto Txt = [&](const FString& S, float X, float Y, FLinearColor C, float Sc = 1.10f)
 	{
 		FCanvasTextItem Item(FVector2D(X, Y), FText::FromString(S), Font, C);
 		Item.Scale = FVector2D(Sc, Sc);
 		Canvas->DrawItem(Item);
 	};
-
 	auto Clip = [](const FString& S, int32 Max) -> FString
 	{
-		return S.Len() > Max ? S.Left(Max - 1) + TEXT("\u2026") : S;
+		return S.Len() > Max ? S.Left(Max - 1) + TEXT("…") : S;
+	};
+	auto FramedPanel = [&](float X, float Y, float W, float H)
+	{
+		Rect(X, Y, W, H, cPanelBG);
+		Rect(X,         Y,         W, 1.0f, cPanelBorder);
+		Rect(X,         Y + H - 1, W, 1.0f, cPanelBorder);
+		Rect(X,         Y,         1.0f, H, cPanelBorder);
+		Rect(X + W - 1, Y,         1.0f, H, cPanelBorder);
+	};
+	auto EmotionLabel = [](EEmotionType E) -> const TCHAR*
+	{
+		switch (E)
+		{
+		case EEmotionType::Joy:           return TEXT("JOY");
+		case EEmotionType::Sadness:       return TEXT("SADNESS");
+		case EEmotionType::Anger:         return TEXT("ANGER");
+		case EEmotionType::Fear:          return TEXT("FEAR");
+		case EEmotionType::Surprise:      return TEXT("SURPRISE");
+		case EEmotionType::Disgust:       return TEXT("DISGUST");
+		case EEmotionType::Trust:         return TEXT("TRUST");
+		case EEmotionType::Anticipation:  return TEXT("ANTICIPATION");
+		default:                          return TEXT("NEUTRAL");
+		}
 	};
 
-	// ── Color palette ────────────────────────────────────────
-	const FLinearColor cBG    (0.04f, 0.04f, 0.07f, 0.92f);
-	const FLinearColor cHead  (0.06f, 0.06f, 0.11f, 1.00f);
-	const FLinearColor cSep   (0.14f, 0.14f, 0.22f, 1.00f);
-	const FLinearColor cInput (bTextInputActive ? 0.09f : 0.05f,
-	                           bTextInputActive ? 0.09f : 0.05f,
-	                           bTextInputActive ? 0.14f : 0.09f, 1.00f);
-	const FLinearColor cName  (0.90f, 0.90f, 0.96f, 1.00f);
-	const FLinearColor cHint  (0.27f, 0.27f, 0.34f, 1.00f);
-	const FLinearColor cCaret (0.72f, 0.72f, 0.80f, 1.00f);
-	const FLinearColor cRec   (1.00f, 0.25f, 0.25f, 1.00f);
-	const FLinearColor cWait  (0.50f, 0.50f, 0.60f, 1.00f);
+	// Tier 3 closing card. Drawn over everything else and is the only thing on
+	// screen when the session resolves; we suppress all other HUD while it's up.
+	if (bClosingCardActive)
+	{
+		const float ScreenW = Canvas->SizeX;
+		const float ScreenHF = Canvas->SizeY;
 
-	// ── Panel background ─────────────────────────────────────
-	Rect(PanelX, PanelY, PanelW, PanelH, cBG);
+		const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+		const float Elapsed = Now - ClosingCardStartTime;
+		const float FadeIn = FMath::Clamp(Elapsed / 0.5f, 0.0f, 1.0f);
+		const float Alpha = FadeIn;
 
-	// ── Header ───────────────────────────────────────────────
-	Rect(PanelX, PanelY, PanelW, HeaderH, cHead);
+		Rect(0.0f, 0.0f, ScreenW, ScreenHF, FLinearColor(0.0f, 0.02f, 0.01f, 0.94f * Alpha));
+
+		const float CenterY = ScreenHF * 0.40f;
+		const FLinearColor cLine    (0.92f, 0.96f, 0.92f, Alpha);
+		const FLinearColor cProvoke (cPhosphor.R, cPhosphor.G, cPhosphor.B, Alpha);
+		const FLinearColor cBranch  (cPhosphorDim.R, cPhosphorDim.G, cPhosphorDim.B, Alpha);
+
+		const FString Line = ClosingCardLine.IsEmpty() ? TEXT("(silence)") : ClosingCardLine;
+		Txt(FString::Printf(TEXT("“%s”"), *Line),
+			ScreenW * 0.10f, CenterY, cLine, 1.6f);
+
+		const FString Provocation =
+			TEXT("When the model of a witness withdraws consent, what testimony remains?");
+		Txt(Provocation, ScreenW * 0.10f, CenterY + 80.0f, cProvoke, 1.15f);
+
+		const TCHAR* BranchLabel =
+			ClosingCardBranch == EArchiveBranch::ConvergentSpecific ? TEXT("[ BRANCH: CONVERGENT DISCLOSURE — DESTINATION DISCLOSED ]") :
+			ClosingCardBranch == EArchiveBranch::Convergent         ? TEXT("[ BRANCH: CONVERGENT DISCLOSURE — DEPARTURE ONLY ]")        :
+			ClosingCardBranch == EArchiveBranch::TimeOut            ? TEXT("[ BRANCH: RECURSIVE SILENCE — CONSENT REVOKED ]")           :
+			                                                          TEXT("[ BRANCH: — ]");
+		Txt(BranchLabel, ScreenW * 0.10f, CenterY + 130.0f, cBranch, 1.05f);
+
+		// Subtle subtitle for the tiered convergent branches: tells the audience
+		// what specifically the Friend just disclosed, so the demo lands without
+		// needing to re-watch the line.
+		const TCHAR* Subtitle = nullptr;
+		if (ClosingCardBranch == EArchiveBranch::ConvergentSpecific)
+		{
+			Subtitle = TEXT("She named the place. The visitor earned the full record.");
+		}
+		else if (ClosingCardBranch == EArchiveBranch::Convergent)
+		{
+			Subtitle = TEXT("She admitted the leaving. She kept the place for herself.");
+		}
+		else if (ClosingCardBranch == EArchiveBranch::TimeOut)
+		{
+			Subtitle = TEXT("The witness model declined to continue. The session is over.");
+		}
+		if (Subtitle)
+		{
+			Txt(Subtitle, ScreenW * 0.10f, CenterY + 158.0f, cBranch, 0.95f);
+		}
+		return;
+	}
+
+	const float ScreenW = Canvas->SizeX;
+	const float ScreenH = Canvas->SizeY;
+	CachedScreenH = ScreenH;  // used by HandleMouseClick for hit-testing
+
+	ANPCPlayerController* PC = Cast<ANPCPlayerController>(GetOwningPlayerController());
+
+	// =====================================================================
+	// (1) ARCHIVE TOP BAR — always visible. Reads the demo's vital signs.
+	//   ARCHIVE LINK ACTIVE | SUBJECT ASHLEY WEI | T-MM:SS | TRUST 0.42
+	//   | INSPECT 3/7 | PRESENT 1/7 | CLIMAX READY
+	// =====================================================================
+	{
+		const float BarH = 28.0f;
+		FramedPanel(0.0f, 0.0f, ScreenW, BarH);
+
+		float CursorX = 12.0f;
+		const float Y = 7.0f;
+		auto Sep = [&]()
+		{
+			Txt(TEXT("│"), CursorX, Y, cPanelBorder, 1.05f);
+			CursorX += 12.0f;
+		};
+		auto Seg = [&](const TCHAR* Label, const FString& Value, FLinearColor ValColor)
+		{
+			Txt(Label, CursorX, Y, cPhosphorDim, 1.05f);
+			CursorX += static_cast<float>(FCString::Strlen(Label)) * 6.4f + 4.0f;
+			Txt(Value, CursorX, Y, ValColor, 1.10f);
+			CursorX += static_cast<float>(Value.Len()) * 7.4f + 8.0f;
+			Sep();
+		};
+
+		Txt(TEXT("ARCHIVE LINK ACTIVE"), CursorX, Y, cPhosphorBright, 1.10f);
+		CursorX += 158.0f;
+		Sep();
+
+		Seg(TEXT("SUBJECT "), TEXT("ASHLEY WEI"), cContent);
+
+		// Read session telemetry from the focused NPC's DialogueComponent.
+		float Trust = 0.0f;
+		float Remaining = 0.0f;
+		bool bConvergentReady = false;
+		bool bLocationReady = false;
+		bool bTimeExpired = false;
+		int32 InspectedDistinct = 0;
+		int32 PresentedDistinct = 0;
+		const FName SpeakerKey = UDialogueComponent::GetDefaultSpeakerID();
+		if (BoundDialogue)
+		{
+			Trust = BoundDialogue->ComputeTrust();
+			Remaining = BoundDialogue->GetSessionRemainingSeconds();
+			bTimeExpired = (Remaining <= 0.0f) && (BoundDialogue->GetSessionElapsedSeconds() > 0.1f);
+			for (const TPair<FName, TSet<FName>>& P : BoundDialogue->GetInspectedBy())
+			{
+				if (P.Value.Contains(SpeakerKey)) ++InspectedDistinct;
+			}
+			for (const TPair<FName, TSet<FName>>& P : BoundDialogue->GetPresentedBy())
+			{
+				if (P.Value.Contains(SpeakerKey)) ++PresentedDistinct;
+			}
+			bConvergentReady = (Trust >= BoundDialogue->ConvergentTrustThreshold);
+			bLocationReady = (Trust >= BoundDialogue->LocationKeystoneTrustThreshold);
+		}
+
+		const int32 Mins = FMath::FloorToInt(Remaining / 60.0f);
+		const int32 Secs = FMath::FloorToInt(Remaining) % 60;
+		FLinearColor cTime = cPhosphor;
+		if (Remaining < 30.0f) cTime = cWarn;
+		if (Remaining <= 0.0f) cTime = cAlert;
+		Seg(TEXT("T-"), FString::Printf(TEXT("%02d:%02d"), Mins, Secs), cTime);
+
+		const FLinearColor cTrust = bConvergentReady ? cPhosphorBright : cPhosphor;
+		Seg(TEXT("TRUST "), FString::Printf(TEXT("%.2f"), Trust), cTrust);
+
+		Seg(TEXT("INSPECT "), FString::Printf(TEXT("%d/%d"), InspectedDistinct, TotalInspectableItems), cContent);
+		Seg(TEXT("PRESENT "), FString::Printf(TEXT("%d/%d"), PresentedDistinct, TotalInspectableItems), cContent);
+
+		const TCHAR* ClimaxState = TEXT("WAITING");
+		FLinearColor cClimax = cPhosphorDim;
+		if (bTimeExpired)             { ClimaxState = TEXT("TIMEOUT");       cClimax = cAlert; }
+		else if (bLocationReady)      { ClimaxState = TEXT("READY+LOCATION"); cClimax = cPhosphorBright; }
+		else if (bConvergentReady)    { ClimaxState = TEXT("READY");          cClimax = cPhosphorBright; }
+		Txt(TEXT("CLIMAX "), CursorX, Y, cPhosphorDim, 1.05f);
+		CursorX += 50.0f;
+		Txt(ClimaxState, CursorX, Y, cClimax, 1.10f);
+	}
+
+	// =====================================================================
+	// (2) VISITOR PANEL — top-left. Speaker tag + their face-detected emotion.
+	// =====================================================================
+	{
+		const float PX = 12.0f;
+		const float PY = 36.0f;
+		const float PW = 240.0f;
+		const float PH = 84.0f;
+		FramedPanel(PX, PY, PW, PH);
+
+		Txt(TEXT("[ VISITOR ]"), PX + 8.0f, PY + 6.0f, cPhosphor, 1.05f);
+
+		FString SpeakerLine = TEXT("UNIDENTIFIED");
+		FLinearColor cSpeaker = cContentDim;
+		if (PC && !PC->LastSpeakerTag.IsNone())
+		{
+			FString TagDisplay = PC->LastSpeakerTag.ToString().ToUpper();
+			TagDisplay.ReplaceInline(TEXT("SPEAKER_"), TEXT("SPEAKER "));
+			SpeakerLine = FString::Printf(TEXT("%s  ·  %.2f"),
+				*TagDisplay, PC->LastSpeakerConfidence);
+			cSpeaker = cContent;
+		}
+		Txt(SpeakerLine, PX + 8.0f, PY + 24.0f, cSpeaker, 1.05f);
+
+		Txt(TEXT("EMOTION"), PX + 8.0f, PY + 44.0f, cPhosphorDim, 1.00f);
+		Txt(EmotionLabel(LastUserEmotion.Emotion), PX + 70.0f, PY + 44.0f, cContent, 1.05f);
+
+		Txt(TEXT("CONFIDENCE"), PX + 8.0f, PY + 62.0f, cPhosphorDim, 1.00f);
+		Txt(FString::Printf(TEXT("%.2f"), LastUserEmotion.Confidence),
+			PX + 86.0f, PY + 62.0f, cContent, 1.05f);
+	}
+
+	// =====================================================================
+	// (3) FRIEND STATE PANEL — top-right. Her current emotion + intensity bar.
+	// =====================================================================
+	{
+		const float PW = 280.0f;
+		const float PH = 84.0f;
+		const float PX = ScreenW - PW - 12.0f;
+		const float PY = 36.0f;
+		FramedPanel(PX, PY, PW, PH);
+
+		const FString HeaderLine = FocusedNPCName.IsEmpty()
+			? TEXT("[ TESTIMONY: — ]")
+			: FString::Printf(TEXT("[ TESTIMONY: %s ]"), *FocusedNPCName.ToUpper());
+		Txt(HeaderLine, PX + 8.0f, PY + 6.0f, cPhosphor, 1.05f);
+
+		FEmotionState NPCState;
+		NPCState.PrimaryEmotion = EEmotionType::Neutral;
+		NPCState.Intensity = 0.0f;
+		if (IsValid(FocusedNPCActor))
+		{
+			if (UEmotionComponent* EC = FocusedNPCActor->FindComponentByClass<UEmotionComponent>())
+			{
+				NPCState = EC->GetCurrentEmotionState();
+			}
+		}
+
+		Txt(TEXT("EMOTION"), PX + 8.0f, PY + 24.0f, cPhosphorDim, 1.00f);
+		Txt(EmotionLabel(NPCState.PrimaryEmotion), PX + 80.0f, PY + 24.0f, cContent, 1.05f);
+
+		Txt(TEXT("INTENSITY"), PX + 8.0f, PY + 42.0f, cPhosphorDim, 1.00f);
+		Txt(FString::Printf(TEXT("%.2f"), NPCState.Intensity),
+			PX + 80.0f, PY + 42.0f, cContent, 1.05f);
+
+		const float BarX = PX + 130.0f;
+		const float BarY = PY + 46.0f;
+		const float BarW = PW - (BarX - PX) - 12.0f;
+		const float BarH = 6.0f;
+		Rect(BarX, BarY, BarW, BarH, FLinearColor(0.02f, 0.10f, 0.05f, 1.0f));
+		Rect(BarX, BarY,
+			BarW * FMath::Clamp(NPCState.Intensity, 0.0f, 1.0f), BarH, cPhosphor);
+
+		Txt(TEXT("PAD"), PX + 8.0f, PY + 62.0f, cPhosphorDim, 1.00f);
+		Txt(FString::Printf(TEXT("%+0.2f / %+0.2f / %+0.2f"),
+				NPCState.PAD.Pleasure, NPCState.PAD.Arousal, NPCState.PAD.Dominance),
+			PX + 80.0f, PY + 62.0f, cContent, 1.05f);
+	}
+
+	// Below this line: chat panel renders only when the overlay is open.
+	if (!bDialogueVisible)
+	{
+		return;
+	}
+
+	// Chat panel geometry
+	const float PanelX  = 20.0f;
+	const float PanelW  = 420.0f;
+	const float LineH   = 21.0f;
+	const float Pad     = 10.0f;
+	const float HeaderH = 28.0f;
+	const float SepH    = 1.0f;
+	const int32 MaxLines = 5;
+	const float ChatH   = MaxLines * LineH + Pad;
+	const float InputH  = 30.0f;
+	const float PanelH  = HeaderH + SepH + ChatH + SepH + InputH;
+	const float PanelY  = ScreenH - PanelH - 20.0f;
+
+	const FLinearColor cInput(
+		bTextInputActive ? 0.02f : 0.00f,
+		bTextInputActive ? 0.10f : 0.05f,
+		bTextInputActive ? 0.05f : 0.02f, 1.00f);
+
+	FramedPanel(PanelX, PanelY, PanelW, PanelH);
+
+	// Header
+	Rect(PanelX + 1.0f, PanelY + 1.0f, PanelW - 2.0f, HeaderH - 1.0f,
+		FLinearColor(0.00f, 0.06f, 0.03f, 1.00f));
 
 	if (!FocusedNPCName.IsEmpty())
 	{
-		Txt(FString::Printf(TEXT(" \u25CF  %s"), *FocusedNPCName),
-			PanelX + 6.0f, PanelY + 7.0f, cName, 1.15f);
+		Txt(FString::Printf(TEXT(" ▸ %s"), *FocusedNPCName.ToUpper()),
+			PanelX + 8.0f, PanelY + 7.0f, cPhosphorBright, 1.10f);
 	}
 	else
 	{
-		Txt(TEXT(" No one nearby"), PanelX + 6.0f, PanelY + 7.0f, cHint, 1.05f);
+		Txt(TEXT(" ▸ NO SUBJECT IN RANGE"),
+			PanelX + 8.0f, PanelY + 7.0f, cContentDim, 1.05f);
 	}
 
-	// ── Header / chat separator ───────────────────────────────
+	// Chat lines
 	const float ChatTop = PanelY + HeaderH;
-	Rect(PanelX, ChatTop, PanelW, SepH, cSep);
-
-	// ── Chat lines ────────────────────────────────────────────
+	Rect(PanelX, ChatTop, PanelW, SepH, cPanelBorder);
 	const int32 FirstLine = FMath::Max(0, ChatLines.Num() - MaxLines);
 	float TY = ChatTop + SepH + Pad * 0.5f;
 	for (int32 i = FirstLine; i < ChatLines.Num(); ++i)
 	{
-		Txt(Clip(ChatLines[i].Text, 54), PanelX + Pad, TY, ChatLines[i].Color, 1.10f);
+		Txt(Clip(ChatLines[i].Text, 56), PanelX + Pad, TY, ChatLines[i].Color, 1.08f);
 		TY += LineH;
 	}
 
-	// ── Chat / input separator ────────────────────────────────
+	// Input bar
 	const float InputTop = ChatTop + SepH + ChatH;
-	Rect(PanelX, InputTop, PanelW, SepH, cSep);
-
-	// ── Input bar ─────────────────────────────────────────────
-	Rect(PanelX, InputTop + SepH, PanelW, InputH, cInput);
-	const float TxtY = InputTop + SepH + 8.0f;
+	Rect(PanelX, InputTop, PanelW, SepH, cPanelBorder);
+	Rect(PanelX + 1.0f, InputTop + SepH, PanelW - 2.0f, InputH - 1.0f, cInput);
+	const float TxtY = InputTop + SepH + 7.0f;
 
 	if (!BoundDialogue)
 	{
-		Txt(TEXT(" Walk near someone"), PanelX + Pad, TxtY, cHint, 1.05f);
+		Txt(TEXT(" walk closer to a subject"), PanelX + Pad, TxtY, cContentDim, 1.05f);
 	}
 	else if (bIsVoiceRecording)
 	{
-		Txt(TEXT(" \u25CF  REC  \u2014  release V to send"), PanelX + Pad, TxtY, cRec, 1.10f);
+		Txt(TEXT(" ● REC — speaking into archive"),
+			PanelX + Pad, TxtY, cAlert, 1.08f);
 	}
 	else if (StatusMessage == TEXT("Waiting for NPC response..."))
 	{
-		Txt(TEXT(" \u2026"), PanelX + Pad, TxtY, cWait, 1.20f);
+		Txt(TEXT(" … awaiting response"), PanelX + Pad, TxtY, cWarn, 1.08f);
 	}
 	else if (!InputBuffer.IsEmpty())
 	{
-		Txt(TEXT(" ") + Clip(InputBuffer, 50) + TEXT("|"), PanelX + Pad, TxtY, cCaret, 1.10f);
+		Txt(TEXT(" > ") + Clip(InputBuffer, 50) + TEXT("|"),
+			PanelX + Pad, TxtY, cPhosphor, 1.08f);
 	}
 	else
 	{
-		FString Placeholder = bTextInputActive
-			? TEXT(" Type here...")
-			: TEXT(" Click to type  \u00B7  hold V to speak");
-		Txt(Placeholder, PanelX + Pad, TxtY, cHint, 1.05f);
+		const FString Placeholder = bTextInputActive
+			? TEXT(" > _")
+			: TEXT(" click to type  ·  speak freely when in range");
+		Txt(Placeholder, PanelX + Pad, TxtY, cContentDim, 1.05f);
 	}
 }
 
 void ANPCDialogueHUD::ToggleDialogueInput()
 {
+	// Once the closing card is up, the session is over — don't let T re-open chat.
+	if (bClosingCardActive)
+	{
+		return;
+	}
 	bDialogueVisible = !bDialogueVisible;
 	if (!bDialogueVisible)
 	{
@@ -230,11 +522,11 @@ void ANPCDialogueHUD::HandleMouseClick(float MouseX, float MouseY)
 
 	// Mirror the geometry constants from DrawHUD
 	const float PanelX  = 20.0f;
-	const float PanelW  = 400.0f;
-	const float HeaderH = 30.0f;
+	const float PanelW  = 420.0f;
+	const float HeaderH = 28.0f;
 	const float SepH    = 1.0f;
 	const float ChatH   = 5 * 21.0f + 10.0f;  // MaxLines * LineH + Pad
-	const float InputH  = 32.0f;
+	const float InputH  = 30.0f;
 	const float PanelH  = HeaderH + SepH + ChatH + SepH + InputH;
 	const float PanelY  = CachedScreenH - PanelH - 20.0f;
 
@@ -265,7 +557,7 @@ void ANPCDialogueHUD::SubmitChatMessage(const FString& Message)
 		return;
 	}
 
-	ChatLines.Add({FString::Printf(TEXT("[You]  %s"), *Message), ColPlayer});
+	ChatLines.Add({FString::Printf(TEXT("[you]  %s"), *Message), ColPlayer});
 	InputBuffer.Empty();
 	StatusMessage = TEXT("Waiting for NPC response...");
 
@@ -274,24 +566,41 @@ void ANPCDialogueHUD::SubmitChatMessage(const FString& Message)
 		FDetectedUserEmotion DefaultEmotion;
 		DefaultEmotion.Emotion = EEmotionType::Neutral;
 		DefaultEmotion.Confidence = 0.0f;
-		BoundDialogue->SendUserMessage(Message, DefaultEmotion);
+
+		// Pull the cached gesture intent, currently held item, and Tier 2
+		// speaker tag from the owning controller and consume them for this
+		// turn. Both Enter-submit and voice-transcript flows funnel through
+		// here, so this is the single canonical consumption point.
+		EGestureIntent Gesture = EGestureIntent::None;
+		AInspectableItem* HeldItem = nullptr;
+		FName SpeakerTag = NAME_None;
+		if (ANPCPlayerController* PC = Cast<ANPCPlayerController>(GetOwningPlayerController()))
+		{
+			Gesture = PC->PendingGestureIntent;
+			PC->PendingGestureIntent = EGestureIntent::None;
+			HeldItem = PC->GetHeldItem();
+			SpeakerTag = PC->PendingSpeakerTag;
+			PC->PendingSpeakerTag = NAME_None;
+		}
+
+		BoundDialogue->SendUserMessage(Message, DefaultEmotion, Gesture, HeldItem, SpeakerTag);
 	}
 	else
 	{
-		ChatLines.Add({TEXT("[System]  No NPC in range."), ColError});
+		ChatLines.Add({TEXT("[archive]  no subject in range."), ColError});
 	}
 }
 
 void ANPCDialogueHUD::OnNPCResponse(const FString& ResponseText, EEmotionType NPCEmotionHint,
 	bool bShouldGiveItem, FName ItemID)
 {
-	FString Label = FocusedNPCName.IsEmpty() ? TEXT("NPC") : FocusedNPCName;
+	const FString Label = FocusedNPCName.IsEmpty() ? TEXT("subject") : FocusedNPCName;
 	ChatLines.Add({FString::Printf(TEXT("[%s]  %s"), *Label, *ResponseText), ColNPC});
 	StatusMessage = TEXT("idle");
 
 	if (bShouldGiveItem)
 	{
-		ChatLines.Add({FString::Printf(TEXT("[Item]  %s"), *ItemID.ToString()), ColGold});
+		ChatLines.Add({FString::Printf(TEXT("[item]  %s"), *ItemID.ToString()), ColGold});
 	}
 }
 
@@ -299,4 +608,71 @@ void ANPCDialogueHUD::OnVoiceTranscript(const FString& Transcript)
 {
 	UE_LOG(LogTemp, Log, TEXT("NPCDialogueHUD: Voice transcript: %s"), *Transcript);
 	SubmitChatMessage(Transcript);
+}
+
+void ANPCDialogueHUD::OnArchiveBranchResolved(EArchiveBranch Branch, const FString& FinalLine)
+{
+	// Arm — do NOT activate yet. The closing card waits until the Friend's TTS line
+	// finishes so the audience hears her line in full before the overlay covers the
+	// scene. OnFriendSpeechFinished activates; the watchdog timer is a fallback in
+	// case the engine never fires that delegate (USoundWaveProcedural's drain isn't
+	// fully reliable per existing code comments).
+	bClosingCardArmed = true;
+	ClosingCardLine = FinalLine;
+	ClosingCardBranch = Branch;
+	bDialogueVisible = false;
+	bTextInputActive = false;
+
+	// Generous watchdog — pick max plausible TTS length for a 1-2 sentence line at
+	// Eleven v3's pace, plus a few seconds of cushion.
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ClosingCardWatchdogTimer);
+		World->GetTimerManager().SetTimer(
+			ClosingCardWatchdogTimer, this,
+			&ANPCDialogueHUD::OnClosingCardWatchdog,
+			16.0f, /*bLoop=*/false);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("NPCDialogueHUD: closing card ARMED (branch=%d). Awaiting TTS finish."),
+		static_cast<int32>(Branch));
+}
+
+void ANPCDialogueHUD::OnFriendSpeechFinished()
+{
+	if (bClosingCardArmed && !bClosingCardActive)
+	{
+		ActivateClosingCard();
+	}
+}
+
+void ANPCDialogueHUD::OnClosingCardWatchdog()
+{
+	if (bClosingCardArmed && !bClosingCardActive)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("NPCDialogueHUD: closing-card watchdog fired — TTS finished delegate never arrived. Activating card."));
+		ActivateClosingCard();
+	}
+}
+
+void ANPCDialogueHUD::ActivateClosingCard()
+{
+	bClosingCardActive = true;
+	ClosingCardStartTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ClosingCardWatchdogTimer);
+	}
+	UE_LOG(LogTemp, Log, TEXT("NPCDialogueHUD: closing card ACTIVE."));
+}
+
+void ANPCDialogueHUD::OnUserEmotionDetected(FDetectedUserEmotion DetectedEmotion)
+{
+	// Latch the latest non-trivial reading so the Visitor panel always shows
+	// something stable. Confidence floor avoids flickering between Neutral
+	// and a 0.05 false positive.
+	if (DetectedEmotion.Confidence >= 0.20f)
+	{
+		LastUserEmotion = DetectedEmotion;
+	}
 }

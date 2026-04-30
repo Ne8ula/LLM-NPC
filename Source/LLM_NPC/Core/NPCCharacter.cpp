@@ -1,5 +1,6 @@
 #include "NPCCharacter.h"
 #include "NPCSubsystemComponent.h"
+#include "NPCGraphDataAsset.h"
 #include "LLM_NPC/Dialogue/DialogueComponent.h"
 #include "LLM_NPC/Emotion/EmotionComponent.h"
 #include "LLM_NPC/Vision/FacialRecognitionComponent.h"
@@ -8,9 +9,11 @@
 #include "LLM_NPC/Animation/MetahumanAnimComponent.h"
 #include "LLM_NPC/Animation/NPCLipSyncComponent.h"
 #include "LLM_NPC/Animation/NPCBodyMotionComponent.h"
+#include "LLM_NPC/Animation/NPCEyeTrackingComponent.h"
 #include "LLM_NPC/Animation/TemplateAnimationDriverComponent.h"
 #include "LLM_NPC/Dialogue/WhisperSTTComponent.h"
 #include "LLM_NPC/Dialogue/ElevenLabsTTSComponent.h"
+#include "LLM_NPC/Dialogue/SpeakerIdentificationComponent.h"
 #include "LLM_NPC/Fallback/FallbackManagerComponent.h"
 #include "Components/AudioComponent.h"
 
@@ -28,7 +31,9 @@ ANPCCharacter::ANPCCharacter()
 	LipSyncComponent = CreateDefaultSubobject<UNPCLipSyncComponent>(TEXT("LipSyncComponent"));
 	BodyMotionComponent = CreateDefaultSubobject<UNPCBodyMotionComponent>(TEXT("BodyMotionComponent"));
 	TemplateAnimationDriverComponent = CreateDefaultSubobject<UTemplateAnimationDriverComponent>(TEXT("TemplateAnimationDriverComponent"));
+	EyeTrackingComponent = CreateDefaultSubobject<UNPCEyeTrackingComponent>(TEXT("EyeTrackingComponent"));
 	WhisperSTTComponent = CreateDefaultSubobject<UWhisperSTTComponent>(TEXT("WhisperSTTComponent"));
+	SpeakerIdentificationComponent = CreateDefaultSubobject<USpeakerIdentificationComponent>(TEXT("SpeakerIdentificationComponent"));
 	ElevenLabsTTSComponent = CreateDefaultSubobject<UElevenLabsTTSComponent>(TEXT("ElevenLabsTTSComponent"));
 	FallbackManagerComponent = CreateDefaultSubobject<UFallbackManagerComponent>(TEXT("FallbackManagerComponent"));
 	TTSComponent = CreateDefaultSubobject<UElevenLabsTTSComponent>(TEXT("TTSComponent"));
@@ -89,39 +94,68 @@ float ANPCCharacter::GetEmotionStabilityModifier(EEmotionType Emotion) const
 
 void ANPCCharacter::OnDialogueResponse(const FString& ResponseText, EEmotionType NPCEmotionHint, bool bShouldGiveItem, FName ItemID)
 {
-	if (ElevenLabsTTSComponent && ElevenLabsTTSComponent->IsSubsystemAvailable() && !ResponseText.IsEmpty())
+	if (!ElevenLabsTTSComponent || !ElevenLabsTTSComponent->IsSubsystemAvailable() || ResponseText.IsEmpty())
 	{
-		// Use voice config from NPCConfig if available
-		FString VoiceID;
-		float Stability = 0.5f;
-		float SimilarityBoost = 0.75f;
-
-		if (NPCConfig)
-		{
-			VoiceID = NPCConfig->ElevenLabsVoiceID;
-			Stability = NPCConfig->VoiceStability;
-			SimilarityBoost = NPCConfig->VoiceSimilarityBoost;
-		}
-
-		// Modulate stability based on emotion — lower = more expressive
-		float StabilityMod = GetEmotionStabilityModifier(NPCEmotionHint);
-		Stability = FMath::Clamp(Stability + StabilityMod, 0.1f, 1.0f);
-
-		// Boost style exaggeration for emotional states
-		if (NPCEmotionHint != EEmotionType::Neutral)
-		{
-			ElevenLabsTTSComponent->StyleExaggeration = FMath::Clamp(0.7f + FMath::Abs(StabilityMod), 0.0f, 1.0f);
-		}
-		else
-		{
-			ElevenLabsTTSComponent->StyleExaggeration = 0.3f;
-		}
-
-		UE_LOG(LogTemp, Log, TEXT("ANPCCharacter: TTS emotion='%s', stability=%.2f, style=%.2f: %s"),
-			*UEnum::GetValueAsString(NPCEmotionHint), Stability, ElevenLabsTTSComponent->StyleExaggeration, *ResponseText.Left(80));
-
-		ElevenLabsTTSComponent->SpeakText(ResponseText, VoiceID, Stability, SimilarityBoost);
+		return;
 	}
+
+	// Single source of truth for voice ID resolution.
+	// Priority: graph node ElevenLabsVoiceID > NPCConfig ElevenLabsVoiceID. The graph
+	// node always wins when set — this is what drives The Friend's stable voice. The
+	// previous implementation also had DialogueComponent calling SpeakText with the
+	// graph-resolved voice while this handler called it with NPCConfig's voice; the
+	// last delegate to fire won, which is why the voice flipped turn-to-turn.
+	FString VoiceID;
+	float Stability = 0.5f;
+	float SimilarityBoost = 0.75f;
+
+	if (NPCConfig)
+	{
+		VoiceID = NPCConfig->ElevenLabsVoiceID;
+		Stability = NPCConfig->VoiceStability;
+		SimilarityBoost = NPCConfig->VoiceSimilarityBoost;
+
+		// Graph node voice ID overrides NPCConfig.
+		if (DialogueComponent && !DialogueComponent->GraphNodeID.IsNone())
+		{
+			UNPCGraphDataAsset* Graph = NPCConfig->GraphDataAsset.Get();
+			if (!Graph && !NPCConfig->GraphDataAsset.IsNull())
+			{
+				Graph = NPCConfig->GraphDataAsset.LoadSynchronous();
+			}
+			if (Graph)
+			{
+				if (const FNPCGraphNode* Node = Graph->FindNode(DialogueComponent->GraphNodeID))
+				{
+					if (!Node->ElevenLabsVoiceID.IsEmpty())
+					{
+						VoiceID = Node->ElevenLabsVoiceID;
+					}
+				}
+			}
+		}
+	}
+
+	// Modulate stability based on emotion — lower = more expressive.
+	const float StabilityMod = GetEmotionStabilityModifier(NPCEmotionHint);
+	Stability = FMath::Clamp(Stability + StabilityMod, 0.1f, 1.0f);
+
+	// Boost style exaggeration for emotional states.
+	if (NPCEmotionHint != EEmotionType::Neutral)
+	{
+		ElevenLabsTTSComponent->StyleExaggeration = FMath::Clamp(0.7f + FMath::Abs(StabilityMod), 0.0f, 1.0f);
+	}
+	else
+	{
+		ElevenLabsTTSComponent->StyleExaggeration = 0.3f;
+	}
+
+	UE_LOG(LogTemp, Log,
+		TEXT("ANPCCharacter: TTS voice='%s' emotion='%s' stability=%.2f style=%.2f: %s"),
+		*VoiceID, *UEnum::GetValueAsString(NPCEmotionHint), Stability,
+		ElevenLabsTTSComponent->StyleExaggeration, *ResponseText.Left(80));
+
+	ElevenLabsTTSComponent->SpeakText(ResponseText, VoiceID, Stability, SimilarityBoost);
 }
 
 float ANPCCharacter::GetVisemeJawOpen(TCHAR Char) const

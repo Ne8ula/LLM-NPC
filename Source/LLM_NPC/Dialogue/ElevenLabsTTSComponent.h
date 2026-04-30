@@ -117,12 +117,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|TTS|Config", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float StyleExaggeration = 0.5f;
 
-	/** Audio output model ID. Default is eleven_flash_v2_5 which costs 0.5 credits
-	 *  per character (vs 1.0 for multilingual_v2) and has lower latency. English
-	 *  quality is comparable; set back to eleven_multilingual_v2 for best non-English
-	 *  quality if you have the credit budget. */
+	/** Audio output model ID.
+	 *  Default is eleven_v3 (alpha) — the only model that recognises inline audio tags
+	 *  like "[sighs] I do not know what to say." Brackets are interpreted as vocal
+	 *  expression, not spoken aloud, allowing the LLM to drive emotional inflection
+	 *  per-line without separate parameter tuning.
+	 *
+	 *  Alternatives (lose audio-tag support):
+	 *    - eleven_multilingual_v2: best non-English quality, 1.0 credits/char.
+	 *    - eleven_turbo_v2_5: balanced cost/latency, 0.5 credits/char.
+	 *    - eleven_flash_v2_5: cheapest + fastest, English-only, 0.5 credits/char.
+	 *  Switch via BP defaults or a per-instance override if your account does not
+	 *  have access to v3 yet (it ships in alpha to most paid tiers). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|TTS|Config")
-	FString ModelID = TEXT("eleven_flash_v2_5");
+	FString ModelID = TEXT("eleven_v3");
 
 	/** Output audio format. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|TTS|Config")

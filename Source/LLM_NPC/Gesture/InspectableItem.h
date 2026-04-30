@@ -71,7 +71,7 @@ public:
 	// Narrative fields — consumed by UDialogueComponent on Present
 	// ------------------------------------------------------------------
 
-	/** Stable identifier referenced by topic-gates in the NPC graph (e.g. "folded_note"). Lowercase, snake_case. */
+	/** Stable identifier referenced by topic-gates in the NPC graph (e.g. "letter"). Lowercase, snake_case. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Inspect|Narrative")
 	FName ItemID;
 
@@ -96,12 +96,12 @@ public:
 	FString NPCKnowledgeText;
 
 	/** Minimum allowed uniform scale. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Gesture|Inspect", meta = (ClampMin = "0.01"))
-	float MinScale = 0.1f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Gesture|Inspect", meta = (ClampMin = "0.0001"))
+	float MinScale = 0.0001f;
 
 	/** Maximum allowed uniform scale. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Gesture|Inspect", meta = (ClampMin = "0.1"))
-	float MaxScale = 5.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Gesture|Inspect", meta = (ClampMin = "19.0"))
+	float MaxScale = 19.0f;
 
 	/** Base rotation speed multiplier. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Gesture|Inspect")

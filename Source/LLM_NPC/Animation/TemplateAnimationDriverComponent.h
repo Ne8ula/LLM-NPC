@@ -7,6 +7,7 @@
 
 class UEmotionComponent;
 class UDialogueComponent;
+class UElevenLabsTTSComponent;
 class USkeletalMeshComponent;
 class UAnimInstance;
 class UAnimSequence;
@@ -162,6 +163,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Animation|Template")
 	bool bDriveFromDialogueResponse = true;
 
+	/**
+	 * After TTS finishes, wait this many seconds and then collapse the
+	 * template back to Idle regardless of the current emotional state.
+	 * Prevents a triggered emotion (e.g. Sadness) from holding on the body
+	 * indefinitely between turns. The underlying EmotionComponent state is
+	 * untouched — voice modulation, FACS curves, and other downstream
+	 * systems continue to use the real emotion. Set to 0 to disable.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Animation|Template",
+		meta = (ClampMin = "0.0", ClampMax = "10.0"))
+	float IdleReturnDelaySeconds = 1.75f;
+
 private:
 	UFUNCTION()
 	void HandleEmotionChanged(FEmotionState OldState, FEmotionState NewState);
@@ -169,6 +182,24 @@ private:
 	UFUNCTION()
 	void HandleDialogueResponse(const FString& ResponseText, EEmotionType NPCEmotionHint,
 		bool bShouldGiveItem, FName ItemID);
+
+	/** TTS speech finished — schedule the Idle return timer. */
+	UFUNCTION()
+	void HandleSpeechFinished();
+
+	/** TTS speech started — cancel any pending Idle return from a prior utterance. */
+	UFUNCTION()
+	void HandleSpeechStarted();
+
+	/** TTS speech errored out — same as Finished from the body's POV. */
+	UFUNCTION()
+	void HandleSpeechError(int32 ResponseCode, const FString& ErrorBody);
+
+	/** Timer callback — apply Idle template and reset LastHandledEmotion. */
+	void HandleIdleReturnTimer();
+
+	/** Stop a pending Idle-return timer if one is queued. */
+	void ClearIdleReturnTimer();
 
 	/** Pick A or B variant for the given emotion. Called once per emotion change. */
 	EMetahumanTemplateAnim PickVariantForEmotion(EEmotionType Emotion) const;
@@ -202,6 +233,12 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UDialogueComponent> CachedDialogueComp;
+
+	UPROPERTY()
+	TObjectPtr<UElevenLabsTTSComponent> CachedTTSComp;
+
+	/** Timer handle for the post-speech Idle return. */
+	FTimerHandle IdleReturnTimerHandle;
 
 	UPROPERTY()
 	TObjectPtr<USkeletalMeshComponent> CachedFaceMesh;

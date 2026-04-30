@@ -14,10 +14,12 @@ class UNPCInventoryComponent;
 class UMetahumanAnimComponent;
 class UNPCLipSyncComponent;
 class UNPCBodyMotionComponent;
+class UNPCEyeTrackingComponent;
 class UTemplateAnimationDriverComponent;
 class UFallbackManagerComponent;
 class UWhisperSTTComponent;
 class UElevenLabsTTSComponent;
+class USpeakerIdentificationComponent;
 
 /**
  * Base Metahuman NPC actor that owns all subsystem components.
@@ -68,7 +70,13 @@ public:
 	TObjectPtr<UTemplateAnimationDriverComponent> TemplateAnimationDriverComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
+	TObjectPtr<UNPCEyeTrackingComponent> EyeTrackingComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
 	TObjectPtr<UWhisperSTTComponent> WhisperSTTComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
+	TObjectPtr<USpeakerIdentificationComponent> SpeakerIdentificationComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
 	TObjectPtr<UElevenLabsTTSComponent> ElevenLabsTTSComponent;

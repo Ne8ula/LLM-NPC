@@ -1,11 +1,14 @@
 #include "TemplateAnimationDriverComponent.h"
 #include "LLM_NPC/Emotion/EmotionComponent.h"
 #include "LLM_NPC/Dialogue/DialogueComponent.h"
+#include "LLM_NPC/Dialogue/ElevenLabsTTSComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimSequence.h"
 #include "Components/ChildActorComponent.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Engine/World.h"
 #include "Misc/Paths.h"
+#include "TimerManager.h"
 #include "UObject/Package.h"
 
 UTemplateAnimationDriverComponent::UTemplateAnimationDriverComponent()
@@ -155,6 +158,17 @@ void UTemplateAnimationDriverComponent::InitializeSubsystem()
 
 	CachedEmotionComp = Owner->FindComponentByClass<UEmotionComponent>();
 	CachedDialogueComp = Owner->FindComponentByClass<UDialogueComponent>();
+	// FindComponentByClass — match the discovery convention used by the
+	// rest of the pipeline (NPCCharacter has two TTS subobjects from a
+	// pre-existing quirk; we want whichever instance is also wired as the
+	// lip sync source so our timer aligns with audible speech end).
+	CachedTTSComp = Owner->FindComponentByClass<UElevenLabsTTSComponent>();
+	if (CachedTTSComp)
+	{
+		CachedTTSComp->OnSpeechStarted.AddDynamic(this, &UTemplateAnimationDriverComponent::HandleSpeechStarted);
+		CachedTTSComp->OnSpeechFinished.AddDynamic(this, &UTemplateAnimationDriverComponent::HandleSpeechFinished);
+		CachedTTSComp->OnSpeechError.AddDynamic(this, &UTemplateAnimationDriverComponent::HandleSpeechError);
+	}
 
 	// Template animation signal source:
 	//   bDriveFromDialogueResponse == true  → DialogueComponent's Claude-parsed
@@ -255,6 +269,13 @@ void UTemplateAnimationDriverComponent::ShutdownSubsystem()
 	{
 		CachedDialogueComp->OnDialogueResponseReceived.RemoveDynamic(this, &UTemplateAnimationDriverComponent::HandleDialogueResponse);
 	}
+	if (CachedTTSComp)
+	{
+		CachedTTSComp->OnSpeechStarted.RemoveDynamic(this, &UTemplateAnimationDriverComponent::HandleSpeechStarted);
+		CachedTTSComp->OnSpeechFinished.RemoveDynamic(this, &UTemplateAnimationDriverComponent::HandleSpeechFinished);
+		CachedTTSComp->OnSpeechError.RemoveDynamic(this, &UTemplateAnimationDriverComponent::HandleSpeechError);
+	}
+	ClearIdleReturnTimer();
 	StopAllEmotionMontages();
 	Super::ShutdownSubsystem();
 }
@@ -288,6 +309,11 @@ void UTemplateAnimationDriverComponent::HandleEmotionChanged(FEmotionState OldSt
 void UTemplateAnimationDriverComponent::HandleDialogueResponse(const FString& /*ResponseText*/,
 	EEmotionType NPCEmotionHint, bool /*bShouldGiveItem*/, FName /*ItemID*/)
 {
+	// New turn arriving — cancel any pending Idle return from the previous
+	// utterance regardless of whether the emotion changed; we shouldn't snap
+	// to Idle mid-conversation while a new response is about to play.
+	ClearIdleReturnTimer();
+
 	// Route Claude's directly-parsed emotion to template selection. Decoupled
 	// from EmotionComponent so slow decay (300s half-life with our default
 	// NeutralThreshold) can't hold Sadness on the face after Claude has
@@ -534,4 +560,65 @@ USkeletalMeshComponent* UTemplateAnimationDriverComponent::FindBodyMesh(AActor* 
 		}
 	}
 	return nullptr;
+}
+
+void UTemplateAnimationDriverComponent::HandleSpeechStarted()
+{
+	// New utterance is audible — kill any Idle-return queued from the
+	// previous one. Belt-and-suspenders: HandleDialogueResponse already
+	// clears it earlier in the pipeline, but a TTS-only path (e.g. a
+	// retry that doesn't re-emit OnDialogueResponseReceived) still needs
+	// the cancel here.
+	ClearIdleReturnTimer();
+}
+
+void UTemplateAnimationDriverComponent::HandleSpeechFinished()
+{
+	if (IdleReturnDelaySeconds <= 0.0f)
+	{
+		return;
+	}
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	World->GetTimerManager().SetTimer(
+		IdleReturnTimerHandle,
+		this,
+		&UTemplateAnimationDriverComponent::HandleIdleReturnTimer,
+		IdleReturnDelaySeconds,
+		/*bLoop=*/false);
+}
+
+void UTemplateAnimationDriverComponent::HandleSpeechError(int32 /*ResponseCode*/, const FString& /*ErrorBody*/)
+{
+	// Speech failed mid-pipeline — treat the same as Finished so the body
+	// doesn't stay frozen on the emotion template waiting for audio that
+	// will never arrive.
+	HandleSpeechFinished();
+}
+
+void UTemplateAnimationDriverComponent::HandleIdleReturnTimer()
+{
+	if (CurrentLockedTemplate != EMetahumanTemplateAnim::Idle)
+	{
+		ApplyTemplate(EMetahumanTemplateAnim::Idle);
+		CurrentLockedTemplate = EMetahumanTemplateAnim::Idle;
+		UE_LOG(LogTemp, Log, TEXT("TemplateAnimDriver[%s]: post-speech idle return (after %.2fs)"),
+			GetOwner() ? *GetOwner()->GetName() : TEXT("?"), IdleReturnDelaySeconds);
+	}
+	// Reset the dedup key so the next non-Neutral emotion from Claude still
+	// drives a transition out of Idle. Without this, an emotion matching
+	// whatever fired immediately before the idle return would be silently
+	// skipped by HandleDialogueResponse's match-LastHandledEmotion check.
+	LastHandledEmotion = EEmotionType::Neutral;
+}
+
+void UTemplateAnimationDriverComponent::ClearIdleReturnTimer()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(IdleReturnTimerHandle);
+	}
 }

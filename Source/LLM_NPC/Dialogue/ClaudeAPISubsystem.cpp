@@ -129,9 +129,13 @@ FString UClaudeAPISubsystem::BuildRequestBody(
 		TEXT("  \"response_text\": \"your dialogue response here\",\n")
 		TEXT("  \"npc_emotion_update\": \"one of: Neutral, Joy, Sadness, Anger, Fear, Surprise, Disgust, Trust, Anticipation\",\n")
 		TEXT("  \"should_give_item\": false,\n")
-		TEXT("  \"item_id\": \"\"\n")
+		TEXT("  \"item_id\": \"\",\n")
+		TEXT("  \"branch_resolution\": null\n")
 		TEXT("}\n")
-		TEXT("Always respond in this JSON format. The response_text field contains your in-character dialogue.");
+		TEXT("Always respond in this JSON format. The response_text field contains your in-character dialogue. ")
+		TEXT("The branch_resolution field is null on every turn EXCEPT a climax turn (set only when the prompt's ")
+		TEXT("CLIMAX INSTRUCTION block is present, in which case set it to one of \"convergent\", ")
+		TEXT("\"convergent_specific\", or \"recursive_silence\" as that block specifies).");
 
 	RootObject->SetStringField(TEXT("system"), AugmentedSystemPrompt);
 
@@ -333,6 +337,10 @@ FClaudeAPIResponse UClaudeAPISubsystem::ParseResponse(const FString& ResponseBod
 
 		StructuredResponse->TryGetBoolField(TEXT("should_give_item"), Result.bShouldGiveItem);
 		StructuredResponse->TryGetStringField(TEXT("item_id"), Result.ItemID);
+
+		// Tier 3: branch_resolution is null on every non-climax turn. Try-get leaves
+		// the empty default in place when the field is missing OR JSON null.
+		StructuredResponse->TryGetStringField(TEXT("branch_resolution"), Result.BranchResolution);
 
 		Result.bSuccess = true;
 		UE_LOG(LogTemp, Log, TEXT("ClaudeAPISubsystem: Parsed structured response. Emotion: %s"), *EmotionString);

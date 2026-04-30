@@ -471,6 +471,11 @@ void UMetahumanAnimComponent::BuildDefaultEmotionMappings()
 	UE_LOG(LogTemp, Log, TEXT("MetahumanAnim: Built %d emotion curve mappings"), EmotionCurveMappings.Num());
 }
 
+void UMetahumanAnimComponent::SetFaceCurve(FName ControlName, float Value)
+{
+	SetFaceControl(ControlName, Value);
+}
+
 void UMetahumanAnimComponent::SetFaceControl(FName ControlName, float Value)
 {
 	if (!CachedFaceAnimInstance || !CachedSetControlFunc)

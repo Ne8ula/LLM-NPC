@@ -56,6 +56,17 @@ public:
 	/** Get the cached Face skeletal mesh. */
 	USkeletalMeshComponent* GetFaceMesh() const { return CachedSkeletalMesh; }
 
+	/**
+	 * Push a single curve value through the Face AnimBP's "Set Control"
+	 * reflection bridge. Public so sibling components (e.g. eye tracking)
+	 * can drive curves that aren't owned by the emotion / viseme pipeline
+	 * without duplicating the reflection cache. No-op when the bridge
+	 * isn't initialized yet — safe to spam from sibling Tick before this
+	 * component's BeginPlay has run.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "NPC|Animation")
+	void SetFaceCurve(FName ControlName, float Value);
+
 	// --- Configuration ---
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|Animation")
