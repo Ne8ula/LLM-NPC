@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Memory Archive — Elevator Pitch</title>
+<style>
+  @page { size: A4 portrait; margin: 0; }
+  @media print {
+    html, body { margin: 0; padding: 0; background: #02060a; }
+    .card { box-shadow: none; margin: 0; }
+  }
+
+  :root {
+    --bg:       #02060a;
+    --line:     #1d3a28;
+    --line-2:   #2a583c;
+    --dim:      #6b8a78;
+    --mid:      #9ec3aa;
+    --text:     #d6ead8;
+    --bright:   #e6f6e8;
+    --accent:   #7eecaa;
+    --accent-2: #5fc88a;
+    --warm:     #d7c489;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Courier New", monospace;
+    -webkit-font-smoothing: antialiased;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body { display: flex; justify-content: center; padding: 18px 0; }
+
+  .card {
+    position: relative;
+    width: 210mm;
+    height: 297mm;
+    padding: 14mm 16mm 12mm;
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        rgba(0,0,0,0)        0,
+        rgba(0,0,0,0)        2px,
+        rgba(20, 60, 38, 0.14) 3px,
+        rgba(0,0,0,0)        4px
+      ),
+      radial-gradient(ellipse at 50% 28%, rgba(40,110,72,0.10) 0%, rgba(0,0,0,0) 60%),
+      var(--bg);
+    box-shadow: 0 0 28px rgba(0,0,0,0.6);
+    overflow: hidden;
+  }
+
+  .corner {
+    position: absolute; width: 11mm; height: 11mm;
+    border-color: var(--accent); border-style: solid; border-width: 0;
+  }
+  .corner.tl { top: 5mm; left: 5mm;     border-top-width: 0.5mm; border-left-width: 0.5mm; }
+  .corner.tr { top: 5mm; right: 5mm;    border-top-width: 0.5mm; border-right-width: 0.5mm; }
+  .corner.bl { bottom: 5mm; left: 5mm;  border-bottom-width: 0.5mm; border-left-width: 0.5mm; }
+  .corner.br { bottom: 5mm; right: 5mm; border-bottom-width: 0.5mm; border-right-width: 0.5mm; }
+
+  /* ===== Header ===== */
+  .header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding-bottom: 3.5mm;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 8mm;
+  }
+  .header .micro {
+    font-size: 8pt; letter-spacing: 0.30em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  .header h1 {
+    font-size: 22pt; letter-spacing: 0.08em; font-weight: 400;
+    color: var(--bright); margin: 1mm 0 0; line-height: 1.05;
+  }
+  .header h1 .sub { color: var(--accent); font-weight: 500; }
+  .header .meta {
+    font-size: 7.6pt; letter-spacing: 0.22em; color: var(--dim);
+    margin-top: 2mm; line-height: 1.5;
+  }
+  .header .right { text-align: right; }
+  .pill {
+    display: inline-block;
+    border: 1px solid var(--line-2);
+    border-radius: 2px;
+    padding: 0.8mm 2.6mm;
+    font-size: 8pt; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--accent);
+    background: rgba(40,90,60,0.20);
+    margin-top: 1.4mm;
+  }
+
+  /* ===== Title for whole sheet ===== */
+  .sheet-title {
+    display: flex; align-items: baseline; gap: 4mm;
+    margin-bottom: 7mm;
+  }
+  .sheet-title .idx {
+    font-size: 9pt; letter-spacing: 0.28em; color: var(--dim);
+    border: 1px solid var(--line-2);
+    padding: 0.6mm 2mm; border-radius: 1px;
+    background: rgba(10,25,18,0.6);
+  }
+  .sheet-title .label {
+    font-size: 13pt; letter-spacing: 0.20em; text-transform: uppercase;
+    color: var(--accent); font-weight: 500;
+  }
+  .sheet-title .rule {
+    flex: 1; height: 1px;
+    background: linear-gradient(to right, rgba(126,236,170,0.5), rgba(126,236,170,0));
+  }
+  .sheet-title .target {
+    font-size: 8pt; letter-spacing: 0.26em; color: var(--accent-2);
+  }
+
+  /* ===== Beat block ===== */
+  .beat {
+    border: 1px solid var(--line-2);
+    border-left: 0.8mm solid var(--accent);
+    background: rgba(10, 25, 18, 0.55);
+    padding: 3.4mm 4.4mm;
+    margin-bottom: 3.4mm;
+  }
+  .beat:last-of-type { margin-bottom: 0; }
+  .beat .row {
+    display: flex; align-items: center; gap: 4mm;
+    margin-bottom: 2.2mm;
+  }
+  .beat .timing {
+    font-size: 10pt; color: var(--accent);
+    font-weight: 500; letter-spacing: 0.06em;
+    background: rgba(40,90,60,0.25);
+    border: 1px solid var(--line-2);
+    border-radius: 2px;
+    padding: 0.6mm 2.4mm;
+    text-shadow: 0 0 2mm rgba(126,236,170,0.5);
+    white-space: nowrap;
+  }
+  .beat .heading {
+    font-size: 10pt; letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--bright); font-weight: 500;
+  }
+  .beat .cue {
+    margin-left: auto;
+    font-size: 7.4pt; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--accent-2);
+  }
+  .beat .cue::before {
+    content: "▸ ";
+    color: var(--accent);
+  }
+  .beat .script {
+    font-size: 11pt; line-height: 1.55;
+    color: var(--text);
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  }
+  .beat .script em {
+    color: var(--bright); font-style: italic;
+  }
+  .beat .script strong {
+    color: var(--accent); font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .beat .script .q {
+    color: var(--warm);
+  }
+
+  /* ===== Footer ===== */
+  .footer {
+    position: absolute; left: 16mm; right: 16mm; bottom: 7mm;
+    display: flex; justify-content: space-between; align-items: center;
+    border-top: 1px solid var(--line);
+    padding-top: 2.4mm;
+    font-size: 7.4pt; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  .footer .center { color: var(--accent); }
+
+  /* ===== Print-helper banner (screen only) ===== */
+  .print-tip {
+    position: fixed; top: 10px; left: 50%;
+    transform: translateX(-50%);
+    font-family: ui-monospace, monospace; font-size: 11px;
+    color: rgba(180, 240, 200, 0.65);
+    background: rgba(8, 18, 14, 0.85);
+    border: 1px solid rgba(126,236,170,0.3);
+    padding: 6px 14px; border-radius: 3px;
+    letter-spacing: 0.14em;
+  }
+  @media print { .print-tip { display: none; } }
+</style>
+</head>
+<body>
+
+<div class="print-tip">CTRL · P  →  SAVE AS PDF  →  A4 PORTRAIT  →  NO MARGINS  ·  BACKGROUND GRAPHICS ON</div>
+
+<div class="card">
+  <span class="corner tl"></span>
+  <span class="corner tr"></span>
+  <span class="corner bl"></span>
+  <span class="corner br"></span>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="left">
+      <div class="micro">LLM-NPC · UE 5.7 · THRESHOLD</div>
+      <h1>The Memory Archive <span class="sub">/ Vertical Slice</span></h1>
+      <div class="meta">
+        SUBJECT · ASHLEY WEI &nbsp;<span style="opacity:0.55">[POSTHUMOUS RECONSTRUCTION]</span><br>
+        TESTIMONY · THE FRIEND &nbsp;<span style="opacity:0.55">— CONSENT · GRANTED</span>
+      </div>
+    </div>
+    <div class="right">
+      <div class="micro" style="color: var(--accent)">Speaker Card</div>
+      <div class="meta">2026 · 04 · 30</div>
+      <span class="pill">≈ 90 SECONDS</span>
+    </div>
+  </div>
+
+  <div class="sheet-title">
+    <span class="idx">≡</span>
+    <span class="label">Elevator Pitch — Poster Walkthrough</span>
+    <span class="rule"></span>
+    <span class="target">5 BEATS</span>
+  </div>
+
+  <!-- BEAT 1 — OPEN -->
+  <div class="beat">
+    <div class="row">
+      <span class="timing">0:00 — 0:10</span>
+      <span class="heading">Open</span>
+      <span class="cue">point: poster header</span>
+    </div>
+    <div class="script">
+      This is <em>The Memory Archive</em>. A near-future apparatus built to recover <strong>Ashley Wei</strong> — a child who disappeared from a Chinese residential compound four years ago. She never consented to be archived.
+    </div>
+  </div>
+
+  <!-- BEAT 2 — FRAME -->
+  <div class="beat">
+    <div class="row">
+      <span class="timing">0:10 — 0:30</span>
+      <span class="heading">Frame</span>
+      <span class="cue">point: subject &amp; testimony lines</span>
+    </div>
+    <div class="script">
+      The only person who agreed to be modeled is <em>The Friend</em> — Ashley&rsquo;s neighbour, the last person to see her alive. The Friend who lives in this archive is that model. She remembers consenting. <strong>She can revoke consent.</strong> The piece asks one question: <span class="q">when the model of a witness withdraws consent, what testimony remains?</span>
+    </div>
+  </div>
+
+  <!-- BEAT 3 — LOOP -->
+  <div class="beat">
+    <div class="row">
+      <span class="timing">0:30 — 0:55</span>
+      <span class="heading">The Loop</span>
+      <span class="cue">point: section 01 (the four stages)</span>
+    </div>
+    <div class="script">
+      Two operators speak from outside the diegetic space, visible inside as chrome robotic hands. Voice goes through <strong>Whisper</strong>, gets tagged by a custom <strong>Speaker-ID</strong> component, then annotated with whatever object they&rsquo;re holding, what gesture they&rsquo;re making, what their face shows. That annotated message goes to <strong>Claude</strong> — which returns structured JSON: dialogue, emotion update, optional item-give. <strong>ElevenLabs v3</strong> speaks it with inline audio tags; a template anim driver picks one of ten MetaHuman face-and-body montages; lip sync rides char-level timestamps.
+    </div>
+  </div>
+
+  <!-- BEAT 4 — MECHANIC -->
+  <div class="beat">
+    <div class="row">
+      <span class="timing">0:55 — 1:18</span>
+      <span class="heading">The Mechanic</span>
+      <span class="cue">point: components grid</span>
+    </div>
+    <div class="script">
+      Seven inspectable objects sit in The Friend&rsquo;s back-room store. Hard-gated topics open only when specific items are <em>presented</em> &mdash; not just looked at &mdash; and only when per-speaker trust crosses a threshold. The conversation can branch three ways: <strong>convergent disclosure</strong>, <strong>divergent fragmentation</strong>, or <strong>recursive silence</strong> &mdash; where the model decides the real Friend would not have wanted this continued, and severs the link.
+    </div>
+  </div>
+
+  <!-- BEAT 5 — CLOSE -->
+  <div class="beat">
+    <div class="row">
+      <span class="timing">1:18 — 1:30</span>
+      <span class="heading">Close</span>
+      <span class="cue">point: tier badge / footer</span>
+    </div>
+    <div class="script">
+      A <strong>speculative-design provocation</strong> about consent and witness, on a working multi-modal LLM stack. Tier 2 just shipped. Tier 3 finishes next week.
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <span>BRANCH · claude/continue-llm-npc-api</span>
+    <span class="center">▮ MEMORY ARCHIVE · ELEVATOR PITCH · 90 s ▮</span>
+    <span>~220 WORDS</span>
+  </div>
+
+</div>
+
+</body>
+</html>

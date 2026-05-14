@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Memory Archive — Vertical Slice Poster</title>
+<style>
+  @page { size: A4 portrait; margin: 0; }
+  @media print {
+    html, body { margin: 0; padding: 0; background: #02060a; }
+    .poster { box-shadow: none; margin: 0; }
+  }
+
+  :root {
+    --bg:       #02060a;
+    --line:     #1d3a28;
+    --line-2:   #2a583c;
+    --dim:      #6b8a78;
+    --mid:      #9ec3aa;
+    --text:     #d6ead8;
+    --bright:   #e6f6e8;
+    --accent:   #7eecaa;
+    --accent-2: #5fc88a;
+    --warm:     #d7c489;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Courier New", monospace;
+    -webkit-font-smoothing: antialiased;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body { display: flex; justify-content: center; padding: 18px 0; }
+
+  /* ===== A4 surface ===== */
+  .poster {
+    position: relative;
+    width: 210mm;
+    height: 297mm;
+    padding: 10mm 12mm 9mm;
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        rgba(0,0,0,0)        0,
+        rgba(0,0,0,0)        2px,
+        rgba(20, 60, 38, 0.15) 3px,
+        rgba(0,0,0,0)        4px
+      ),
+      radial-gradient(ellipse at 50% 28%, rgba(40,110,72,0.10) 0%, rgba(0,0,0,0) 60%),
+      var(--bg);
+    box-shadow: 0 0 28px rgba(0,0,0,0.6);
+    overflow: hidden;
+  }
+  .corner {
+    position: absolute; width: 11mm; height: 11mm;
+    border-color: var(--accent); border-style: solid; border-width: 0;
+  }
+  .corner.tl { top: 5mm; left: 5mm;     border-top-width: 0.5mm; border-left-width: 0.5mm; }
+  .corner.tr { top: 5mm; right: 5mm;    border-top-width: 0.5mm; border-right-width: 0.5mm; }
+  .corner.bl { bottom: 5mm; left: 5mm;  border-bottom-width: 0.5mm; border-left-width: 0.5mm; }
+  .corner.br { bottom: 5mm; right: 5mm; border-bottom-width: 0.5mm; border-right-width: 0.5mm; }
+
+  /* ===== Typography ===== */
+  .micro {
+    font-size: 8pt; letter-spacing: 0.30em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  .label {
+    font-size: 8pt; letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600;
+  }
+  h1 {
+    font-size: 22pt; letter-spacing: 0.08em; font-weight: 400;
+    color: var(--bright); margin: 0.6mm 0 0; line-height: 1.05;
+  }
+  h1 .sub { color: var(--accent); font-weight: 500; }
+  h2 {
+    font-size: 12pt; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--accent); font-weight: 500;
+    margin: 0 0 3mm 0;
+    display: flex; align-items: center; gap: 3mm;
+  }
+  h2 .idx {
+    color: var(--dim); font-weight: 400; font-size: 9pt;
+    border: 1px solid var(--line-2);
+    padding: 0.4mm 1.6mm; border-radius: 1px;
+    background: rgba(10,25,18,0.6);
+  }
+  h2 .rule {
+    flex: 1; height: 1px;
+    background: linear-gradient(to right, rgba(126,236,170,0.5), rgba(126,236,170,0));
+  }
+  code {
+    font-family: inherit; font-size: 9pt;
+    color: var(--mid);
+    background: rgba(126,236,170,0.07);
+    border: 1px solid rgba(126,236,170,0.18);
+    padding: 0 4px; border-radius: 2px;
+  }
+  .accent  { color: var(--accent); }
+  .accent2 { color: var(--accent-2); }
+  .warm    { color: var(--warm); }
+  .dim     { color: var(--dim); }
+  .em      { color: var(--bright); }
+
+  /* ===== Header ===== */
+  .header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding-bottom: 2.6mm;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 4mm;
+  }
+  .header .right { text-align: right; }
+  .header .meta {
+    margin-top: 1.2mm;
+    color: var(--dim); font-size: 7.4pt; letter-spacing: 0.22em;
+    line-height: 1.45;
+  }
+  .pill {
+    display: inline-block;
+    border: 1px solid var(--line-2);
+    border-radius: 2px;
+    padding: 0.7mm 2.4mm;
+    font-size: 7.4pt; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--accent);
+    background: rgba(40,90,60,0.20);
+    margin-top: 1.4mm;
+  }
+
+  section { margin-bottom: 4mm; }
+  section:last-of-type { margin-bottom: 0; }
+
+  /* ===== LOOP — big numbered stages ===== */
+  .stage {
+    display: flex; align-items: center;
+    border: 1px solid var(--line-2);
+    border-left: 0.8mm solid var(--accent);
+    background: rgba(10, 25, 18, 0.55);
+    padding: 2.6mm 4mm;
+    gap: 5mm;
+  }
+  .stage .step {
+    font-size: 18pt; font-weight: 300; color: var(--accent);
+    line-height: 1; min-width: 11mm;
+    text-shadow: 0 0 3mm rgba(126,236,170,0.35);
+  }
+  .stage .body { flex: 1; }
+  .stage .title {
+    font-size: 12pt; color: var(--bright); letter-spacing: 0.06em;
+    margin-bottom: 0.8mm;
+  }
+  .stage .desc {
+    font-size: 9pt; line-height: 1.4; color: var(--text);
+  }
+  .stage .desc .tok { color: var(--accent-2); }
+  .stage .endpoint {
+    font-size: 9.4pt; color: var(--accent-2);
+    margin-top: 0.4mm;
+  }
+
+  .arrow-row {
+    display: flex; justify-content: center;
+    margin: 0.4mm 0;
+  }
+  .arrow {
+    width: 0; height: 0;
+    border-left: 2.4mm solid transparent;
+    border-right: 2.4mm solid transparent;
+    border-top: 2.6mm solid var(--accent);
+    filter: drop-shadow(0 0 1mm rgba(126,236,170,0.55));
+  }
+
+  /* ===== API — three big service cards ===== */
+  .apis {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2.4mm;
+  }
+  .svc {
+    border: 1px solid var(--line-2);
+    background: rgba(10, 25, 18, 0.5);
+    padding: 2.6mm 3.4mm;
+    position: relative;
+  }
+  .svc .badge {
+    font-size: 6.6pt; letter-spacing: 0.26em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  .svc .name {
+    font-size: 14pt; color: var(--bright); letter-spacing: 0.04em;
+    margin: 0.6mm 0 1.6mm;
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 1.4mm;
+  }
+  .svc .name .dot {
+    display: inline-block;
+    width: 2mm; height: 2mm; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 2.4mm rgba(126,236,170,0.7);
+    margin-right: 1.8mm; vertical-align: middle;
+  }
+  .svc .endpoint {
+    font-size: 8pt; color: var(--accent-2);
+    line-height: 1.35; margin-bottom: 1.4mm;
+    word-break: break-all;
+  }
+  .svc .returns {
+    font-size: 8.2pt; color: var(--text);
+    line-height: 1.35;
+  }
+  .svc .returns b { color: var(--bright); font-weight: 500; }
+  .svc .auth {
+    font-size: 7pt; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--warm); margin-top: 1.4mm;
+  }
+
+  /* ===== COMPONENTS — six tiles ===== */
+  .components {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2.4mm;
+  }
+  .comp {
+    border: 1px solid var(--line-2);
+    background: rgba(10, 25, 18, 0.45);
+    padding: 2.2mm 3mm;
+    border-top: 0.7mm solid var(--accent);
+  }
+  .comp .ctitle {
+    font-size: 10pt; color: var(--bright); letter-spacing: 0.06em;
+    margin-bottom: 1mm;
+  }
+  .comp .csubtitle {
+    font-size: 6.8pt; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 1.2mm;
+  }
+  .comp .clist {
+    font-size: 8pt; line-height: 1.42; color: var(--text);
+  }
+  .comp .clist b { color: var(--accent-2); font-weight: 500; }
+
+  /* ===== Logo band (between components and footer) ===== */
+  .logo-band {
+    display: flex; align-items: center; gap: 5mm;
+    margin: 5mm 0 0;
+  }
+  .logo-band .flank {
+    flex: 1; height: 1px;
+    background: linear-gradient(to right, rgba(126,236,170,0), rgba(126,236,170,0.55), rgba(126,236,170,0));
+  }
+  .logo {
+    display: flex; align-items: center; gap: 5mm;
+  }
+  .mark {
+    width: 18mm; height: 18mm; flex: none;
+    filter: drop-shadow(0 0 1.4mm rgba(126,236,170,0.35));
+  }
+  .wordmark { display: flex; flex-direction: column; gap: 1mm; }
+  .wordmark .brand {
+    font-size: 13pt; letter-spacing: 0.30em; font-weight: 500;
+    color: var(--bright);
+    text-shadow: 0 0 3mm rgba(126,236,170,0.45);
+  }
+  .wordmark .reg {
+    display: flex; align-items: center; gap: 2.5mm;
+    font-size: 6.6pt; letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .wordmark .reg .tick {
+    width: 0.6mm; height: 0.6mm; background: var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 1.4mm rgba(126,236,170,0.7);
+  }
+
+  /* ===== Footer ===== */
+  .footer {
+    position: absolute; left: 12mm; right: 12mm; bottom: 4mm;
+    display: flex; justify-content: space-between; align-items: center;
+    border-top: 1px solid var(--line);
+    padding-top: 1.8mm;
+    font-size: 7.4pt; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  .footer .center { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="poster">
+  <span class="corner tl"></span>
+  <span class="corner tr"></span>
+  <span class="corner bl"></span>
+  <span class="corner br"></span>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="left">
+      <div class="micro">LLM-NPC · UE 5.7 · Threshold</div>
+      <h1>The Memory Archive <span class="sub">/ Vertical Slice</span></h1>
+      <div class="meta">
+        SUBJECT · ASHLEY WEI &nbsp;<span class="dim">[POSTHUMOUS RECONSTRUCTION]</span><br>
+        TESTIMONY · THE FRIEND &nbsp;<span class="dim">— CONSENT · GRANTED</span>
+      </div>
+    </div>
+    <div class="right">
+      <div class="label">Single-NPC Demo</div>
+      <div class="meta">2026 · 04 · 30</div>
+      <span class="pill">TIER 2 · COMPLETE</span>
+    </div>
+  </div>
+
+  <!-- 01 — LOOP -->
+  <section>
+    <h2><span class="idx">01</span> The Loop <span class="rule"></span></h2>
+
+    <div class="stage">
+      <div class="step">01</div>
+      <div class="body">
+        <div class="title">INPUT</div>
+        <div class="desc">
+          <span class="tok">WhisperSTT</span> ·
+          <span class="tok">SpeakerID</span> ·
+          <span class="tok">FacialRecognition</span> ·
+          <span class="tok">GestureRecognition</span> ·
+          <span class="tok">InspectableItem (E / F)</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-row"><div class="arrow"></div></div>
+
+    <div class="stage">
+      <div class="step">02</div>
+      <div class="body">
+        <div class="title">ASSEMBLY</div>
+        <div class="desc">
+          <span class="tok">BuildSystemPromptFromGraph()</span> from
+          <code>NPCGraphDataAsset</code> &nbsp;+&nbsp;
+          <span class="tok">BuildAnnotatedContent()</span> wraps
+          <code>[Speaker]</code> <code>[Holding]</code> <code>[Gesture]</code> <code>[Emotion]</code>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-row"><div class="arrow"></div></div>
+
+    <div class="stage">
+      <div class="step">03</div>
+      <div class="body">
+        <div class="title">CLAUDE API</div>
+        <div class="endpoint">POST /v1/messages</div>
+        <div class="desc">
+          Returns <code>{ dialogue, emotion_update, item_give }</code>
+        </div>
+      </div>
+    </div>
+
+    <div class="arrow-row"><div class="arrow"></div></div>
+
+    <div class="stage">
+      <div class="step">04</div>
+      <div class="body">
+        <div class="title">OUTPUT BROADCAST</div>
+        <div class="desc">
+          <span class="tok">ElevenLabsTTS</span> ·
+          <span class="tok">LipSync</span> ·
+          <span class="tok">EmotionComponent</span> ·
+          <span class="tok">TemplateAnimDriver</span> ·
+          <span class="tok">Speaker memory</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 02 — API -->
+  <section>
+    <h2><span class="idx">02</span> API Surface <span class="rule"></span></h2>
+    <div class="apis">
+      <div class="svc">
+        <div class="badge">Speech-to-Text</div>
+        <div class="name"><span class="dot"></span>Whisper</div>
+        <div class="endpoint">POST /v1/audio/transcriptions</div>
+        <div class="returns"><b>Returns</b> · transcript text</div>
+        <div class="auth">Authorization · Bearer</div>
+      </div>
+      <div class="svc">
+        <div class="badge">Language Model</div>
+        <div class="name"><span class="dot"></span>Claude</div>
+        <div class="endpoint">POST /v1/messages</div>
+        <div class="returns"><b>Returns</b> · structured JSON · dialogue + emotion + item</div>
+        <div class="auth">x-api-key</div>
+      </div>
+      <div class="svc">
+        <div class="badge">Text-to-Speech</div>
+        <div class="name"><span class="dot"></span>ElevenLabs</div>
+        <div class="endpoint">POST /v1/text-to-speech / &#8203;{voice_id} / &#8203;with-timestamps</div>
+        <div class="returns"><b>Returns</b> · Base64 PCM 24 kHz + char alignment</div>
+        <div class="auth">xi-api-key</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 — COMPONENTS -->
+  <section>
+    <h2><span class="idx">03</span> Components <span class="rule"></span></h2>
+    <div class="components">
+
+      <div class="comp">
+        <div class="csubtitle">Core</div>
+        <div class="ctitle">Actor &amp; World</div>
+        <div class="clist">
+          <b>NPCCharacter</b> · NPCPlayerController · NPCGameMode · NPCGraphDataAsset
+        </div>
+      </div>
+
+      <div class="comp">
+        <div class="csubtitle">Dialogue</div>
+        <div class="ctitle">LLM Pipeline</div>
+        <div class="clist">
+          <b>DialogueComponent</b> · ClaudeAPISubsystem · WhisperSTT · ElevenLabsTTS · SpeakerID
+        </div>
+      </div>
+
+      <div class="comp">
+        <div class="csubtitle">Emotion</div>
+        <div class="ctitle">PAD State Machine</div>
+        <div class="clist">
+          <b>EmotionComponent</b> · EmotionStateMachine · EmotionGraphDataAsset
+        </div>
+      </div>
+
+      <div class="comp">
+        <div class="csubtitle">Animation</div>
+        <div class="ctitle">MetaHuman Driving</div>
+        <div class="clist">
+          <b>TemplateAnimDriver</b> · MetahumanAnim · LipSync · EyeTracking · BodyMotion
+        </div>
+      </div>
+
+      <div class="comp">
+        <div class="csubtitle">Sensing</div>
+        <div class="ctitle">ONNX Vision</div>
+        <div class="clist">
+          <b>FacialRecognition</b> · GestureRecognition · CameraManagerSubsystem
+        </div>
+      </div>
+
+      <div class="comp">
+        <div class="csubtitle">World &amp; HUD</div>
+        <div class="ctitle">Interaction</div>
+        <div class="clist">
+          <b>InspectableItem</b> (E · F · Q) · NPCDialogueHUD · FallbackManager
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- LOGO BAND -->
+  <div class="logo-band">
+    <div class="flank"></div>
+
+    <div class="logo">
+      <svg class="mark" viewBox="-50 -50 100 100" xmlns="http://www.w3.org/2000/svg" aria-label="The Memory Archive seal">
+        <!-- Four filled radial wedges (alternating pinwheel: N · E · S · W) -->
+        <polygon points="0,0 -16.07,-38.80 16.07,-38.80" fill="#7eecaa"/>
+        <polygon points="0,0 38.80,-16.07 38.80,16.07"   fill="#7eecaa"/>
+        <polygon points="0,0 16.07,38.80 -16.07,38.80"   fill="#7eecaa"/>
+        <polygon points="0,0 -38.80,16.07 -38.80,-16.07" fill="#7eecaa"/>
+
+        <!-- Outer octagonal frame -->
+        <polygon points="-16.07,-38.80 16.07,-38.80 38.80,-16.07 38.80,16.07 16.07,38.80 -16.07,38.80 -38.80,16.07 -38.80,-16.07"
+                 fill="none" stroke="#7eecaa" stroke-width="2.4" stroke-linejoin="miter"/>
+
+        <!-- Inner octagonal frame (bureaucratic doubling) -->
+        <polygon points="-10.07,-24.32 10.07,-24.32 24.32,-10.07 24.32,10.07 10.07,24.32 -10.07,24.32 -24.32,10.07 -24.32,-10.07"
+                 fill="#02060a" stroke="#7eecaa" stroke-width="1" stroke-linejoin="miter"/>
+
+        <!-- Central read-head: disc + horizontal scan slot -->
+        <circle cx="0" cy="0" r="7.6" fill="#02060a" stroke="#7eecaa" stroke-width="1.4"/>
+        <rect x="-4.6" y="-0.9" width="9.2" height="1.8" fill="#7eecaa"/>
+
+        <!-- Cardinal tick marks outside the seal -->
+        <line x1="0" y1="-46" x2="0" y2="-43" stroke="#7eecaa" stroke-width="1.8"/>
+        <line x1="0" y1="43"  x2="0" y2="46"  stroke="#7eecaa" stroke-width="1.8"/>
+        <line x1="-46" y1="0" x2="-43" y2="0" stroke="#7eecaa" stroke-width="1.8"/>
+        <line x1="43"  y1="0" x2="46"  y2="0" stroke="#7eecaa" stroke-width="1.8"/>
+      </svg>
+
+      <div class="wordmark">
+        <div class="brand">THE MEMORY ARCHIVE</div>
+        <div class="reg">
+          <span>ARCHIVUM</span><span class="tick"></span>
+          <span>TESTIMONII</span><span class="tick"></span>
+          <span>DIV. III</span><span class="tick"></span>
+          <span>REG&middot;0042</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="flank"></div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <span>BRANCH · claude/continue-llm-npc-api</span>
+    <span class="center">▮ MEMORY ARCHIVE · TECHNICAL POSTER ▮</span>
+    <span>~11.6 K LOC · 75 .cpp / .h</span>
+  </div>
+
+</div>
+
+</body>
+</html>
