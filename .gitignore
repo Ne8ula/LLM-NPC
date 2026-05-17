@@ -54,3 +54,4 @@ Content/Models/*.onnx
 Thumbs.db
 Desktop.ini
 ~$slide-deck.pptx
+*.zip
