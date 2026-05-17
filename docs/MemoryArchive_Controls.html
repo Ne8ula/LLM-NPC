@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Memory Archive — Controls</title>
+<style>
+  :root {
+    --bg:       #02060a;
+    --line:     #1d3a28;
+    --line-2:   #2a583c;
+    --dim:      #6b8a78;
+    --mid:      #9ec3aa;
+    --text:     #d6ead8;
+    --bright:   #e6f6e8;
+    --accent:   #7eecaa;
+    --accent-2: #5fc88a;
+    --warm:     #d7c489;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Courier New", monospace;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Atmospheric body backdrop — soft scanlines + center phosphor wash */
+  body {
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        rgba(0,0,0,0)        0px,
+        rgba(0,0,0,0)        2px,
+        rgba(20, 60, 38, 0.14) 3px,
+        rgba(0,0,0,0)        4px
+      ),
+      radial-gradient(ellipse at 50% 28%, rgba(40,110,72,0.10) 0%, rgba(0,0,0,0) 60%),
+      var(--bg);
+  }
+
+  /* Stage fills the viewport — sized for Razer Blade 2K (2560×1440 = 16:9)
+     but scales cleanly to any 16:9 monitor. */
+  .stage {
+    position: fixed; inset: 0;
+    padding: 4vh 5vw;
+    display: flex; flex-direction: column;
+    animation: flicker 5.5s linear infinite;
+  }
+  @keyframes flicker {
+    0%, 96%, 100% { filter: brightness(1.0); }
+    97%   { filter: brightness(1.04); }
+    98%   { filter: brightness(0.96); }
+    99%   { filter: brightness(1.02); }
+  }
+
+  /* Corner brackets */
+  .corner {
+    position: fixed;
+    width: 2.6vw; height: 2.6vw;
+    min-width: 28px; min-height: 28px;
+    border-color: var(--accent); border-style: solid; border-width: 0;
+    pointer-events: none; z-index: 50;
+  }
+  .corner.tl { top: 2vh; left: 2vw;     border-top-width: 1.5px; border-left-width: 1.5px; }
+  .corner.tr { top: 2vh; right: 2vw;    border-top-width: 1.5px; border-right-width: 1.5px; }
+  .corner.bl { bottom: 2vh; left: 2vw;  border-bottom-width: 1.5px; border-left-width: 1.5px; }
+  .corner.br { bottom: 2vh; right: 2vw; border-bottom-width: 1.5px; border-right-width: 1.5px; }
+
+  /* ============================================================
+     HEADER
+     ============================================================ */
+  .header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding-bottom: 1.6vh;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 5vh;
+  }
+  .header .micro {
+    font-size: clamp(11px, 0.85vw, 14px);
+    letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  .header h1 {
+    font-size: clamp(34px, 3.5vw, 60px);
+    font-weight: 400; letter-spacing: 0.08em;
+    color: var(--bright); margin: 0.5vh 0 0; line-height: 1.0;
+  }
+  .header h1 .sub { color: var(--accent); }
+  .header .meta {
+    margin-top: 0.8vh;
+    color: var(--dim);
+    font-size: clamp(11px, 0.85vw, 14px);
+    letter-spacing: 0.22em; line-height: 1.5;
+  }
+  .header .right { text-align: right; }
+  .header .right .label {
+    font-size: clamp(10px, 0.85vw, 14px);
+    letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .pill {
+    display: inline-block;
+    border: 1px solid var(--line-2);
+    border-radius: 2px;
+    padding: 0.5vh 1.4vw;
+    margin-top: 1vh;
+    font-size: clamp(10px, 0.85vw, 14px);
+    letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--accent);
+    background: rgba(40,90,60,0.20);
+  }
+
+  /* ============================================================
+     CONTROL GRID — 3 columns × 2 rows
+     ============================================================ */
+  .grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(2, 1fr);
+    gap: 3vh 3vw;
+    min-height: 0;
+  }
+  .card {
+    position: relative;
+    border: 1px solid var(--line-2);
+    background: rgba(10, 25, 18, 0.55);
+    padding: 3vh 2.6vw;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    overflow: hidden;
+  }
+  .card::before {
+    content: "";
+    position: absolute; top: 0; left: 0; width: 5px; height: 100%;
+    background: var(--accent);
+    box-shadow: 0 0 14px rgba(126,236,170,0.55);
+  }
+  .card .num {
+    position: absolute; top: 1.4vh; right: 1.6vw;
+    font-size: clamp(11px, 0.9vw, 14px);
+    letter-spacing: 0.32em; color: var(--dim);
+  }
+
+  /* Keycap row */
+  .keys {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0.9vw;
+    flex-wrap: wrap;
+    margin-bottom: 3vh;
+  }
+  .key {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: clamp(58px, 4.8vw, 88px);
+    height: clamp(58px, 4.8vw, 88px);
+    padding: 0 1.6vw;
+    border: 1.5px solid var(--accent);
+    border-radius: 8px;
+    background:
+      linear-gradient(180deg, rgba(40,90,60,0.45) 0%, rgba(10,25,18,0.85) 100%);
+    color: var(--bright);
+    font-size: clamp(20px, 2.0vw, 34px);
+    font-weight: 500; letter-spacing: 0.05em;
+    box-shadow:
+      0 0 12px rgba(126, 236, 170, 0.32),
+      inset 0 1px 0 rgba(180, 255, 210, 0.18),
+      inset 0 -2px 0 rgba(0, 0, 0, 0.55);
+    text-shadow: 0 0 12px rgba(126, 236, 170, 0.65);
+    user-select: none;
+  }
+  .key.wide  { padding: 0 2vw; min-width: clamp(110px, 9vw, 180px); font-size: clamp(15px, 1.4vw, 22px); letter-spacing: 0.20em; text-transform: uppercase; }
+  .key.thin  { font-size: clamp(22px, 2.4vw, 38px); }
+  .key.glyph { font-size: clamp(28px, 2.8vw, 44px); }
+  .keys .sep {
+    font-size: clamp(14px, 1.1vw, 20px);
+    color: var(--dim);
+    letter-spacing: 0.30em;
+  }
+
+  .card .label {
+    font-size: clamp(14px, 1.05vw, 18px);
+    letter-spacing: 0.30em; text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 0.8vh;
+    text-shadow: 0 0 8px rgba(126, 236, 170, 0.4);
+  }
+  .card .desc {
+    font-size: clamp(13px, 1.0vw, 17px);
+    line-height: 1.5; color: var(--text);
+    max-width: 30ch;
+  }
+  .card .desc b { color: var(--bright); font-weight: 500; }
+
+  /* ============================================================
+     FOOTER
+     ============================================================ */
+  .footer {
+    margin-top: 4vh;
+    border-top: 1px solid var(--line);
+    padding-top: 1.4vh;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: clamp(10px, 0.85vw, 14px);
+    letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  .footer .center { color: var(--accent); }
+  .footer .legend {
+    display: inline-flex; align-items: center; gap: 0.6vw;
+  }
+  .footer .legend .mini-key {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: clamp(20px, 1.4vw, 26px);
+    height: clamp(20px, 1.4vw, 26px);
+    border: 1px solid var(--line-2);
+    border-radius: 3px;
+    background: rgba(10,25,18,0.6);
+    color: var(--accent);
+    font-size: clamp(10px, 0.8vw, 12px);
+  }
+
+  /* Atmospheric overlays */
+  .scanlines {
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 40;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0)    0px,
+      rgba(0,0,0,0)    2px,
+      rgba(0,40,20,0.20) 3px,
+      rgba(0,0,0,0)    4px);
+    mix-blend-mode: multiply;
+    opacity: 0.6;
+  }
+  .vignette {
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 41;
+    background:
+      radial-gradient(ellipse 90% 80% at 50% 50%,
+        rgba(0,0,0,0) 60%,
+        rgba(0,0,0,0.28) 88%,
+        rgba(0,0,0,0.62) 100%),
+      radial-gradient(ellipse 40% 40% at 0% 0%,    rgba(0,0,0,0.35), rgba(0,0,0,0) 70%),
+      radial-gradient(ellipse 40% 40% at 100% 0%,  rgba(0,0,0,0.35), rgba(0,0,0,0) 70%),
+      radial-gradient(ellipse 40% 40% at 0% 100%,  rgba(0,0,0,0.35), rgba(0,0,0,0) 70%),
+      radial-gradient(ellipse 40% 40% at 100% 100%,rgba(0,0,0,0.35), rgba(0,0,0,0) 70%);
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+
+  <!-- corner brackets -->
+  <span class="corner tl"></span>
+  <span class="corner tr"></span>
+  <span class="corner bl"></span>
+  <span class="corner br"></span>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="left">
+      <div class="micro">LLM-NPC · UE 5.7 · Threshold</div>
+      <h1>The Memory Archive <span class="sub">/ Controls</span></h1>
+      <div class="meta">
+        DEMO HUB &middot; QUICK REFERENCE CARD &middot;
+        FOR VISITORS &amp; OPERATORS
+      </div>
+    </div>
+    <div class="right">
+      <div class="label">Control Card</div>
+      <div class="meta">2026 &middot; 05 &middot; 14</div>
+      <span class="pill">v1 &middot; STATIC</span>
+    </div>
+  </div>
+
+  <!-- CONTROL GRID -->
+  <div class="grid">
+
+    <!-- 01 — Jump to section -->
+    <div class="card">
+      <div class="num">01</div>
+      <div class="keys">
+        <span class="key">1</span>
+        <span class="key">2</span>
+        <span class="key">3</span>
+      </div>
+      <div class="label">Jump to Section</div>
+      <div class="desc">Press a number to open that mechanic directly. Works from <b>anywhere</b> &mdash; the hub or inside any section.</div>
+    </div>
+
+    <!-- 02 — Click / Select -->
+    <div class="card">
+      <div class="num">02</div>
+      <div class="keys">
+        <span class="key wide">Mouse Click</span>
+      </div>
+      <div class="label">Select a Tile</div>
+      <div class="desc">Click any of the three tiles on the hub to enter that section. Hover to highlight before clicking.</div>
+    </div>
+
+    <!-- 03 — Next section -->
+    <div class="card">
+      <div class="num">03</div>
+      <div class="keys">
+        <span class="key glyph">&rarr;</span>
+        <span class="sep">/</span>
+        <span class="key wide">Space</span>
+      </div>
+      <div class="label">Next Section</div>
+      <div class="desc">Advance to the next mechanic in sequence. Wraps around from <b>03</b> back to <b>01</b>.</div>
+    </div>
+
+    <!-- 04 — Return to hub -->
+    <div class="card">
+      <div class="num">04</div>
+      <div class="keys">
+        <span class="key wide">Esc</span>
+      </div>
+      <div class="label">Return to Hub</div>
+      <div class="desc">Exit the current section and return to the three-tile grid. The <b>BACK</b> button on the section header does the same.</div>
+    </div>
+
+    <!-- 05 — Fullscreen -->
+    <div class="card">
+      <div class="num">05</div>
+      <div class="keys">
+        <span class="key">F</span>
+      </div>
+      <div class="label">Toggle Fullscreen</div>
+      <div class="desc">Switch to immersive full-screen mode (recommended for the exhibit). Press <b>F</b> again or <b>Esc</b> to exit.</div>
+    </div>
+
+    <!-- 06 — Jump first / last -->
+    <div class="card">
+      <div class="num">06</div>
+      <div class="keys">
+        <span class="key wide">Home</span>
+        <span class="sep">/</span>
+        <span class="key wide">End</span>
+      </div>
+      <div class="label">First / Last Section</div>
+      <div class="desc">Jump directly to section <b>01</b> (THE LOOP) or <b>03</b> (EMOTION &amp; BRANCHING).</div>
+    </div>
+
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <span>BRANCH &middot; claude/continue-llm-npc-api</span>
+    <span class="center">&#x25AE; MEMORY ARCHIVE &middot; CONTROL CARD &middot; QUICK REFERENCE &#x25AE;</span>
+    <span class="legend">
+      <span class="mini-key">&larr;</span>
+      <span>PRIOR</span>
+      <span class="mini-key">&rarr;</span>
+      <span>NEXT</span>
+    </span>
+  </div>
+
+</div>
+
+<div class="scanlines"></div>
+<div class="vignette"></div>
+
+</body>
+</html>

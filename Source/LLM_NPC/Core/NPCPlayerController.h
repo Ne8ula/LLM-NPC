@@ -165,4 +165,37 @@ private:
 	bool bWasIgnoringLook = false;
 	bool b1KeyWasDown = false;
 	bool b2KeyWasDown = false;
+
+	// ---------------------------------------------------------------------------
+	// Voice input mode — Proximity Chat (VAD, always-on) vs Push-to-Talk (V hold)
+	// Mutually exclusive. Default: both off — mic is idle until the user either
+	//   (a) toggles proximity on with P, or
+	//   (b) holds V for push-to-talk.
+	// HUD reads bProximityChatEnabled / bPushToTalkActive to draw the mode chip.
+	// ---------------------------------------------------------------------------
+public:
+	/** True while proximity chat (always-on mic + VAD silence segmentation) is active. */
+	UPROPERTY(BlueprintReadOnly, Category = "NPC|Voice")
+	bool bProximityChatEnabled = false;
+
+	/** True while the V key is held and PTT is the active recording. */
+	UPROPERTY(BlueprintReadOnly, Category = "NPC|Voice")
+	bool bPushToTalkActive = false;
+
+private:
+	/** Apply mode change to the focused NPC's WhisperSTTComponent. */
+	void SetProximityChatMode(bool bEnabled);
+
+	/** V-down: start PTT recording (only if proximity is off and chat text isn't focused). */
+	void HandlePushToTalkPressed();
+
+	/** V-up: stop PTT recording and transcribe. */
+	void HandlePushToTalkReleased();
+
+	bool bPKeyWasDown = false;
+	bool bVKeyWasDown = false;
+
+	/** STT pinned at PTT-start so a focus switch mid-utterance still routes to
+	 *  the right NPC on release. Weak so a destroyed NPC won't dangle. */
+	TWeakObjectPtr<class UWhisperSTTComponent> PTTActiveSTT;
 };

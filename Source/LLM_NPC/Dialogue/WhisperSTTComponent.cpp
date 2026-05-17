@@ -152,7 +152,7 @@ void UWhisperSTTComponent::InitializeSubsystem()
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: OpenAI API key loaded. Voice input available."));
-	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Hold V to record, release to transcribe."));
+	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Hold V for push-to-talk, or press P to toggle proximity chat."));
 	bIsAvailable = true;
 
 	// Subscribe to the sibling TTS so we can gate the mic during NPC speech
@@ -243,20 +243,57 @@ void UWhisperSTTComponent::StartRecording()
 	wfx.nBlockAlign = wfx.nChannels * wfx.wBitsPerSample / 8;
 	wfx.nAvgBytesPerSec = wfx.nSamplesPerSec * wfx.nBlockAlign;
 
-	// Open default recording device
+	// Open recording device. WAVE_MAPPER consults the legacy "default device"
+	// registry, which on modern Windows can disagree with the MMDevice default
+	// the user sets in mmsys.cpl — we've seen WAVE_MAPPER return MMSYSERR_BADDEVICEID (2)
+	// even when the device enumerates correctly. So iterate over every enumerated
+	// device by explicit index and use the first one that accepts our format.
+	// WAVE_MAPPER stays as a last-ditch fallback.
 	HWAVEIN hWaveIn = nullptr;
-	MMRESULT result = waveInOpen(
-		&hWaveIn,
-		WAVE_MAPPER,
-		&wfx,
-		reinterpret_cast<DWORD_PTR>(&WaveInCallback),
-		reinterpret_cast<DWORD_PTR>(this),
-		CALLBACK_FUNCTION
-	);
+	MMRESULT result = MMSYSERR_BADDEVICEID;
+	const UINT DeviceCount = waveInGetNumDevs();
+	for (UINT DevIdx = 0; DevIdx < DeviceCount; ++DevIdx)
+	{
+		result = waveInOpen(
+			&hWaveIn,
+			DevIdx,
+			&wfx,
+			reinterpret_cast<DWORD_PTR>(&WaveInCallback),
+			reinterpret_cast<DWORD_PTR>(this),
+			CALLBACK_FUNCTION
+		);
+		if (result == MMSYSERR_NOERROR)
+		{
+			UE_LOG(LogTemp, Log, TEXT("WhisperSTT: opened device index %u."), DevIdx);
+			break;
+		}
+		UE_LOG(LogTemp, Warning,
+			TEXT("WhisperSTT: waveInOpen(device=%u) returned %d; trying next."),
+			DevIdx, result);
+	}
 
 	if (result != MMSYSERR_NOERROR)
 	{
-		UE_LOG(LogTemp, Error, TEXT("WhisperSTT: waveInOpen failed with error %d."), result);
+		// Last-ditch attempt — WAVE_MAPPER lets the OS pick. Usually redundant
+		// with the explicit loop above, but kept so a future driver fixes the
+		// mapper without us re-touching this code.
+		result = waveInOpen(
+			&hWaveIn,
+			WAVE_MAPPER,
+			&wfx,
+			reinterpret_cast<DWORD_PTR>(&WaveInCallback),
+			reinterpret_cast<DWORD_PTR>(this),
+			CALLBACK_FUNCTION
+		);
+		if (result == MMSYSERR_NOERROR)
+		{
+			UE_LOG(LogTemp, Log, TEXT("WhisperSTT: opened via WAVE_MAPPER fallback."));
+		}
+	}
+
+	if (result != MMSYSERR_NOERROR)
+	{
+		UE_LOG(LogTemp, Error, TEXT("WhisperSTT: waveInOpen failed with error %d (no device accepted 16kHz mono 16-bit PCM)."), result);
 		return;
 	}
 
@@ -372,6 +409,52 @@ void UWhisperSTTComponent::StopRecordingAndTranscribe()
 	// PCM is already 16-bit 16kHz mono — just add WAV header
 	TArray<uint8> WAVData = EncodeAsWAV(CapturedPCM, SampleRate, 1, 16);
 	SendToWhisperAPI(WAVData);
+}
+
+void UWhisperSTTComponent::StopRecordingDiscard()
+{
+	if (!bIsRecording)
+	{
+		return;
+	}
+
+	bIsRecording = false;
+	OnRecordingStateChanged.Broadcast(false);
+
+	HWAVEIN hWaveIn = reinterpret_cast<HWAVEIN>(WaveInHandle);
+	waveInStop(hWaveIn);
+	waveInReset(hWaveIn);
+
+	WAVEHDR* Headers = reinterpret_cast<WAVEHDR*>(WaveHeaders);
+	if (Headers)
+	{
+		for (int32 i = 0; i < NumBuffers; ++i)
+		{
+			waveInUnprepareHeader(hWaveIn, &Headers[i], sizeof(WAVEHDR));
+			if (Headers[i].dwUser)
+			{
+				delete reinterpret_cast<FWaveInBufferContext*>(Headers[i].dwUser);
+			}
+		}
+		delete[] Headers;
+		WaveHeaders = nullptr;
+	}
+
+	waveInClose(hWaveIn);
+	WaveInHandle = nullptr;
+
+	if (BufferMemory)
+	{
+		delete[] BufferMemory;
+		BufferMemory = nullptr;
+	}
+
+	{
+		FScopeLock Lock(&PCMLock);
+		RecordedPCM.Empty();
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("WhisperSTT: Recording stopped without dispatch (mode change)."));
 }
 
 // ----------------------------------------------------------------------------

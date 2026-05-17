@@ -23,7 +23,12 @@
       "Read(//c/Program Files \\(x86\\)/Epic Games/Launcher/Engine/Binaries/Win64/**)",
       "Read(//c/Program Files/Epic Games/**)",
       "Read(//c/Program Files \\(x86\\)/Epic Games/**)",
-      "Bash(xargs grep *)"
+      "Bash(xargs grep *)",
+      "Bash(grep -n -o '.\\\\{0,80\\\\}includePartialMessages.\\\\{0,120\\\\}' \"C:/Users/alexx/.vscode/extensions/anthropic.claude-code-2.1.141-win32-x64/extension.js\")"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "notebooklm-mcp"
+  ]
 }

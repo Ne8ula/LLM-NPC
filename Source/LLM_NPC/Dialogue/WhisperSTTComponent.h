@@ -130,7 +130,15 @@ public:
 	 * multi-NPC scenarios make device contention a real concern.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|STT")
-	bool bAutoStartOnInit = true;
+	bool bAutoStartOnInit = false;
+
+	/**
+	 * Stop the waveIn capture session without dispatching the buffered PCM to Whisper.
+	 * Used when toggling proximity-chat off — we want to terminate the always-on mic
+	 * cleanly without sending whatever fragment was in the buffer.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "NPC|STT")
+	void StopRecordingDiscard();
 
 protected:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType,

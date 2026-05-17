@@ -624,6 +624,94 @@ A small C++ helper (`§7.7 branch-eligibility hint`) computes per-turn: per-spea
 
 ---
 
+## Exhibit Demo Stack — `docs/` (2026-05-14)
+
+The visitor-facing presentation layer for the Memory Archive prototype. Lives entirely in `docs/` as static HTML — no build step, no server required, opens directly in any modern browser via `file://`. Designed for a Razer Blade 2K (2560×1440, 16:9) exhibit display with mouse + keyboard input. All five files share the same CRT phosphor-green aesthetic: `--accent: #7eecaa`, near-black `#02060a` background, mono stack (`ui-monospace, SF Mono, Menlo, Consolas`), corner brackets, soft scanline overlays.
+
+### File inventory
+
+| File | Purpose | Format |
+|---|---|---|
+| `docs/MemoryArchive_Hub.html` | Interactive exhibit kiosk. Three-tile hub + per-section video player. The primary visitor-facing piece. | 16:9 landscape, mouse + keyboard |
+| `docs/MemoryArchive_Controls.html` | Standalone quick-reference card showing keyboard shortcuts. | 16:9 landscape, static |
+| `docs/MemoryArchive_Poster.html` | A4-portrait one-page technical poster summarising the loop, API surface, and component grid. Includes the Umbrella-style octagonal seal logo as inline SVG. | A4 portrait, print → PDF |
+| `docs/MemoryArchive_ElevatorPitch.html` | Six-beat spoken pitch card (≈ 1:45 read-aloud) with time chips + cue notes. | A4 portrait, print → PDF |
+| `docs/MemoryArchive_Slideshow.html` | Auto-advancing 12-image slideshow paired into 6 top/bottom slides with stylized transitions. | Browser fullscreen |
+| `docs/videos/` | MP4 source files. Total ~2.77 GB — **must be gitignored** before any push (largest file alone is 2.36 GB, well above GitHub's 100 MB per-file cap). |  |
+
+### The Hub — three-section exhibit demo
+
+| # | Tile | Video file | Source size |
+|---|---|---|---|
+| 01 | The Loop (full pipeline overview) | `videos/The Loop.mp4` | 170 MB |
+| 02 | Object Interaction (E pickup, F present) | `videos/Item Inspect.mp4` | 236 MB |
+| 03 | Emotion & Branching | `videos/Ending.mp4` | 2.36 GB |
+
+Filenames with spaces are URL-encoded in the JS (`videos/The%20Loop.mp4`, `videos/Item%20Inspect.mp4`).
+
+**Voice & Identity demo deliberately omitted from the hub.** The Tier 2 SpeakerID + Whisper code shipped (per the Memory Archive Tier 2 block above) and is active in `Threshold_Compound.umap`, but the visitor-facing exhibit only features the three sections with recorded video. The original 4-tile / 2×2 grid was refactored to a single horizontal row of 3 tiles (`grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr;`), keyboard handlers shrunk from `['1','2','3','4']` → `['1','2','3']`, and a `const SECTION_COUNT = 3` was added so future add/remove only needs a data change.
+
+### Hub architecture
+
+- Two `.view` divs (hub + section) both `position: fixed; inset: 0; width: 100vw; height: 100vh;`. Active view toggled via `.active` class which controls `opacity` and `pointer-events`.
+- Section data lives in a JS `SECTIONS` object keyed `1..3`; each entry has `title`, `file`, `about` (HTML string), `bullets` (string array). `enterSection(n)` swaps the active view, populates the section panel, loads the video via `videoSource.src = data.file; video.load()`, and fires entry-flourishes (static burst, decode-scramble title, retrigger of stage glitch-in animation via class toggle).
+- **`SECTION_COUNT` constant** drives all modulo wrap-around (`enterSection((n % SECTION_COUNT) + 1)`), so adding or removing sections only requires updating the `SECTIONS` object and the constant.
+
+### Video layout
+
+- `.video-frame` wrapper uses CSS `aspect-ratio: 16 / 9` + `max-height: calc(100vh - 260px)` so the playback area is always 16:9 regardless of viewport.
+- `.video-stage` is a flat rectangle with `border-radius: 4px` and a subtle outer drop-shadow halo. **No bevel, no curve, no SVG barrel distortion** — the curved CRT bezel went through three design iterations (heavy retro → curved bezel + `feDisplacementMap` barrel → final flat rectangle) and was ultimately removed because the bend clipped in-game UI at the corners. The unused `<filter id="crt-barrel">` SVG defs and `<filter id="crt-bend">` defs remain in the HTML but are not referenced by any CSS rule.
+- `.video-inner` wrapper holds the video + content-tied overlays so they get clipped by `overflow: hidden`; HUD chrome (`.vid-hud`) sat at the `.video-stage` level but is currently `display: none`.
+- **Custom video controls** replace the native `<video controls>` attribute — two-row compact bar below the video frame:
+  - Row 1 (`.vc-scrubber-row`): full-width `<input type="range" min="0" max="1000" step="0.1">` with custom track + thumb styled in phosphor green.
+  - Row 2 (`.vc-button-row`): time readout `00:00 / 00:00` on the left, three 26×26 px keycap-styled buttons on the right (`▶`/`❚❚` play-pause, `♪`/`∅` mute, `⛶` fullscreen).
+- **Scrubber bug fixed (2026-05-14)** — `timeupdate` event was overwriting `vcScrubber.value` four times a second during drag, snapping the thumb back. Gated by `scrubbing` flag set on `pointerdown` and cleared on `pointerup` / `pointercancel`. Inside `timeupdate`: `if (!scrubbing) updateVcScrubber();`.
+- **Fullscreen targets the `.video-frame` wrapper**, not the whole document, so exiting fullscreen returns the visitor to the section view rather than the hub.
+
+### Atmosphere overlays (current state — minimal, post-simplification)
+
+What remains active over the playing video:
+- `.vid-scan` — repeating-linear-gradient scanlines, `opacity: 0.55`, dark-green 18%-alpha bars, slow `scanDrift` keyframe (3 px / 14 s).
+- `.vid-noise` — persistent TV-static, opacity `0.13`, SVG `fractalNoise` (`baseFrequency=0.92`) tinted green-cyan, position cycled through 8 stepped offsets every 0.42 s (`noiseShift` keyframe).
+- `.vid-pixelgrid` — RGB triad stripes (red/green/blue subpixels at 1-px intervals), opacity `0.22`, `mix-blend-mode: overlay`.
+- `.vid-sweep` — 90 px green band travelling top→bottom every 7 s (`vidSweep` keyframe), `mix-blend-mode: screen`.
+- `.vid-dust` — drifting bright specks at opacity `0.30`, drifts via `dustDrift` (22 s).
+- `.static-burst-vid.fire` — SVG fractalNoise burst that fires for 0.55 s on every section entry (`staticPulse` keyframe).
+- Caption decode-scramble — title, crumb, section number cycle through random katakana/hex/block glyphs (`0-9 A-F ｱ-ﾎ # @ / \ | ░ ▒ ▓ █`) for ~500-650 ms on every entry.
+- Periodic micro-glitch — `setTimeout` chain randomly fires `.hud-jitter` (180 ms `translateX` + `hue-rotate` step animation) every 4-10 s while the section view is active.
+
+**Disabled but preserved in markup:**
+- `.vid-hud` (REC dot, SIGNAL · ACQUIRED, timecode + frame counter, REG · ARCH-04-NN, 5-bar signal-strength meter, 4 corner brackets) — hidden because the chrome overlapped the in-game UI inside the recorded videos. To re-enable, remove `display: none` from `.vid-hud`.
+- `.vid-perfs` (film-sprocket holes on left/right edges), `.vid-pip` (center status pip), `.vid-chroma` (red-left / cyan-right side fringe), `.vid-tear` (bright horizontal scanning line), `.vid-glitch` (periodic glitch flash) — present in HTML but currently visually quiet because their CSS effects landed near opacity zero. Re-tune individually if needed.
+- `<filter id="crt-barrel">` and `<filter id="crt-bend">` SVG defs — full `feDisplacementMap` implementations preserved but no CSS rule references them anymore.
+
+### Keyboard map
+
+- `1`, `2`, `3` → jump straight to that section from anywhere (works on hub or inside any section)
+- `Esc` / `Backspace` → back to hub (inside section); exit fullscreen (on hub)
+- `→` / `Space` → next section (wraps 03 → 01)
+- `F` → toggle full-screen on `.video-frame`
+- `Home` / `End` → first / last section
+
+### The other four HTML deliverables
+
+- **`MemoryArchive_Slideshow.html`** — auto-advancing image deck. 12 screenshots from `Saved/Screenshots/WindowsEditor/HighresScreenshot*.png` paired into 6 thematic top/bottom slides (world → apparatus → subject narrative arc). Five stylized transitions rotate: `scanwipe` (CRT scan refresh), `rgbsplit` (chromatic aberration converge), `datamosh` (jittery skewed displacement), `venetian` (horizontal slat reveal), `glitch` (heavy 24-step RGB jitter + skew). Each slide also runs one of four Ken Burns drifts (zoomIn / zoomOut / panLeft / panRight) over ~9 s. Atmosphere: Matrix code-rain canvas behind images, pixel-triad grid, hard scanlines, downward sweep beam, static-burst flash on entry, decode-scramble caption text, CRT flicker. Controls: ←/→ navigate, Space advance, Right-click back, `P` pause, `F` fullscreen, Home/End jump.
+
+- **`MemoryArchive_Poster.html`** — single A4-portrait technical poster. Sections: header (title + subject/testimony identifiers + `TIER 2 · COMPLETE` pill), `01 The Loop` (4 numbered horizontal stage cards with arrow chevrons), `02 API Surface` (3 service cards for Whisper / Claude / ElevenLabs), `03 Components` (6 subsystem tiles), Umbrella-style octagonal seal logo (inline SVG: outer octagon outline + 4 alternating filled radial wedges + inner octagonal frame + central disc with horizontal scan slot + 4 cardinal tick marks), footer. Wordmark: "THE MEMORY ARCHIVE / ARCHIVUM · TESTIMONII · DIV. III · REG·0042". Print-ready via `@page { size: A4 portrait; margin: 0 }` and `-webkit-print-color-adjust: exact`.
+
+- **`MemoryArchive_ElevatorPitch.html`** — speaker card. Six beats: `00:00 Hook` (15 s, Huizinga + Stenros frame), `00:15 Premise` (25 s, Ashley/Friend backstory + consent revocation), `00:40 The Loop` (30 s, four-stage pipeline walk), `01:10 New Mechanics` (25 s, speaker ID + soft doubt + three branches), `01:35 Contribution` (15 s, design fiction + empirical scaffold), `01:45 Close` (5 s, what's left). Each beat row: time chip + section name + duration on the left; headline + verbatim script + `▶ point · …` cue note on the right.
+
+- **`MemoryArchive_Controls.html`** — exhibit reference card. Six keycap-styled cards in a 3×2 grid: `1 2 3` jump-to-section, `Mouse Click` select, `→ / Space` next, `Esc` return, `F` fullscreen, `Home / End` first/last. Keycap visual: phosphor-green border, linear gradient body (dark green → near-black), inner highlight + outer green glow, `inset 0 -2px 0` shadow giving each cap a depressed baseline. Scales via `clamp()` from 1080p laptop to 2K Razer Blade.
+
+### Operational notes
+
+- **Disk size:** `docs/videos/` is ~2.77 GB. **Add `docs/videos/` to `.gitignore` before any push.** Hosting online (GitHub Pages, Vercel, S3) requires Git LFS or external object storage; the 2.36 GB `Ending.mp4` alone exceeds GitHub's per-file limit by 23×. For exhibit kiosk usage no hosting is needed — the HTML opens via `file://`.
+- **Re-encode recipe** if exhibit machine stutters during scrub on the 2.36 GB file: `ffmpeg -i "Ending.mp4" -c:v libx264 -crf 23 -preset slow -vf "scale='min(1920,iw)':-2" -c:a aac -b:a 128k "Ending_web.mp4"` typically drops the file 70-85 % with no visible quality loss for screen-recorded content. Then update `SECTIONS[3].file` accordingly.
+- **Browser target:** Chrome / Edge on the exhibit machine. The custom video controls use `<input type="range">` styling that requires both `::-webkit-slider-runnable-track` / `::-webkit-slider-thumb` *and* `::-moz-range-track` / `::-moz-range-progress` / `::-moz-range-thumb` for cross-browser thumb styling. Both rule sets are present.
+- **Disabled features preserved** (Voice & Identity tile, `.vid-hud` HUD chrome, several visual effects, curved bezel, barrel filter) are kept as commented or display-none code so they can be re-enabled by single-class toggles if the demo scope expands.
+
+---
+
 ## Research Foundation & Theoretical Framework
 
 This project is grounded in a formal literature review synthesising psychology, play theory, game AI architecture, spatial computing, and generative AI. The following captures all sources, concepts, and design decisions from the research notebook.

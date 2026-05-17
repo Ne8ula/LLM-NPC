@@ -27,6 +27,10 @@ static const FLinearColor cContentDim    (0.55f, 0.66f, 0.58f, 1.00f);  // hint 
 static const FLinearColor cWarn          (1.00f, 0.65f, 0.20f, 1.00f);  // amber accent
 static const FLinearColor cAlert         (1.00f, 0.32f, 0.32f, 1.00f);  // alert/REC
 
+// Global UI scale — bump every panel, padding, line height, and font scale uniformly.
+// Single source of truth so HandleMouseClick stays in sync with DrawHUD geometry.
+static const float UIScale = 1.20f;
+
 // Chat line colors (player + NPC + system)
 static const FLinearColor ColSystem (cPhosphorDim);
 static const FLinearColor ColFocus  (cPhosphor);
@@ -160,7 +164,7 @@ void ANPCDialogueHUD::DrawHUD()
 	auto Txt = [&](const FString& S, float X, float Y, FLinearColor C, float Sc = 1.10f)
 	{
 		FCanvasTextItem Item(FVector2D(X, Y), FText::FromString(S), Font, C);
-		Item.Scale = FVector2D(Sc, Sc);
+		Item.Scale = FVector2D(Sc * UIScale, Sc * UIScale);
 		Canvas->DrawItem(Item);
 	};
 	auto Clip = [](const FString& S, int32 Max) -> FString
@@ -216,14 +220,14 @@ void ANPCDialogueHUD::DrawHUD()
 
 		const FString Provocation =
 			TEXT("When the model of a witness withdraws consent, what testimony remains?");
-		Txt(Provocation, ScreenW * 0.10f, CenterY + 80.0f, cProvoke, 1.15f);
+		Txt(Provocation, ScreenW * 0.10f, CenterY + 80.0f * UIScale, cProvoke, 1.15f);
 
 		const TCHAR* BranchLabel =
 			ClosingCardBranch == EArchiveBranch::ConvergentSpecific ? TEXT("[ BRANCH: CONVERGENT DISCLOSURE — DESTINATION DISCLOSED ]") :
 			ClosingCardBranch == EArchiveBranch::Convergent         ? TEXT("[ BRANCH: CONVERGENT DISCLOSURE — DEPARTURE ONLY ]")        :
 			ClosingCardBranch == EArchiveBranch::TimeOut            ? TEXT("[ BRANCH: RECURSIVE SILENCE — CONSENT REVOKED ]")           :
 			                                                          TEXT("[ BRANCH: — ]");
-		Txt(BranchLabel, ScreenW * 0.10f, CenterY + 130.0f, cBranch, 1.05f);
+		Txt(BranchLabel, ScreenW * 0.10f, CenterY + 130.0f * UIScale, cBranch, 1.05f);
 
 		// Subtle subtitle for the tiered convergent branches: tells the audience
 		// what specifically the Friend just disclosed, so the demo lands without
@@ -243,7 +247,7 @@ void ANPCDialogueHUD::DrawHUD()
 		}
 		if (Subtitle)
 		{
-			Txt(Subtitle, ScreenW * 0.10f, CenterY + 158.0f, cBranch, 0.95f);
+			Txt(Subtitle, ScreenW * 0.10f, CenterY + 158.0f * UIScale, cBranch, 0.95f);
 		}
 		return;
 	}
@@ -260,27 +264,27 @@ void ANPCDialogueHUD::DrawHUD()
 	//   | INSPECT 3/7 | PRESENT 1/7 | CLIMAX READY
 	// =====================================================================
 	{
-		const float BarH = 28.0f;
+		const float BarH = 28.0f * UIScale;
 		FramedPanel(0.0f, 0.0f, ScreenW, BarH);
 
-		float CursorX = 12.0f;
-		const float Y = 7.0f;
+		float CursorX = 12.0f * UIScale;
+		const float Y = 7.0f * UIScale;
 		auto Sep = [&]()
 		{
 			Txt(TEXT("│"), CursorX, Y, cPanelBorder, 1.05f);
-			CursorX += 12.0f;
+			CursorX += 12.0f * UIScale;
 		};
 		auto Seg = [&](const TCHAR* Label, const FString& Value, FLinearColor ValColor)
 		{
 			Txt(Label, CursorX, Y, cPhosphorDim, 1.05f);
-			CursorX += static_cast<float>(FCString::Strlen(Label)) * 6.4f + 4.0f;
+			CursorX += static_cast<float>(FCString::Strlen(Label)) * 6.4f * UIScale + 4.0f * UIScale;
 			Txt(Value, CursorX, Y, ValColor, 1.10f);
-			CursorX += static_cast<float>(Value.Len()) * 7.4f + 8.0f;
+			CursorX += static_cast<float>(Value.Len()) * 7.4f * UIScale + 8.0f * UIScale;
 			Sep();
 		};
 
 		Txt(TEXT("ARCHIVE LINK ACTIVE"), CursorX, Y, cPhosphorBright, 1.10f);
-		CursorX += 158.0f;
+		CursorX += 158.0f * UIScale;
 		Sep();
 
 		Seg(TEXT("SUBJECT "), TEXT("ASHLEY WEI"), cContent);
@@ -329,22 +333,75 @@ void ANPCDialogueHUD::DrawHUD()
 		if (bTimeExpired)             { ClimaxState = TEXT("TIMEOUT");       cClimax = cAlert; }
 		else if (bLocationReady)      { ClimaxState = TEXT("READY+LOCATION"); cClimax = cPhosphorBright; }
 		else if (bConvergentReady)    { ClimaxState = TEXT("READY");          cClimax = cPhosphorBright; }
-		Txt(TEXT("CLIMAX "), CursorX, Y, cPhosphorDim, 1.05f);
-		CursorX += 50.0f;
+		Txt(TEXT("ENDING "), CursorX, Y, cPhosphorDim, 1.05f);
+		CursorX += 50.0f * UIScale;
 		Txt(ClimaxState, CursorX, Y, cClimax, 1.10f);
+	}
+
+	// =====================================================================
+	// (1.5) INPUT MODE CHIP — top-center. Shows whether the voice channel is
+	// in Push-to-Talk (default), Proximity (P-toggle on), or actively recording.
+	// Panel width is measured against the actual text each frame so the longest
+	// mode label can't overflow the frame.
+	// =====================================================================
+	{
+		const TCHAR* Mode = TEXT("PUSH-TO-TALK · HOLD V");
+		FLinearColor cMode = cContentDim;
+		if (PC)
+		{
+			if (PC->bProximityChatEnabled)
+			{
+				Mode = PC->bPushToTalkActive
+					? TEXT("PROXIMITY · PTT OVERRIDE")    // shouldn't happen, but defensive
+					: TEXT("PROXIMITY · P TO TOGGLE OFF");
+				cMode = cPhosphorBright;
+			}
+			else if (PC->bPushToTalkActive)
+			{
+				Mode = TEXT("● REC — V HELD");
+				cMode = cAlert;
+			}
+			else
+			{
+				Mode = TEXT("PUSH-TO-TALK · HOLD V · P FOR PROXIMITY");
+				cMode = cContentDim;
+			}
+		}
+
+		// Measure each string at its draw scale. Canvas::StrLen returns
+		// unscaled pixel width via out-params; multiply by our text scale.
+		const FString LabelStr = TEXT("[ INPUT ]");
+		const float TextScale = 1.05f * UIScale;
+		float LabelW = 0.0f, LabelH = 0.0f;
+		float ValueW = 0.0f, ValueH = 0.0f;
+		Canvas->StrLen(Font, LabelStr, LabelW, LabelH);
+		Canvas->StrLen(Font, Mode, ValueW, ValueH);
+		LabelW *= TextScale;
+		ValueW *= TextScale;
+
+		const float HPad = 10.0f * UIScale;
+		const float Gap  = 10.0f * UIScale;
+		const float PW = HPad * 2.0f + LabelW + Gap + ValueW;
+		const float PH = 30.0f * UIScale;
+		const float PX = (ScreenW - PW) * 0.5f;
+		const float PY = 36.0f * UIScale;
+		FramedPanel(PX, PY, PW, PH);
+
+		Txt(LabelStr, PX + HPad, PY + 7.0f * UIScale, cPhosphor, 1.05f);
+		Txt(Mode,     PX + HPad + LabelW + Gap, PY + 7.0f * UIScale, cMode, 1.05f);
 	}
 
 	// =====================================================================
 	// (2) VISITOR PANEL — top-left. Speaker tag + their face-detected emotion.
 	// =====================================================================
 	{
-		const float PX = 12.0f;
-		const float PY = 36.0f;
-		const float PW = 240.0f;
-		const float PH = 84.0f;
+		const float PX = 12.0f * UIScale;
+		const float PY = 36.0f * UIScale;
+		const float PW = 240.0f * UIScale;
+		const float PH = 84.0f * UIScale;
 		FramedPanel(PX, PY, PW, PH);
 
-		Txt(TEXT("[ VISITOR ]"), PX + 8.0f, PY + 6.0f, cPhosphor, 1.05f);
+		Txt(TEXT("[ VISITOR ]"), PX + 8.0f * UIScale, PY + 6.0f * UIScale, cPhosphor, 1.05f);
 
 		FString SpeakerLine = TEXT("UNIDENTIFIED");
 		FLinearColor cSpeaker = cContentDim;
@@ -356,30 +413,30 @@ void ANPCDialogueHUD::DrawHUD()
 				*TagDisplay, PC->LastSpeakerConfidence);
 			cSpeaker = cContent;
 		}
-		Txt(SpeakerLine, PX + 8.0f, PY + 24.0f, cSpeaker, 1.05f);
+		Txt(SpeakerLine, PX + 8.0f * UIScale, PY + 24.0f * UIScale, cSpeaker, 1.05f);
 
-		Txt(TEXT("EMOTION"), PX + 8.0f, PY + 44.0f, cPhosphorDim, 1.00f);
-		Txt(EmotionLabel(LastUserEmotion.Emotion), PX + 70.0f, PY + 44.0f, cContent, 1.05f);
+		Txt(TEXT("EMOTION"), PX + 8.0f * UIScale, PY + 44.0f * UIScale, cPhosphorDim, 1.00f);
+		Txt(EmotionLabel(LastUserEmotion.Emotion), PX + 70.0f * UIScale, PY + 44.0f * UIScale, cContent, 1.05f);
 
-		Txt(TEXT("CONFIDENCE"), PX + 8.0f, PY + 62.0f, cPhosphorDim, 1.00f);
+		Txt(TEXT("CONFIDENCE"), PX + 8.0f * UIScale, PY + 62.0f * UIScale, cPhosphorDim, 1.00f);
 		Txt(FString::Printf(TEXT("%.2f"), LastUserEmotion.Confidence),
-			PX + 86.0f, PY + 62.0f, cContent, 1.05f);
+			PX + 86.0f * UIScale, PY + 62.0f * UIScale, cContent, 1.05f);
 	}
 
 	// =====================================================================
 	// (3) FRIEND STATE PANEL — top-right. Her current emotion + intensity bar.
 	// =====================================================================
 	{
-		const float PW = 280.0f;
-		const float PH = 84.0f;
-		const float PX = ScreenW - PW - 12.0f;
-		const float PY = 36.0f;
+		const float PW = 280.0f * UIScale;
+		const float PH = 84.0f * UIScale;
+		const float PX = ScreenW - PW - 12.0f * UIScale;
+		const float PY = 36.0f * UIScale;
 		FramedPanel(PX, PY, PW, PH);
 
 		const FString HeaderLine = FocusedNPCName.IsEmpty()
 			? TEXT("[ TESTIMONY: — ]")
 			: FString::Printf(TEXT("[ TESTIMONY: %s ]"), *FocusedNPCName.ToUpper());
-		Txt(HeaderLine, PX + 8.0f, PY + 6.0f, cPhosphor, 1.05f);
+		Txt(HeaderLine, PX + 8.0f * UIScale, PY + 6.0f * UIScale, cPhosphor, 1.05f);
 
 		FEmotionState NPCState;
 		NPCState.PrimaryEmotion = EEmotionType::Neutral;
@@ -392,25 +449,25 @@ void ANPCDialogueHUD::DrawHUD()
 			}
 		}
 
-		Txt(TEXT("EMOTION"), PX + 8.0f, PY + 24.0f, cPhosphorDim, 1.00f);
-		Txt(EmotionLabel(NPCState.PrimaryEmotion), PX + 80.0f, PY + 24.0f, cContent, 1.05f);
+		Txt(TEXT("EMOTION"), PX + 8.0f * UIScale, PY + 24.0f * UIScale, cPhosphorDim, 1.00f);
+		Txt(EmotionLabel(NPCState.PrimaryEmotion), PX + 80.0f * UIScale, PY + 24.0f * UIScale, cContent, 1.05f);
 
-		Txt(TEXT("INTENSITY"), PX + 8.0f, PY + 42.0f, cPhosphorDim, 1.00f);
+		Txt(TEXT("INTENSITY"), PX + 8.0f * UIScale, PY + 42.0f * UIScale, cPhosphorDim, 1.00f);
 		Txt(FString::Printf(TEXT("%.2f"), NPCState.Intensity),
-			PX + 80.0f, PY + 42.0f, cContent, 1.05f);
+			PX + 80.0f * UIScale, PY + 42.0f * UIScale, cContent, 1.05f);
 
-		const float BarX = PX + 130.0f;
-		const float BarY = PY + 46.0f;
-		const float BarW = PW - (BarX - PX) - 12.0f;
-		const float BarH = 6.0f;
+		const float BarX = PX + 130.0f * UIScale;
+		const float BarY = PY + 46.0f * UIScale;
+		const float BarW = PW - (BarX - PX) - 12.0f * UIScale;
+		const float BarH = 6.0f * UIScale;
 		Rect(BarX, BarY, BarW, BarH, FLinearColor(0.02f, 0.10f, 0.05f, 1.0f));
 		Rect(BarX, BarY,
 			BarW * FMath::Clamp(NPCState.Intensity, 0.0f, 1.0f), BarH, cPhosphor);
 
-		Txt(TEXT("PAD"), PX + 8.0f, PY + 62.0f, cPhosphorDim, 1.00f);
+		Txt(TEXT("PAD"), PX + 8.0f * UIScale, PY + 62.0f * UIScale, cPhosphorDim, 1.00f);
 		Txt(FString::Printf(TEXT("%+0.2f / %+0.2f / %+0.2f"),
 				NPCState.PAD.Pleasure, NPCState.PAD.Arousal, NPCState.PAD.Dominance),
-			PX + 80.0f, PY + 62.0f, cContent, 1.05f);
+			PX + 80.0f * UIScale, PY + 62.0f * UIScale, cContent, 1.05f);
 	}
 
 	// Below this line: chat panel renders only when the overlay is open.
@@ -420,17 +477,17 @@ void ANPCDialogueHUD::DrawHUD()
 	}
 
 	// Chat panel geometry
-	const float PanelX  = 20.0f;
-	const float PanelW  = 420.0f;
-	const float LineH   = 21.0f;
-	const float Pad     = 10.0f;
-	const float HeaderH = 28.0f;
+	const float PanelX  = 20.0f * UIScale;
+	const float PanelW  = 420.0f * UIScale;
+	const float LineH   = 21.0f * UIScale;
+	const float Pad     = 10.0f * UIScale;
+	const float HeaderH = 28.0f * UIScale;
 	const float SepH    = 1.0f;
 	const int32 MaxLines = 5;
 	const float ChatH   = MaxLines * LineH + Pad;
-	const float InputH  = 30.0f;
+	const float InputH  = 30.0f * UIScale;
 	const float PanelH  = HeaderH + SepH + ChatH + SepH + InputH;
-	const float PanelY  = ScreenH - PanelH - 20.0f;
+	const float PanelY  = ScreenH - PanelH - 20.0f * UIScale;
 
 	const FLinearColor cInput(
 		bTextInputActive ? 0.02f : 0.00f,
@@ -446,12 +503,12 @@ void ANPCDialogueHUD::DrawHUD()
 	if (!FocusedNPCName.IsEmpty())
 	{
 		Txt(FString::Printf(TEXT(" ▸ %s"), *FocusedNPCName.ToUpper()),
-			PanelX + 8.0f, PanelY + 7.0f, cPhosphorBright, 1.10f);
+			PanelX + 8.0f * UIScale, PanelY + 7.0f * UIScale, cPhosphorBright, 1.10f);
 	}
 	else
 	{
 		Txt(TEXT(" ▸ NO SUBJECT IN RANGE"),
-			PanelX + 8.0f, PanelY + 7.0f, cContentDim, 1.05f);
+			PanelX + 8.0f * UIScale, PanelY + 7.0f * UIScale, cContentDim, 1.05f);
 	}
 
 	// Chat lines
@@ -469,7 +526,7 @@ void ANPCDialogueHUD::DrawHUD()
 	const float InputTop = ChatTop + SepH + ChatH;
 	Rect(PanelX, InputTop, PanelW, SepH, cPanelBorder);
 	Rect(PanelX + 1.0f, InputTop + SepH, PanelW - 2.0f, InputH - 1.0f, cInput);
-	const float TxtY = InputTop + SepH + 7.0f;
+	const float TxtY = InputTop + SepH + 7.0f * UIScale;
 
 	if (!BoundDialogue)
 	{
@@ -521,14 +578,14 @@ void ANPCDialogueHUD::HandleMouseClick(float MouseX, float MouseY)
 	}
 
 	// Mirror the geometry constants from DrawHUD
-	const float PanelX  = 20.0f;
-	const float PanelW  = 420.0f;
-	const float HeaderH = 28.0f;
+	const float PanelX  = 20.0f * UIScale;
+	const float PanelW  = 420.0f * UIScale;
+	const float HeaderH = 28.0f * UIScale;
 	const float SepH    = 1.0f;
-	const float ChatH   = 5 * 21.0f + 10.0f;  // MaxLines * LineH + Pad
-	const float InputH  = 30.0f;
+	const float ChatH   = (5 * 21.0f + 10.0f) * UIScale;  // MaxLines * LineH + Pad
+	const float InputH  = 30.0f * UIScale;
 	const float PanelH  = HeaderH + SepH + ChatH + SepH + InputH;
-	const float PanelY  = CachedScreenH - PanelH - 20.0f;
+	const float PanelY  = CachedScreenH - PanelH - 20.0f * UIScale;
 
 	const float InputBoxY = PanelY + HeaderH + SepH + ChatH + SepH;
 

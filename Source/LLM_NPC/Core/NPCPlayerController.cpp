@@ -276,12 +276,43 @@ void ANPCPlayerController::Tick(float DeltaTime)
 		b2KeyWasDown = b2Down;
 	}
 
+	// Voice input mode switches.
+	//   P toggles Proximity Chat (always-on mic + VAD silence segmentation). Mutually
+	//   exclusive with PTT — turning P on cancels any in-progress PTT recording.
+	//   V (held) is Push-to-Talk. Only fires when proximity chat is OFF and the chat
+	//   text box isn't focused (so V remains a regular letter while typing).
+	{
+		const bool bPDown = IsInputKeyDown(EKeys::P);
+		if (bPDown && !bPKeyWasDown && !bTextActive)
+		{
+			SetProximityChatMode(!bProximityChatEnabled);
+		}
+		bPKeyWasDown = bPDown;
+
+		const bool bVDown = IsInputKeyDown(EKeys::V);
+		if (!bTextActive)
+		{
+			if (bVDown && !bVKeyWasDown)
+			{
+				HandlePushToTalkPressed();
+			}
+			else if (!bVDown && bVKeyWasDown)
+			{
+				HandlePushToTalkReleased();
+			}
+		}
+		else if (bPushToTalkActive)
+		{
+			// User clicked into the chat input mid-PTT. Cut the recording cleanly
+			// so an open mic doesn't keep recording while they type.
+			HandlePushToTalkReleased();
+		}
+		bVKeyWasDown = bVDown;
+	}
+
 	// While holding an item, every tick: keep it in the camera's hand-position,
 	// apply mouse-drag rotation (RMB held), and apply scroll-wheel scale.
 	TickHeldItem(DeltaTime);
-
-	// (V push-to-talk removed. Voice now auto-starts in UpdateNPCFocus when entering an
-	// NPC's vicinity and auto-stops + transcribes when leaving.)
 
 	// Only capture keyboard when the user has clicked the input box
 	if (HUD->IsDialogueVisible() && HUD->IsTextInputActive())
@@ -533,6 +564,100 @@ void ANPCPlayerController::HandleSpeakerIdentified(FName Tag, float Confidence)
 	LastSpeakerConfidence = Confidence;
 	UE_LOG(LogTemp, Log, TEXT("[SpeakerID] resolved %s (%.2f)"),
 		*Tag.ToString(), Confidence);
+}
+
+void ANPCPlayerController::SetProximityChatMode(bool bEnabled)
+{
+	if (bEnabled == bProximityChatEnabled)
+	{
+		return;
+	}
+
+	// Flipping modes — kill any in-progress PTT recording so the two modes can't
+	// double-up on the same waveIn device.
+	if (bPushToTalkActive)
+	{
+		HandlePushToTalkReleased();
+	}
+
+	bProximityChatEnabled = bEnabled;
+
+	UWhisperSTTComponent* STT = IsValid(FocusedNPC) ? FocusedNPC->WhisperSTTComponent : nullptr;
+	if (!STT)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[VoiceMode] proximity %s but no focused NPC — mic state unchanged."),
+			bEnabled ? TEXT("ON") : TEXT("OFF"));
+		return;
+	}
+
+	if (bEnabled)
+	{
+		// Defensive: if a stale bAutoStartOnInit override on the BP already started
+		// the mic in some other mode, drop it cleanly before we re-arm with VAD.
+		if (STT->IsRecording())
+		{
+			STT->StopRecordingDiscard();
+		}
+		STT->bAutoSegmentOnSilence = true;
+		STT->StartRecording();
+		UE_LOG(LogTemp, Log, TEXT("[VoiceMode] PROXIMITY ON — mic open, VAD segmenting."));
+	}
+	else
+	{
+		STT->StopRecordingDiscard();
+		STT->bAutoSegmentOnSilence = false;
+		UE_LOG(LogTemp, Log, TEXT("[VoiceMode] PROXIMITY OFF — mic idle."));
+	}
+}
+
+void ANPCPlayerController::HandlePushToTalkPressed()
+{
+	if (bProximityChatEnabled || bPushToTalkActive)
+	{
+		return;
+	}
+
+	UWhisperSTTComponent* STT = IsValid(FocusedNPC) ? FocusedNPC->WhisperSTTComponent : nullptr;
+	if (!STT)
+	{
+		return;
+	}
+
+	// Defensive: if the mic was already running (stale auto-start, leftover VAD),
+	// drop it so we start from a known-empty buffer with PTT settings.
+	if (STT->IsRecording())
+	{
+		STT->StopRecordingDiscard();
+	}
+
+	// PTT is one-shot capture: no VAD interruption, send everything on release.
+	STT->bAutoSegmentOnSilence = false;
+	STT->StartRecording();
+	PTTActiveSTT = STT;
+	bPushToTalkActive = true;
+	UE_LOG(LogTemp, Log, TEXT("[VoiceMode] PTT down — recording."));
+}
+
+void ANPCPlayerController::HandlePushToTalkReleased()
+{
+	if (!bPushToTalkActive)
+	{
+		return;
+	}
+
+	bPushToTalkActive = false;
+
+	// Use the STT pinned at start — focus may have switched mid-utterance.
+	UWhisperSTTComponent* STT = PTTActiveSTT.Get();
+	PTTActiveSTT.Reset();
+	if (!STT)
+	{
+		return;
+	}
+
+	STT->StopRecordingAndTranscribe();
+	UE_LOG(LogTemp, Log, TEXT("[VoiceMode] PTT up — transcribing."));
 }
 
 void ANPCPlayerController::OnGestureDetected(FGestureInput DetectedGesture)
