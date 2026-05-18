@@ -64,3 +64,6 @@ Desktop.ini
 *.key
 *.pem
 secrets.ini
+
+# Local UE plugin (not committed)
+/Plugins/UnrealClaude
