@@ -13,7 +13,13 @@ class UGestureRecognitionComponent;
 class UNPCInventoryComponent;
 class UMetahumanAnimComponent;
 class UNPCLipSyncComponent;
+class UNPCBodyMotionComponent;
+class UNPCEyeTrackingComponent;
+class UTemplateAnimationDriverComponent;
 class UFallbackManagerComponent;
+class UWhisperSTTComponent;
+class UElevenLabsTTSComponent;
+class USpeakerIdentificationComponent;
 
 /**
  * Base Metahuman NPC actor that owns all subsystem components.
@@ -58,7 +64,28 @@ public:
 	TObjectPtr<UNPCLipSyncComponent> LipSyncComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
+	TObjectPtr<UNPCBodyMotionComponent> BodyMotionComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
+	TObjectPtr<UTemplateAnimationDriverComponent> TemplateAnimationDriverComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
+	TObjectPtr<UNPCEyeTrackingComponent> EyeTrackingComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
+	TObjectPtr<UWhisperSTTComponent> WhisperSTTComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
+	TObjectPtr<USpeakerIdentificationComponent> SpeakerIdentificationComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
+	TObjectPtr<UElevenLabsTTSComponent> ElevenLabsTTSComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
 	TObjectPtr<UFallbackManagerComponent> FallbackManagerComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NPC|Subsystems")
+	TObjectPtr<UElevenLabsTTSComponent> TTSComponent;
 
 	/** Initialize all subsystems with the assigned NPC config. */
 	UFUNCTION(BlueprintCallable, Category = "NPC")
@@ -66,4 +93,25 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void Tick(float DeltaTime) override;
+
+private:
+	/** Called when DialogueComponent receives a Claude response — forwards text to TTS. */
+	UFUNCTION()
+	void OnDialogueResponse(const FString& ResponseText, EEmotionType NPCEmotionHint, bool bShouldGiveItem, FName ItemID);
+
+	/** Returns a stability modifier for the given emotion. Lower = more expressive voice. */
+	float GetEmotionStabilityModifier(EEmotionType Emotion) const;
+
+	/** Get the jaw open amount for a character (viseme estimation). */
+	float GetVisemeJawOpen(TCHAR Char) const;
+
+	/** Text currently being spoken by TTS. */
+	FString CurrentSpeechText;
+
+	/** Time when current speech started. */
+	float SpeechStartTime = 0.0f;
+
+	/** Whether TTS is currently speaking. */
+	bool bIsSpeaking = false;
 };

@@ -6,7 +6,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
-#include "Misc/App.h"
+#include "Async/Async.h"
 #include "TimerManager.h"
 #include "Engine/GameInstance.h"
 
@@ -29,7 +29,6 @@ void UClaudeAPISubsystem::Deinitialize()
 
 void UClaudeAPISubsystem::LoadAPIKey()
 {
-	// Try environment variable first
 	FString EnvKey = FPlatformMisc::GetEnvironmentVariable(TEXT("ANTHROPIC_API_KEY"));
 	if (!EnvKey.IsEmpty())
 	{
@@ -38,16 +37,7 @@ void UClaudeAPISubsystem::LoadAPIKey()
 		return;
 	}
 
-	// Fallback: try loading from config file
-	FString ConfigKey;
-	if (GConfig && GConfig->GetString(TEXT("/Script/LLM_NPC.ClaudeAPISettings"), TEXT("APIKey"), ConfigKey, GGameIni))
-	{
-		APIKey = ConfigKey;
-		UE_LOG(LogTemp, Log, TEXT("ClaudeAPISubsystem: API key loaded from project settings."));
-		return;
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("ClaudeAPISubsystem: No API key found. Set ANTHROPIC_API_KEY environment variable or configure in project settings."));
+	UE_LOG(LogTemp, Warning, TEXT("ClaudeAPISubsystem: No API key found. Set the ANTHROPIC_API_KEY environment variable."));
 }
 
 bool UClaudeAPISubsystem::IsAPIKeyConfigured() const
@@ -129,9 +119,13 @@ FString UClaudeAPISubsystem::BuildRequestBody(
 		TEXT("  \"response_text\": \"your dialogue response here\",\n")
 		TEXT("  \"npc_emotion_update\": \"one of: Neutral, Joy, Sadness, Anger, Fear, Surprise, Disgust, Trust, Anticipation\",\n")
 		TEXT("  \"should_give_item\": false,\n")
-		TEXT("  \"item_id\": \"\"\n")
+		TEXT("  \"item_id\": \"\",\n")
+		TEXT("  \"branch_resolution\": null\n")
 		TEXT("}\n")
-		TEXT("Always respond in this JSON format. The response_text field contains your in-character dialogue.");
+		TEXT("Always respond in this JSON format. The response_text field contains your in-character dialogue. ")
+		TEXT("The branch_resolution field is null on every turn EXCEPT a climax turn (set only when the prompt's ")
+		TEXT("CLIMAX INSTRUCTION block is present, in which case set it to one of \"convergent\", ")
+		TEXT("\"convergent_specific\", or \"recursive_silence\" as that block specifies).");
 
 	RootObject->SetStringField(TEXT("system"), AugmentedSystemPrompt);
 
@@ -174,13 +168,19 @@ void UClaudeAPISubsystem::ExecuteRequest(TSharedPtr<FPendingRequest> PendingRequ
 	);
 	HttpRequest->SetContentAsString(RequestBody);
 
+	TWeakObjectPtr<UClaudeAPISubsystem> WeakThis(this);
 	HttpRequest->OnProcessRequestComplete().BindLambda(
-		[this, PendingRequest](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully)
+		[WeakThis, PendingRequest](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully)
 		{
+			if (!WeakThis.IsValid())
+			{
+				return;
+			}
+
 			int32 ResponseCode = Response.IsValid() ? Response->GetResponseCode() : 0;
 			FString ResponseBody = Response.IsValid() ? Response->GetContentAsString() : TEXT("");
 
-			HandleResponse(PendingRequest, bConnectedSuccessfully, ResponseCode, ResponseBody);
+			WeakThis->HandleResponse(PendingRequest, bConnectedSuccessfully, ResponseCode, ResponseBody);
 		}
 	);
 
@@ -242,10 +242,14 @@ void UClaudeAPISubsystem::HandleResponse(
 	}
 
 	// Fire callbacks on the game thread
-	AsyncTask(ENamedThreads::GameThread, [this, PendingRequest, ParsedResponse]()
+	TWeakObjectPtr<UClaudeAPISubsystem> WeakSelf(this);
+	AsyncTask(ENamedThreads::GameThread, [WeakSelf, PendingRequest, ParsedResponse]()
 	{
 		PendingRequest->OnComplete.ExecuteIfBound(ParsedResponse);
-		OnAnyResponseReceived.Broadcast(ParsedResponse);
+		if (WeakSelf.IsValid())
+		{
+			WeakSelf->OnAnyResponseReceived.Broadcast(ParsedResponse);
+		}
 	});
 }
 
@@ -323,6 +327,10 @@ FClaudeAPIResponse UClaudeAPISubsystem::ParseResponse(const FString& ResponseBod
 
 		StructuredResponse->TryGetBoolField(TEXT("should_give_item"), Result.bShouldGiveItem);
 		StructuredResponse->TryGetStringField(TEXT("item_id"), Result.ItemID);
+
+		// Tier 3: branch_resolution is null on every non-climax turn. Try-get leaves
+		// the empty default in place when the field is missing OR JSON null.
+		StructuredResponse->TryGetStringField(TEXT("branch_resolution"), Result.BranchResolution);
 
 		Result.bSuccess = true;
 		UE_LOG(LogTemp, Log, TEXT("ClaudeAPISubsystem: Parsed structured response. Emotion: %s"), *EmotionString);

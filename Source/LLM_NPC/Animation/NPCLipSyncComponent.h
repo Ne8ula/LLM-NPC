@@ -2,17 +2,20 @@
 
 #include "CoreMinimal.h"
 #include "LLM_NPC/Core/NPCSubsystemComponent.h"
+#include "VisemeTypes.h"
 #include "NPCLipSyncComponent.generated.h"
 
 class USoundWave;
-class UAudioComponent;
+class UMetahumanAnimComponent;
+class UElevenLabsTTSComponent;
 
 /**
- * Drives viseme blend shapes from TTS audio output for lip synchronization.
+ * Drives MetaHuman viseme blend shapes from ElevenLabs TTS character alignment.
  *
- * Currently implements a simple amplitude-based mouth open/close driver as a
- * placeholder. Designed to be replaced with OVRLipSync or a similar phoneme-based
- * solution in production.
+ * Subscribes to UElevenLabsTTSComponent::OnTTSAlignmentReceived, converts the
+ * character timings into an FVisemeSchedule via FPhonemeVisemeMapper, and
+ * samples the schedule each tick against the TTS playback clock to drive
+ * MetaHuman face curves through UMetahumanAnimComponent::SetVisemeCurves.
  */
 UCLASS(ClassGroup = (LLMNPC), meta = (BlueprintSpawnableComponent))
 class LLM_NPC_API UNPCLipSyncComponent : public UNPCSubsystemComponent
@@ -31,50 +34,126 @@ public:
 	// --- Public API ---
 
 	/**
-	 * Begin driving lip sync from the given audio source.
-	 * Creates an audio component on the owner and plays the sound.
+	 * Deprecated stub kept for Blueprint back-compat. The new lip sync path is
+	 * driven by the TTS alignment delegate and does not take a sound wave.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "NPC|LipSync")
 	void StartLipSync(USoundWave* AudioSource);
 
-	/** Stop lip sync and smoothly close the mouth. */
+	/** Stop lip sync and close the mouth. */
 	UFUNCTION(BlueprintCallable, Category = "NPC|LipSync")
 	void StopLipSync();
 
 	// --- Configuration ---
 
-	/** Name of the morph target controlling mouth open on the skeletal mesh. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|LipSync")
-	FName MouthOpenBlendShape = FName(TEXT("jawOpen"));
-
-	/** Sensitivity multiplier for amplitude-to-morph-target mapping. */
+	/**
+	 * Default per-curve exponential smoothing speed applied on top of the
+	 * schedule sampler. Higher = snappier (less inertia), lower = lazier.
+	 * 16 ≈ ~110 ms to reach target at 60 fps; comfortable range is 12
+	 * (very smooth) to 30 (very snappy). Used for vowel/jaw curves.
+	 *
+	 * Lower values give the face more "weight" through brief consonant
+	 * transitions — TH, DD, KK don't pop in/out as visibly because the
+	 * smoother lags slightly through the short consonant window.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|LipSync",
-		meta = (ClampMin = "0.1", ClampMax = "10.0"))
-	float Sensitivity = 1.0f;
+		meta = (ClampMin = "1.0", ClampMax = "60.0"))
+	float OutputSmoothingSpeed = 16.0f;
 
-	/** Interpolation speed for smoothing mouth movement. */
+	/**
+	 * Fast attack speed used by closure curves (lipsTogether*) when their
+	 * target value is *increasing* — i.e. the lips are snapping shut. Real
+	 * lip closures happen quickly (~50 ms), so this needs to be much higher
+	 * than the default. 50 ≈ near-instant closure.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|LipSync",
-		meta = (ClampMin = "0.1"))
-	float LipSyncInterpolationSpeed = 8.0f;
+		meta = (ClampMin = "1.0", ClampMax = "120.0"))
+	float ClosureAttackSpeed = 50.0f;
+
+	/**
+	 * Slow decay speed used by closure curves (lipsTogether*) when their
+	 * target value is *decreasing* — i.e. the lips are relaxing open. Slow
+	 * decay makes the closure linger long enough to read visually before
+	 * the next vowel pulls the lips fully open. 7 ≈ ~250 ms relax.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|LipSync",
+		meta = (ClampMin = "1.0", ClampMax = "30.0"))
+	float ClosureDecaySpeed = 7.0f;
+
+	/** Fade-out duration at the end of an utterance, in seconds. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|LipSync",
+		meta = (ClampMin = "0.01", ClampMax = "0.5"))
+	float EndFadeOutSec = 0.150f;
+
+	/**
+	 * Schedule watchdog: if the playback clock from UElevenLabsTTSComponent::
+	 * GetPlaybackElapsedSeconds() hasn't advanced for this many seconds while
+	 * bScheduleActive is true, force StopLipSync. Guards the case where TTS
+	 * alignment arrived but audio playback never started (e.g. TTS request
+	 * failed mid-stream after broadcasting alignment) — without this, the
+	 * sampler replays the first viseme frame forever and the mouth locks
+	 * open. Works even if OnSpeechError subscription path is broken.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|LipSync",
+		meta = (ClampMin = "0.2", ClampMax = "10.0"))
+	float ScheduleClockTimeoutSec = 2.0f;
 
 protected:
 	virtual void BeginPlay() override;
 
 private:
-	/** Cached reference to the owner's skeletal mesh component. */
-	UPROPERTY()
-	TObjectPtr<USkeletalMeshComponent> CachedSkeletalMesh;
+	/** Bound to UElevenLabsTTSComponent::OnTTSAlignmentReceived. */
+	UFUNCTION()
+	void HandleTTSAlignmentReceived(
+		const FString& Characters,
+		const TArray<float>& StartTimesSec,
+		const TArray<float>& DurationsSec);
 
-	/** Audio component used for playback. */
-	UPROPERTY()
-	TObjectPtr<UAudioComponent> ActiveAudioComponent;
+	/** Bound to UElevenLabsTTSComponent::OnSpeechFinished. */
+	UFUNCTION()
+	void HandleSpeechFinished();
 
-	/** Whether lip sync is currently active. */
-	bool bIsLipSyncActive = false;
+	/** Bound to UElevenLabsTTSComponent::OnSpeechError — immediate StopLipSync
+	 *  so the mouth doesn't freeze open when a TTS request fails mid-stream. */
+	UFUNCTION()
+	void HandleSpeechError(int32 ResponseCode, const FString& ErrorBody);
 
-	/** Current mouth open value being interpolated. */
-	float CurrentMouthOpenValue = 0.0f;
+	/**
+	 * Sample the active schedule at ScheduleTime. Returns the blended curve
+	 * map (curve name → weight). Empty when the schedule is idle. Updates
+	 * LastKeyIndex as a hint for the next tick.
+	 */
+	TMap<FName, float> SampleScheduleAt(float ScheduleTime);
 
-	/** Target mouth open value derived from audio amplitude. */
-	float TargetMouthOpenValue = 0.0f;
+	/** Cached sibling components on the owner. TWeakObjectPtr tracks GC independently — no UPROPERTY needed. */
+	TWeakObjectPtr<UMetahumanAnimComponent> CachedMetahumanAnim;
+	TWeakObjectPtr<UElevenLabsTTSComponent> CachedTTS;
+
+	/** The schedule currently being played back. */
+	FVisemeSchedule ActiveSchedule;
+
+	/** Index hint into ActiveSchedule.Keys for the current time (avoids repeated linear scans). */
+	int32 LastKeyIndex = 0;
+
+	/** True while ActiveSchedule is being sampled. */
+	bool bScheduleActive = false;
+
+	/** Fade-out state after the schedule ends so the mouth closes smoothly. */
+	bool bFadingOut = false;
+	float FadeOutTimeRemaining = 0.0f;
+
+	/** Schedule watchdog state — tracks whether the TTS playback clock is advancing. */
+	float LastPlaybackElapsed = -1.0f;
+	float ClockStallAccum = 0.0f;
+
+	/** Last raw sample from the schedule (pre-smoothing). */
+	TMap<FName, float> LastCurves;
+
+	/**
+	 * Per-curve smoothed values that are actually pushed to the face each
+	 * tick. Updated by exponentially damping toward the schedule sample,
+	 * giving the mouth motion natural inertia and eliminating snap between
+	 * adjacent visemes.
+	 */
+	TMap<FName, float> SmoothedCurves;
 };

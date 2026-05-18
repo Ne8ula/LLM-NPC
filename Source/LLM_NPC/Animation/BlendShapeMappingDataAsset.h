@@ -71,4 +71,11 @@ public:
 	 * blend shape targets.  Returns an empty array if no mapping matches.
 	 */
 	TArray<FEmotionBlendShapeTarget> GetTargetsForState(const FEmotionState& State) const;
+
+	/**
+	 * Populate with default Metahuman ARKit blend shape mappings for all Plutchik emotions.
+	 * Call this to auto-fill the data asset with sensible defaults.
+	 */
+	UFUNCTION(BlueprintCallable, CallInEditor, Category = "Animation|BlendShape")
+	void PopulateDefaultMetahumanMappings();
 };

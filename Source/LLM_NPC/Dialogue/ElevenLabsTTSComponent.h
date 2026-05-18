@@ -16,6 +16,22 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSpeechFinished);
 /** Delegate fired when raw audio data is received (for lip sync). */
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnTTSAudioDataReceived, const TArray<uint8>&, AudioData, int32, SampleRate);
 
+/** Delegate fired when character-level alignment data is received from ElevenLabs (for viseme lip sync). */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnTTSAlignmentReceived, const FString&, Characters, const TArray<float>&, StartTimesSec, const TArray<float>&, DurationsSec);
+
+/**
+ * Delegate fired when a TTS HTTP request fails — non-200 response, parse
+ * failure, or audio creation failure. ResponseCode is the HTTP status (or
+ * a negative internal code: -1 parse, -2 audio_create). ErrorBody is the
+ * raw response body from ElevenLabs or an internal reason string.
+ *
+ * Subscribers should treat this as "speech is NOT happening" and clear any
+ * speaking/thinking state they were holding. Used by UNPCLipSyncComponent
+ * to StopLipSync cleanly, UMetahumanAnimComponent to clear the thinking
+ * face pose, and UNPCBodyMotionComponent to return the body to idle.
+ */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSpeechError, int32, ResponseCode, const FString&, ErrorBody);
+
 /**
  * Text-to-Speech component using the ElevenLabs API.
  *
@@ -66,6 +82,23 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "NPC|TTS")
 	FOnTTSAudioDataReceived OnTTSAudioDataReceived;
 
+	/** Fired when ElevenLabs character-level alignment data is received. Broadcast before audio playback starts. */
+	UPROPERTY(BlueprintAssignable, Category = "NPC|TTS")
+	FOnTTSAlignmentReceived OnTTSAlignmentReceived;
+
+	/** Fired when a TTS request fails. Subscribers should clear any speaking/thinking state. */
+	UPROPERTY(BlueprintAssignable, Category = "NPC|TTS")
+	FOnSpeechError OnSpeechError;
+
+	/**
+	 * Seconds elapsed since the current TTS utterance started playing.
+	 * Returns 0 if nothing is playing. Uses a wall-clock timestamp captured
+	 * at Play() because USoundWaveProcedural does not expose a reliable
+	 * playback cursor.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "NPC|TTS")
+	float GetPlaybackElapsedSeconds() const;
+
 	// --- Configuration ---
 
 	/** Default ElevenLabs voice ID (can be overridden per call). */
@@ -80,9 +113,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|TTS|Config", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float DefaultSimilarityBoost = 0.75f;
 
-	/** Audio output model ID (e.g., "eleven_multilingual_v2"). */
+	/** Style exaggeration (0.0 = none, 1.0 = max). Higher values make emotional speech more pronounced. Requires v2 model. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|TTS|Config", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float StyleExaggeration = 0.5f;
+
+	/** Audio output model ID.
+	 *  Default is eleven_v3 (alpha) — the only model that recognises inline audio tags
+	 *  like "[sighs] I do not know what to say." Brackets are interpreted as vocal
+	 *  expression, not spoken aloud, allowing the LLM to drive emotional inflection
+	 *  per-line without separate parameter tuning.
+	 *
+	 *  Alternatives (lose audio-tag support):
+	 *    - eleven_multilingual_v2: best non-English quality, 1.0 credits/char.
+	 *    - eleven_turbo_v2_5: balanced cost/latency, 0.5 credits/char.
+	 *    - eleven_flash_v2_5: cheapest + fastest, English-only, 0.5 credits/char.
+	 *  Switch via BP defaults or a per-instance override if your account does not
+	 *  have access to v3 yet (it ships in alpha to most paid tiers). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|TTS|Config")
-	FString ModelID = TEXT("eleven_multilingual_v2");
+	FString ModelID = TEXT("eleven_v3");
 
 	/** Output audio format. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NPC|TTS|Config")
@@ -112,6 +160,14 @@ private:
 	/** Create a USoundWaveProcedural from raw PCM audio data and play it. */
 	void PlayAudioFromPCM(const TArray<uint8>& PCMData);
 
+	/** Parse the JSON body returned by the /with-timestamps endpoint into PCM bytes + alignment arrays. */
+	bool ParseTimestampedResponse(
+		const FString& JsonBody,
+		TArray<uint8>& OutPCM,
+		FString& OutCharacters,
+		TArray<float>& OutStartTimesSec,
+		TArray<float>& OutDurationsSec) const;
+
 	/** Callback when audio playback finishes. */
 	UFUNCTION()
 	void OnAudioPlaybackFinished();
@@ -133,6 +189,18 @@ private:
 	/** Whether speech is currently being played. */
 	bool bIsSpeaking = false;
 
+	/** Wall-clock timestamp (FPlatformTime::Seconds) captured when Play() was called. 0 when idle. */
+	double PlaybackStartWallTime = 0.0;
+
 	/** Whether the API key is configured. */
 	bool bAPIKeyConfigured = false;
+
+	/**
+	 * Monotonically incrementing version counter for in-flight TTS requests.
+	 * Incremented on every SpeakText() call; captured in the HTTP callback closure.
+	 * If the response version doesn't match PendingRequestVersion the response is stale
+	 * (a newer SpeakText was called in the interim) and is discarded without playback.
+	 * Prevents double-playback when two callers both invoke SpeakText on the same frame.
+	 */
+	int32 PendingRequestVersion = 0;
 };

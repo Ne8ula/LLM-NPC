@@ -1,5 +1,6 @@
 #include "InspectableItem.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/SphereComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogInspectableItem, Log, All);
 
@@ -11,13 +12,31 @@ AInspectableItem::AInspectableItem()
 	ItemMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ItemMesh"));
 	RootComponent = ItemMesh;
 
-	// Disable collision for inspection viewport
+	// Disable collision on the mesh — physics never interacts with the item.
 	ItemMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// Trace-only sphere for the player's E-key line trace. Blocks ECC_Visibility only;
+	// ignores Pawn / WorldDynamic / Camera / etc. so the item never obstructs movement
+	// or camera but is reliably hittable by Visibility traces.
+	InteractionSphere = CreateDefaultSubobject<USphereComponent>(TEXT("InteractionSphere"));
+	InteractionSphere->SetupAttachment(RootComponent);
+	InteractionSphere->InitSphereRadius(InteractionRadius);
+	InteractionSphere->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	InteractionSphere->SetCollisionObjectType(ECC_WorldDynamic);
+	InteractionSphere->SetCollisionResponseToAllChannels(ECR_Ignore);
+	InteractionSphere->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	InteractionSphere->SetGenerateOverlapEvents(false);
 }
 
 void AInspectableItem::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Sync sphere radius to the (possibly designer-edited) UPROPERTY value.
+	if (InteractionSphere)
+	{
+		InteractionSphere->SetSphereRadius(InteractionRadius);
+	}
 
 	// Store initial transform for reset
 	InitialScale = GetActorScale3D().X; // Assume uniform scale

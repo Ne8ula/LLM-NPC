@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>THE FRIEND — Vertical Slice Demo</title>
+<style>
+  :root {
+    --bg: #0b0b0e;
+    --panel: #141419;
+    --ink: #e8e6e1;
+    --muted: #8a8a93;
+    --accent: #d96a4a;
+    --accent-soft: #f5a992;
+    --line: #1f1f27;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Inter", "Segoe UI", -apple-system, sans-serif;
+    overflow: hidden;
+  }
+  #deck {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 6vh 8vw;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    animation: fade 0.35s ease-out;
+  }
+  .slide.active { display: flex; }
+  @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  .eyebrow {
+    font-size: 0.8rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent-soft);
+    margin-bottom: 1.2rem;
+  }
+  h1 {
+    font-size: clamp(2.2rem, 5vw, 4rem);
+    font-weight: 600;
+    line-height: 1.05;
+    margin: 0 0 1rem;
+    letter-spacing: -0.02em;
+  }
+  h2 {
+    font-size: clamp(1.6rem, 3.4vw, 2.6rem);
+    font-weight: 600;
+    line-height: 1.1;
+    margin: 0 0 1.2rem;
+    letter-spacing: -0.015em;
+  }
+  p, li {
+    font-size: clamp(1rem, 1.25vw, 1.15rem);
+    line-height: 1.55;
+    color: var(--ink);
+  }
+  .muted { color: var(--muted); }
+  ul.clean {
+    list-style: none;
+    padding: 0;
+    margin: 1rem 0 0;
+  }
+  ul.clean li {
+    padding: 0.45rem 0;
+    border-bottom: 1px solid var(--line);
+  }
+  ul.clean li::before {
+    content: "—";
+    color: var(--accent);
+    margin-right: 0.7rem;
+  }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2vw;
+    align-items: center;
+    height: 100%;
+  }
+  .media {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    max-height: 78vh;
+  }
+  .media img, .media video {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+  }
+  .media.contain img { object-fit: contain; background: #000; }
+  .collage {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 10px;
+    width: 100%;
+    height: 78vh;
+  }
+  .collage .media { max-height: unset; }
+
+  .content-stack {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    height: 100%;
+    max-width: 38vw;
+  }
+  .content-stack.full { max-width: none; }
+
+  .chrome {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 2rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+    pointer-events: none;
+  }
+  .chrome .label { letter-spacing: 0.22em; text-transform: uppercase; }
+  .nav {
+    pointer-events: auto;
+    display: flex;
+    gap: 0.5rem;
+  }
+  .nav button {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    padding: 0.35rem 0.7rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    letter-spacing: 0.1em;
+    font-size: 0.75rem;
+  }
+  .nav button:hover { color: var(--ink); border-color: var(--accent); }
+
+  .dots { display: flex; gap: 0.4rem; pointer-events: auto; }
+  .dots span {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #2a2a32;
+    transition: background 0.2s;
+  }
+  .dots span.on { background: var(--accent); }
+
+  .kbd {
+    font-family: "JetBrains Mono", Menlo, monospace;
+    font-size: 0.78rem;
+    background: #17171d;
+    color: var(--accent-soft);
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+  }
+
+  .footnote {
+    margin-top: 1.5rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+    font-style: italic;
+  }
+
+  .title-slide h1 { font-size: clamp(3rem, 6vw, 5.2rem); }
+  .title-slide .subtitle { font-size: clamp(1.1rem, 1.6vw, 1.4rem); color: var(--muted); max-width: 50ch; }
+</style>
+</head>
+<body>
+<div id="deck">
+
+  <!-- 1 : Title -->
+  <section class="slide title-slide active">
+    <div class="eyebrow">LLM-NPC · Threshold · Vertical Slice</div>
+    <h1>The Friend</h1>
+    <p class="subtitle">
+      An Asian female MetaHuman, mid-20s, running a ground-floor convenience store inside a Chinese residential compound. Sadness 0.5 baseline. Hidden title: "The One Who Stayed."
+    </p>
+    <p class="subtitle" style="margin-top:2rem">
+      Final review demo — scene, character, and emotion-driven template animation pipeline.
+    </p>
+  </section>
+
+  <!-- 2 : Scene & environment -->
+  <section class="slide">
+    <div class="eyebrow">Slide 2 · Scene & Environment</div>
+    <h2>A compound at dusk.<br/>A back-room store inside it.</h2>
+    <div class="grid-2" style="margin-top:1.5rem">
+      <div class="content-stack">
+        <p>
+          <strong>Threshold_Compound</strong> — a Neo-Shanghai residential block in perpetual orange-hour lighting. Volumetric fog, neon signage, red reversed-glyph marquee driven by a custom glitch material.
+        </p>
+        <p style="margin-top:1rem">
+          The Friend's back room is dressed with convenience-store shelving, hanging noodle racks, CRT counter, lanterns, cardboard boxes. Enclosed interior — no exterior sightlines from inside the store.
+        </p>
+        <p class="footnote">
+          Lighting + set dressing is staging; the scene is not the focus of this presentation.
+        </p>
+      </div>
+      <div class="collage">
+        <div class="media"><img src="images/exterior1.png" alt="Exterior compound at dusk with SunRiseInTheEast neon"/></div>
+        <div class="media"><img src="images/exterior2.png" alt="View through a doorway into the compound"/></div>
+        <div class="media"><img src="images/envunlit.png" alt="Convenience store interior, unlit shading"/></div>
+        <div class="media"><img src="images/glitchmaterial.png" alt="Glitch presence master material graph"/></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 : The Friend -->
+  <section class="slide">
+    <div class="eyebrow">Slide 3 · The Character</div>
+    <h2>Meeting The Friend.</h2>
+    <div class="grid-2" style="margin-top:1.5rem">
+      <div class="content-stack">
+        <p>
+          Authored in <strong>MetaHuman Creator</strong> (<code>MH_F_25</code>), assembled to a runtime Blueprint, and wrapped inside <code>BP_NPC_Friend</code> alongside the full LLM-NPC component stack: dialogue, emotion, STT, TTS, facial recognition, fallback.
+        </p>
+        <p style="margin-top:1rem">
+          Runs Claude for dialogue, Whisper for STT, ElevenLabs for TTS. Her personality, voice, and emotional transition costs are authored in <code>DA_Threshold_Friend</code>. Her withheld truth + reflection aspect live in a social-graph data asset.
+        </p>
+      </div>
+      <div class="media"><img src="images/envlighting.png" alt="The Friend MetaHuman posed in her store with neon lighting"/></div>
+    </div>
+  </section>
+
+  <!-- 4 : The animation problem -->
+  <section class="slide">
+    <div class="eyebrow">Slide 4 · The Animation Problem</div>
+    <h2>UE 5.7 MetaHuman Creator<br/>doesn't expose template switching at runtime.</h2>
+    <div class="grid-2" style="margin-top:1.5rem">
+      <div class="content-stack full">
+        <p>
+          The MetaHuman Creator preview panel advertises <em>Template Animation</em> swapping (Idle, Happy A/B, Sad A/B, Anger A/B, Fear A/B, Surprise A/B). In practice, this is an <strong>editor-time preview system</strong>:
+        </p>
+        <ul class="clean">
+          <li>The <em>Face/Body Template Animation</em> enums live in <code>MetaHumanCharacterEditor</code> — editor-only module.</li>
+          <li>At Assembly time, one template is baked as an AnimSequence. The runtime character plays that single loop and nothing switches it.</li>
+          <li><code>UMetaHumanComponentUE</code>'s runtime API is minimal — it wires one bool (body correctives) and exits.</li>
+          <li>Reflection-based attempts to write a template enum hit a wall: the AnimBPs carry no such property.</li>
+        </ul>
+        <p class="footnote">
+          Verified via plugin source (<code>MetaHumanComponentUE.cpp</code>, <code>MetaHumanCharacterEditorSettings.cpp</code>) and a runtime component scan.
+        </p>
+      </div>
+      <div class="media"><img src="images/envwireframe.png" alt="Wireframe view of Friend in store with navmesh"/></div>
+    </div>
+  </section>
+
+  <!-- 5 : The solution -->
+  <section class="slide">
+    <div class="eyebrow">Slide 5 · The Solution</div>
+    <h2>Play the template clips ourselves —<br/>as crossfading montages.</h2>
+    <div class="content-stack full" style="margin-top:1.5rem">
+      <p>
+        The plugin ships the actual template clips as standalone <code>UAnimSequence</code> assets under <code>/MetaHumanCharacter/Optional/Animation/TemplateAnimations/</code>. We reach them directly and drive The Friend through the standard animation pipeline.
+      </p>
+      <ul class="clean">
+        <li>Two minimal slot-host AnimBPs with a single <code>DefaultSlot</code> node: <code>ABP_EmotionSlot_Face</code>, <code>ABP_EmotionSlot_Body</code>.</li>
+        <li>Installed on the Face and Body meshes at init via <code>SetAnimInstanceClass</code>, only when they have no primary AnimInstance (UAF case).</li>
+        <li>Each emotion template plays via <code>PlaySlotAnimationAsDynamicMontage</code> — UE5 auto-crossfades from the outgoing montage to the incoming one on the same slot.</li>
+        <li>~0.6&nbsp;s blend-in = blend-out → perceptually smooth A→B transitions between emotional templates on both face and body.</li>
+      </ul>
+      <p class="footnote">
+        <code>UTemplateAnimationDriverComponent</code> — one component, ~400 LOC, reusable across NPCs; falls back to <code>PlayAnimation</code> hard-swap on non-UAF characters.
+      </p>
+    </div>
+  </section>
+
+  <!-- 6 : Emotion routing -->
+  <section class="slide">
+    <div class="eyebrow">Slide 6 · Claude → Template, Direct</div>
+    <h2>What she's feeling right now<br/>drives what she looks like.</h2>
+    <div class="content-stack full" style="margin-top:1.5rem">
+      <p>
+        By default, template selection listened to <code>UEmotionComponent::OnEmotionChanged</code>. That component runs a PAD state machine with slow decay (~5&nbsp;min), so a single intense signal holds for a long time — even after Claude had moved on.
+      </p>
+      <p style="margin-top:0.8rem">
+        Template animation now subscribes to <code>UDialogueComponent::OnDialogueResponseReceived</code> instead. Each Claude turn carries an <code>EEmotionType NPCEmotionHint</code> — we use that directly to pick the next template, and the montage crossfade handles the transition on screen.
+      </p>
+      <ul class="clean">
+        <li><strong>EmotionComponent stays untouched</strong> — still drives voice stability, FACS curves, decay-sensitive systems.</li>
+        <li><strong>Template = Claude's current read.</strong> Sadness → SadA/B. Neutral → Idle. Configurable per NPC (Surprise is remapped to Idle for The Friend because her template read too exaggerated).</li>
+        <li>Toggled per-NPC via <code>bDriveFromDialogueResponse</code> on the driver component.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 7 : Video walkthrough -->
+  <section class="slide">
+    <div class="eyebrow">Slide 7 · Walkthrough</div>
+    <h2>Live capture.</h2>
+    <div class="media" style="margin-top:1.5rem; max-height:70vh">
+      <video controls preload="metadata" playsinline>
+        <source src="video/Recording 2026-04-23 152248.mp4" type="video/mp4" />
+        Your browser doesn't support embedded video. Open
+        <a href="video/Recording 2026-04-23 152248.mp4">the MP4</a> directly.
+      </video>
+    </div>
+  </section>
+
+  <!-- Chrome -->
+  <div class="chrome">
+    <div class="label">The Friend · Vertical Slice Demo</div>
+    <div class="dots" id="dots"></div>
+    <div class="nav">
+      <button id="prev">← Prev</button>
+      <button id="next">Next →</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dots = document.getElementById('dots');
+  let i = 0;
+
+  slides.forEach((_, idx) => {
+    const d = document.createElement('span');
+    if (idx === 0) d.classList.add('on');
+    d.addEventListener('click', () => go(idx));
+    dots.appendChild(d);
+  });
+
+  function go(n) {
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
+    [...dots.children].forEach((d, idx) => d.classList.toggle('on', idx === i));
+    // Pause any playing video when leaving its slide
+    slides.forEach((s) => s.querySelectorAll('video').forEach(v => {
+      if (!s.classList.contains('active') && !v.paused) v.pause();
+    }));
+  }
+
+  document.getElementById('prev').addEventListener('click', () => go(i - 1));
+  document.getElementById('next').addEventListener('click', () => go(i + 1));
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { go(i + 1); e.preventDefault(); }
+    if (e.key === 'ArrowLeft'  || e.key === 'PageUp')                    { go(i - 1); e.preventDefault(); }
+    if (e.key === 'Home')                                                 { go(0); }
+    if (e.key === 'End')                                                  { go(slides.length - 1); }
+  });
+</script>
+</body>
+</html>

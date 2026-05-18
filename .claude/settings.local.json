@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs -I {} basename {})",
+      "Bash(pip show:*)",
+      "Bash(py --version)",
+      "Bash(where python3:*)",
+      "Bash(where py:*)",
+      "Bash(py -m pip show python-pptx)",
+      "Bash(py -m pip install python-pptx -q)",
+      "Bash(py -m pip install python-pptx)",
+      "Bash(py -c \"from pptx import Presentation; print\\('OK'\\)\")",
+      "Bash(py make_deck.py)",
+      "mcp__notebooklm-mcp__list_notebooks",
+      "WebSearch",
+      "WebFetch(domain:research.nvidia.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:arxiv.org)",
+      "Skill(claude-md-management:revise-claude-md)",
+      "Skill(claude-md-management:revise-claude-md:*)",
+      "Bash(git check-ignore *)",
+      "Read(//c/Program Files/Epic Games/UE_5.7/Engine/Binaries/Win64/**)",
+      "Read(//c/Program Files \\(x86\\)/Epic Games/Launcher/Engine/Binaries/Win64/**)",
+      "Read(//c/Program Files/Epic Games/**)",
+      "Read(//c/Program Files \\(x86\\)/Epic Games/**)",
+      "Bash(xargs grep *)",
+      "Bash(grep -n -o '.\\\\{0,80\\\\}includePartialMessages.\\\\{0,120\\\\}' \"C:/Users/alexx/.vscode/extensions/anthropic.claude-code-2.1.141-win32-x64/extension.js\")"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "notebooklm-mcp"
+  ]
+}

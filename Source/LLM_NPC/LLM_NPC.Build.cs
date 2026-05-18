@@ -17,8 +17,6 @@ public class LLM_NPC : ModuleRules
 			"HTTP",
 			"Json",
 			"JsonUtilities",
-			"AudioCapture",
-			"AudioMixer",
 			"UMG",
 			"SlateCore",
 			"Slate",
@@ -31,6 +29,18 @@ public class LLM_NPC : ModuleRules
 			"RenderCore",
 			"RHI"
 		});
+
+		// Editor-only dependency — needed for GEditor / Editor.h used by CallInEditor functions.
+		if (Target.Type == TargetType.Editor)
+		{
+			PrivateDependencyModuleNames.Add("UnrealEd");
+		}
+
+		// Windows multimedia library for direct microphone capture (waveIn API)
+		if (Target.Platform == UnrealTargetPlatform.Win64)
+		{
+			PublicSystemLibraries.Add("winmm.lib");
+		}
 
 		// Third-party library paths
 		string ThirdPartyPath = Path.Combine(ModuleDirectory, "../../ThirdParty");

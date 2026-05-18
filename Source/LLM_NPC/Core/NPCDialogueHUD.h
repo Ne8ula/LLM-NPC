@@ -2,9 +2,15 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/HUD.h"
+#include "LLM_NPC/Core/NPCTypes.h"
+#include "LLM_NPC/Dialogue/DialogueComponent.h"
 #include "NPCDialogueHUD.generated.h"
 
 class UDialogueComponent;
+class UWhisperSTTComponent;
+class UFacialRecognitionComponent;
+class UElevenLabsTTSComponent;
+class ANPCCharacter;
 
 /**
  * HUD that draws NPC dialogue chat using canvas DrawText.
@@ -21,12 +27,25 @@ public:
 
 	/** Called from player controller when user submits text. */
 	void SubmitChatMessage(const FString& Message);
+	void SetStatus(const FString& Status) { StatusMessage = Status; }
 
 	/** Get the current input text buffer. */
 	FString GetInputBuffer() const { return InputBuffer; }
 	void SetInputBuffer(const FString& Text) { InputBuffer = Text; }
 	void AppendToInput(const FString& Char);
 	void BackspaceInput();
+
+	/** Rebind all delegates to a new focused NPC. Pass nullptr to enter null-focus state. */
+	void SetFocusedNPC(ANPCCharacter* NPC);
+
+	/** Called by NPCPlayerController on V press/release to drive the recording indicator. */
+	void SetVoiceRecording(bool bRecording) { bIsVoiceRecording = bRecording; }
+
+	/** Called by NPCPlayerController on left mouse click. Focuses input if click is inside the input box. */
+	void HandleMouseClick(float MouseX, float MouseY);
+
+	/** True only when the user has clicked the input box — keyboard capture is gated on this. */
+	bool IsTextInputActive() const { return bTextInputActive; }
 
 protected:
 	virtual void BeginPlay() override;
@@ -35,6 +54,50 @@ protected:
 private:
 	UFUNCTION()
 	void OnNPCResponse(const FString& ResponseText, EEmotionType NPCEmotionHint, bool bShouldGiveItem, FName ItemID);
+
+	UFUNCTION()
+	void OnArchiveBranchResolved(EArchiveBranch Branch, const FString& FinalLine);
+
+	/** Latches the most recent face-detected player emotion; rendered in the visitor panel. */
+	UFUNCTION()
+	void OnUserEmotionDetected(FDetectedUserEmotion DetectedEmotion);
+
+	/** Fired by ElevenLabsTTSComponent when the climax line finishes playing. Activates the armed card. */
+	UFUNCTION()
+	void OnFriendSpeechFinished();
+
+	/** Watchdog fallback in case OnSpeechFinished never arrives. */
+	UFUNCTION()
+	void OnClosingCardWatchdog();
+
+	/** Activate the closing card now; called by OnFriendSpeechFinished or the watchdog. */
+	void ActivateClosingCard();
+
+	/** Closing-card state (Tier 3). Two-phase:
+	 *    bClosingCardArmed   — branch resolved, but the Friend's TTS line is still playing.
+	 *                          The card data is captured; the overlay is NOT yet drawn.
+	 *    bClosingCardActive  — TTS finished (or watchdog fired); card overlay is drawing.
+	 */
+	bool bClosingCardArmed = false;
+	bool bClosingCardActive = false;
+	float ClosingCardStartTime = 0.0f;
+	FString ClosingCardLine;
+	EArchiveBranch ClosingCardBranch = EArchiveBranch::None;
+	FTimerHandle ClosingCardWatchdogTimer;
+
+	/** Total inspectable items in the level — counted at BeginPlay for the archive bar denominator. */
+	int32 TotalInspectableItems = 0;
+
+	/** Latched last-detected player facial emotion (latest non-zero-confidence reading). */
+	FDetectedUserEmotion LastUserEmotion;
+
+	/** Cached so we can RemoveDynamic on NPC switch. */
+	UPROPERTY()
+	TObjectPtr<UFacialRecognitionComponent> BoundFacialRec;
+
+	/** Cached so we can RemoveDynamic on NPC switch and use it as the deferred-card trigger. */
+	UPROPERTY()
+	TObjectPtr<UElevenLabsTTSComponent> BoundTTS;
 
 	struct FChatLine
 	{
@@ -45,8 +108,32 @@ private:
 	TArray<FChatLine> ChatLines;
 	FString InputBuffer;
 	FString StatusMessage = TEXT("Type a message and press Enter.");
-	bool bDialogueVisible = true;
+	// Start hidden — PIE opens in FPS look mode (cursor captured). Press T to chat.
+	bool bDialogueVisible = false;
 
 	UPROPERTY()
 	TObjectPtr<UDialogueComponent> BoundDialogue;
+
+	/** Cached STT reference so we can RemoveDynamic on NPC switch. */
+	UPROPERTY()
+	TObjectPtr<UWhisperSTTComponent> BoundSTT;
+
+	/** Cached focused NPC actor — used to detect no-op re-binds. */
+	UPROPERTY()
+	TObjectPtr<ANPCCharacter> FocusedNPCActor;
+
+	/** Display name of the currently focused NPC. */
+	FString FocusedNPCName;
+
+	/** Callback when voice transcript arrives. */
+	UFUNCTION()
+	void OnVoiceTranscript(const FString& Transcript);
+
+	bool bIsVoiceRecording = false;
+
+	/** True when the user has clicked the input box. Cleared on click-outside, focus switch, or overlay hide. */
+	bool bTextInputActive = false;
+
+	/** Cached from the last DrawHUD call — used to compute input box bounds in HandleMouseClick. */
+	float CachedScreenH = 0.0f;
 };

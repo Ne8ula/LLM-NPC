@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The Memory Archive — Elevator Pitch</title>
+<style>
+  @page { size: A4 portrait; margin: 0; }
+  @media print {
+    html, body { margin: 0; padding: 0; background: #02060a; }
+    .sheet { box-shadow: none; margin: 0; }
+  }
+
+  :root {
+    --bg:       #02060a;
+    --line:     #1d3a28;
+    --line-2:   #2a583c;
+    --dim:      #6b8a78;
+    --mid:      #9ec3aa;
+    --text:     #d6ead8;
+    --bright:   #e6f6e8;
+    --accent:   #7eecaa;
+    --accent-2: #5fc88a;
+    --warm:     #d7c489;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Courier New", monospace;
+    -webkit-font-smoothing: antialiased;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  body { display: flex; justify-content: center; padding: 18px 0; }
+
+  .sheet {
+    position: relative;
+    width: 210mm;
+    height: 297mm;
+    padding: 12mm 14mm 11mm;
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        rgba(0,0,0,0)        0,
+        rgba(0,0,0,0)        2px,
+        rgba(20, 60, 38, 0.15) 3px,
+        rgba(0,0,0,0)        4px
+      ),
+      radial-gradient(ellipse at 50% 25%, rgba(40,110,72,0.10) 0%, rgba(0,0,0,0) 60%),
+      var(--bg);
+    box-shadow: 0 0 28px rgba(0,0,0,0.6);
+    overflow: hidden;
+  }
+  .corner {
+    position: absolute; width: 11mm; height: 11mm;
+    border-color: var(--accent); border-style: solid; border-width: 0;
+  }
+  .corner.tl { top: 5mm; left: 5mm;     border-top-width: 0.5mm; border-left-width: 0.5mm; }
+  .corner.tr { top: 5mm; right: 5mm;    border-top-width: 0.5mm; border-right-width: 0.5mm; }
+  .corner.bl { bottom: 5mm; left: 5mm;  border-bottom-width: 0.5mm; border-left-width: 0.5mm; }
+  .corner.br { bottom: 5mm; right: 5mm; border-bottom-width: 0.5mm; border-right-width: 0.5mm; }
+
+  /* ===== Header ===== */
+  .header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding-bottom: 3mm;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 6mm;
+  }
+  .header .micro {
+    font-size: 7.6pt; letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  .header h1 {
+    font-size: 22pt; letter-spacing: 0.08em; font-weight: 400;
+    color: var(--bright); margin: 0.8mm 0 0; line-height: 1.05;
+  }
+  .header h1 .sub { color: var(--accent); font-weight: 500; }
+  .header .meta {
+    margin-top: 1.4mm;
+    color: var(--dim); font-size: 7.6pt; letter-spacing: 0.22em;
+  }
+  .header .right { text-align: right; }
+  .pill {
+    display: inline-block;
+    border: 1px solid var(--line-2);
+    border-radius: 2px;
+    padding: 0.8mm 2.4mm;
+    font-size: 8pt; letter-spacing: 0.30em; text-transform: uppercase;
+    color: var(--accent);
+    background: rgba(40,90,60,0.20);
+    margin-top: 1.6mm;
+  }
+  .header .right .label {
+    font-size: 7.6pt; letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600;
+  }
+
+  /* ===== Intro line ===== */
+  .intro {
+    border-left: 0.8mm solid var(--accent);
+    padding: 2.2mm 0 2.2mm 5mm;
+    margin-bottom: 6mm;
+    background: linear-gradient(to right, rgba(126,236,170,0.05), rgba(126,236,170,0));
+  }
+  .intro .label {
+    font-size: 7pt; letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 1mm;
+  }
+  .intro .text {
+    font-size: 9.6pt; line-height: 1.55; color: var(--text);
+  }
+  .intro .text b { color: var(--bright); }
+
+  /* ===== Beats ===== */
+  .beat {
+    display: grid;
+    grid-template-columns: 24mm 1fr;
+    gap: 4mm;
+    padding: 3mm 0;
+    border-top: 1px solid var(--line);
+  }
+  .beat:last-of-type { border-bottom: 1px solid var(--line); }
+
+  .beat .when {
+    display: flex; flex-direction: column; gap: 1.2mm;
+  }
+  .beat .time {
+    font-size: 12pt; letter-spacing: 0.04em;
+    color: var(--accent);
+    text-shadow: 0 0 2.4mm rgba(126,236,170,0.45);
+  }
+  .beat .name {
+    font-size: 7pt; letter-spacing: 0.30em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  .beat .duration {
+    font-size: 6.6pt; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--accent-2); margin-top: 0.4mm;
+  }
+
+  .beat .body { padding-right: 2mm; }
+  .beat .headline {
+    font-size: 10.5pt; color: var(--bright);
+    letter-spacing: 0.02em; margin-bottom: 1.6mm;
+    font-weight: 500;
+  }
+  .beat .script {
+    font-size: 9.2pt; line-height: 1.5;
+    color: var(--text);
+  }
+  .beat .script b { color: var(--accent); font-weight: 500; }
+  .beat .script .em { color: var(--bright); }
+  .beat .script .warm { color: var(--warm); }
+  .beat .cue {
+    margin-top: 1.6mm;
+    font-size: 7pt; letter-spacing: 0.24em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  .beat .cue::before {
+    content: "▶ "; color: var(--accent);
+  }
+
+  /* ===== Footer ===== */
+  .footer {
+    position: absolute; left: 14mm; right: 14mm; bottom: 6mm;
+    display: flex; justify-content: space-between; align-items: center;
+    border-top: 1px solid var(--line);
+    padding-top: 2mm;
+    font-size: 7.4pt; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  .footer .center { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="sheet">
+  <span class="corner tl"></span>
+  <span class="corner tr"></span>
+  <span class="corner bl"></span>
+  <span class="corner br"></span>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="left">
+      <div class="micro">LLM-NPC · UE 5.7 · Threshold</div>
+      <h1>The Memory Archive <span class="sub">/ Elevator Pitch</span></h1>
+      <div class="meta">A COMPANION TO THE TECHNICAL POSTER · READ ALOUD ≈ 1:45</div>
+    </div>
+    <div class="right">
+      <div class="label">Speaker Card</div>
+      <div class="meta">2026 · 05 · 14</div>
+      <span class="pill">~ 1:45</span>
+    </div>
+  </div>
+
+  <!-- INTRO -->
+  <div class="intro">
+    <div class="label">Frame · One Sentence</div>
+    <div class="text">
+      <b>The Memory Archive</b> is an Unreal Engine prototype that asks one question — <span style="color:var(--accent)">when the model of a witness withdraws consent, what testimony remains?</span>
+    </div>
+  </div>
+
+  <!-- BEAT 01 — HOOK -->
+  <div class="beat">
+    <div class="when">
+      <div class="time">00:00</div>
+      <div class="name">Hook</div>
+      <div class="duration">15s</div>
+    </div>
+    <div class="body">
+      <div class="headline">A speculative-design provocation about consent in synthetic worlds.</div>
+      <div class="script">
+        Huizinga called the space of play the magic circle. Stenros called it a psychological bubble. I built an archive that sits on that boundary on purpose — a near-future apparatus that reconstructs people from the interviews they gave before they were gone.
+      </div>
+      <div class="cue">point · poster title block</div>
+    </div>
+  </div>
+
+  <!-- BEAT 02 — PREMISE -->
+  <div class="beat">
+    <div class="when">
+      <div class="time">00:15</div>
+      <div class="name">Premise</div>
+      <div class="duration">25s</div>
+    </div>
+    <div class="body">
+      <div class="headline">Two operators interview <span class="warm">The Friend</span>, the model of a witness.</div>
+      <div class="script">
+        Ashley Wei disappeared from a residential compound four years ago. She never consented to be archived; her record is reconstructed from secondary sources. <span class="em">The Friend</span> — her neighbour, the last person to see her — agreed to be modelled. She remembers consenting. <span class="warm">She can revoke it.</span>
+      </div>
+      <div class="cue">point · subject &amp; testimony lines</div>
+    </div>
+  </div>
+
+  <!-- BEAT 03 — LOOP -->
+  <div class="beat">
+    <div class="when">
+      <div class="time">00:40</div>
+      <div class="name">The Loop</div>
+      <div class="duration">30s</div>
+    </div>
+    <div class="body">
+      <div class="headline">One turn — four stages.</div>
+      <div class="script">
+        <b>01 Input</b> — Whisper transcribes audio, a four-band DFT fingerprint tags the speaker, ONNX models read face and hand, E/F line-traces pick up and present objects.
+        <b>02 Assembly</b> — DialogueComponent builds the system prompt from a graph asset and wraps the user message in Speaker / Holding / Gesture / Emotion brackets.
+        <b>03 Claude</b> returns structured JSON.
+        <b>04 Broadcast</b> — ElevenLabs voice, FACS face, PAD update, per-speaker memory, MetaHuman montage.
+      </div>
+      <div class="cue">point · §01 the loop · trace the four stages</div>
+    </div>
+  </div>
+
+  <!-- BEAT 04 — WHAT'S NEW -->
+  <div class="beat">
+    <div class="when">
+      <div class="time">01:10</div>
+      <div class="name">New Mechanics</div>
+      <div class="duration">25s</div>
+    </div>
+    <div class="body">
+      <div class="headline">Per-speaker memory, soft doubt, and three branching endings.</div>
+      <div class="script">
+        Two things are novel. <b>Speaker identification</b> lets the model address each operator distinctly — Speaker A and Speaker B get different registers. And a <b>soft-doubt prompt</b> gates seven memory topics behind which items each speaker has inspected or presented. The climax has three branches — <span class="em">Convergent Disclosure</span>, <span class="em">Divergent Fragmentation</span>, or <span class="em">Recursive Silence</span> — and the model decides which one plays.
+      </div>
+      <div class="cue">point · §03 components · then the seal</div>
+    </div>
+  </div>
+
+  <!-- BEAT 05 — CONTRIBUTION -->
+  <div class="beat">
+    <div class="when">
+      <div class="time">01:35</div>
+      <div class="name">Contribution</div>
+      <div class="duration">15s</div>
+    </div>
+    <div class="body">
+      <div class="headline">Speculative design <span class="dim">+</span> an empirical scaffold for the next study.</div>
+      <div class="script">
+        Submission angle is design fiction — the apparatus as a provocation. But every turn is logged as JSONL with gesture, emotion, items, branch hint, and the full Claude payload. A future between-subjects study of two-human-to-one-LLM conversations can run on the same engine without rewriting.
+      </div>
+      <div class="cue">point · footer line</div>
+    </div>
+  </div>
+
+  <!-- BEAT 06 — CLOSING -->
+  <div class="beat">
+    <div class="when">
+      <div class="time">01:45</div>
+      <div class="name">Close</div>
+      <div class="duration">5s</div>
+    </div>
+    <div class="body">
+      <div class="headline">What's left.</div>
+      <div class="script">
+        Tier 2 is complete — speech, speaker ID, item inspect/present, per-speaker memory. Tier 3 is the climax instruction and the consent-withdrawal branch. <span class="em">Demo end of next week.</span>
+      </div>
+      <div class="cue">close · invite questions</div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <span>BRANCH · claude/continue-llm-npc-api</span>
+    <span class="center">▮ MEMORY ARCHIVE · ELEVATOR PITCH · SPEAKER CARD ▮</span>
+    <span>≈ 1 MIN 45 SEC · READ ALOUD</span>
+  </div>
+
+</div>
+
+</body>
+</html>

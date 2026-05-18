@@ -1,0 +1,1632 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>The Memory Archive — Exhibit Hub</title>
+<style>
+  :root {
+    --bg:       #02060a;
+    --line:     #1d3a28;
+    --line-2:   #2a583c;
+    --dim:      #6b8a78;
+    --mid:      #9ec3aa;
+    --text:     #d6ead8;
+    --bright:   #e6f6e8;
+    --accent:   #7eecaa;
+    --accent-2: #5fc88a;
+    --warm:     #d7c489;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Courier New", monospace;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        rgba(0,0,0,0)        0px,
+        rgba(0,0,0,0)        2px,
+        rgba(20, 60, 38, 0.16) 3px,
+        rgba(0,0,0,0)        4px
+      ),
+      radial-gradient(ellipse at 50% 30%, rgba(40,110,72,0.10) 0%, rgba(0,0,0,0) 60%),
+      var(--bg);
+  }
+
+  /* CRT flicker */
+  @keyframes flicker {
+    0%, 96%, 100% { filter: brightness(1.0); }
+    97%   { filter: brightness(1.04); }
+    98%   { filter: brightness(0.96); }
+    99%   { filter: brightness(1.02); }
+  }
+  .stage { animation: flicker 5.5s linear infinite; }
+
+  /* Corner brackets */
+  .corner {
+    position: fixed; width: 28px; height: 28px;
+    border-color: var(--accent); border-style: solid; border-width: 0;
+    pointer-events: none; z-index: 50;
+  }
+  .corner.tl { top: 18px; left: 18px;     border-top-width: 1.5px; border-left-width: 1.5px; }
+  .corner.tr { top: 18px; right: 18px;    border-top-width: 1.5px; border-right-width: 1.5px; }
+  .corner.bl { bottom: 18px; left: 18px;  border-bottom-width: 1.5px; border-left-width: 1.5px; }
+  .corner.br { bottom: 18px; right: 18px; border-bottom-width: 1.5px; border-right-width: 1.5px; }
+
+  /* ============================================================
+     VIEWS
+     ============================================================ */
+  .view {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    width: 100vw; height: 100vh;
+    padding: 42px 56px;
+    display: flex; flex-direction: column;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.45s ease, transform 0.45s ease;
+    transform: scale(1.01);
+  }
+  .view.active {
+    opacity: 1; pointer-events: auto; transform: scale(1.0);
+  }
+
+  /* ===== HUB VIEW ===== */
+  .hub-header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 28px;
+  }
+  .hub-header .micro {
+    font-size: 11px; letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  .hub-header h1 {
+    font-size: 38px; font-weight: 400; letter-spacing: 0.06em;
+    color: var(--bright); margin: 6px 0 0; line-height: 1.0;
+  }
+  .hub-header h1 .sub { color: var(--accent); }
+  .hub-header .right { text-align: right; }
+  .hub-header .right .label {
+    font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .hub-header .right .meta {
+    margin-top: 4px;
+    font-size: 10px; letter-spacing: 0.24em; color: var(--dim);
+  }
+  .hub-header .pill {
+    display: inline-block;
+    border: 1px solid var(--line-2);
+    border-radius: 2px;
+    padding: 3px 10px;
+    margin-top: 8px;
+    font-size: 10px; letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--accent);
+    background: rgba(40,90,60,0.20);
+  }
+
+  /* tile grid — three tiles in a single horizontal row */
+  .tiles {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: 1fr;
+    gap: 22px;
+    min-height: 360px;
+  }
+  .tile {
+    position: relative;
+    border: 1px solid var(--line-2);
+    background: rgba(10, 25, 18, 0.55);
+    padding: 28px 32px 24px;
+    cursor: pointer;
+    display: flex; flex-direction: column; justify-content: space-between;
+    overflow: hidden;
+    min-height: 170px;
+    transition: border-color 0.25s ease, transform 0.25s ease, background 0.25s ease;
+    text-align: left;
+    color: inherit;
+    -webkit-user-select: none; user-select: none;
+    font-family: inherit;
+  }
+  .tile::before {
+    content: "";
+    position: absolute; top: 0; left: 0; width: 5px; height: 100%;
+    background: var(--accent);
+    box-shadow: 0 0 14px rgba(126,236,170,0.55);
+  }
+  .tile:hover, .tile:focus {
+    border-color: var(--accent);
+    background: rgba(15, 38, 28, 0.7);
+    transform: translateY(-2px);
+    outline: none;
+  }
+  .tile:hover .enter, .tile:focus .enter { color: var(--accent); }
+  .tile .head {
+    display: flex; align-items: flex-start; gap: 22px;
+  }
+  .tile .num {
+    font-size: 48px; font-weight: 300; color: var(--accent);
+    line-height: 0.9;
+    text-shadow: 0 0 12px rgba(126,236,170,0.4);
+    min-width: 70px;
+  }
+  .tile .icon {
+    width: 56px; height: 56px; color: var(--accent);
+    flex: none;
+    filter: drop-shadow(0 0 6px rgba(126,236,170,0.4));
+  }
+  .tile .body { margin-top: 22px; }
+  .tile .title {
+    font-size: 22px; letter-spacing: 0.08em;
+    color: var(--bright); margin-bottom: 8px;
+    font-weight: 500;
+  }
+  .tile .desc {
+    font-size: 13px; line-height: 1.55; color: var(--text);
+    max-width: 38ch;
+  }
+  .tile .footnote {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 22px;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+    font-size: 10px; letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  .tile .footnote .key {
+    color: var(--accent-2);
+  }
+  .tile .footnote .enter {
+    color: var(--mid);
+    transition: color 0.25s ease;
+  }
+  .tile .footnote .enter::after {
+    content: " ›";
+    color: var(--accent);
+  }
+
+  .hub-footer {
+    margin-top: 22px;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 10px; letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  .hub-footer .center { color: var(--accent); }
+  .hub-footer .hint kbd {
+    display: inline-block;
+    border: 1px solid var(--line-2);
+    border-radius: 2px;
+    padding: 1px 6px; margin: 0 3px;
+    font-size: 9px; font-family: inherit;
+    color: var(--accent);
+    background: rgba(10,25,18,0.6);
+  }
+
+  /* ===== SECTION VIEW ===== */
+  .section-header {
+    display: flex; align-items: center; gap: 24px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 24px;
+  }
+  .section-header .back {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid var(--line-2);
+    background: rgba(10,25,18,0.55);
+    color: var(--accent);
+    padding: 8px 14px;
+    font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease;
+  }
+  .section-header .back:hover {
+    border-color: var(--accent);
+    background: rgba(15, 38, 28, 0.7);
+  }
+  .section-header .back::before { content: "←"; font-size: 14px; line-height: 1; }
+  .section-header .crumb {
+    font-size: 11px; letter-spacing: 0.30em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  .section-header .crumb .num { color: var(--accent); }
+  .section-header .title {
+    font-size: 24px; letter-spacing: 0.06em; color: var(--bright);
+    font-weight: 500;
+  }
+  .section-header .right {
+    margin-left: auto;
+    display: flex; gap: 10px; align-items: center;
+    font-size: 10px; letter-spacing: 0.26em; text-transform: uppercase;
+    color: var(--dim);
+  }
+  .section-header .right kbd {
+    border: 1px solid var(--line-2);
+    border-radius: 2px;
+    padding: 1px 6px;
+    font-family: inherit; font-size: 9px;
+    color: var(--accent);
+    background: rgba(10,25,18,0.6);
+  }
+
+  .section-body {
+    flex: 1;
+    display: grid;
+    /* Wider video column — sidebar is now a tight panel beside the centerpiece */
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 28px;
+    min-height: 0;
+  }
+  /* Left column — stacks the 16:9 video frame + scrubber + compact controls */
+  .video-col {
+    display: flex; flex-direction: column;
+    min-width: 0;
+    gap: 10px;
+    justify-content: center;
+  }
+  /* Wrapper that locks 16:9 aspect ratio for the video tube */
+  .video-frame {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    max-height: calc(100vh - 260px);
+    position: relative;
+    margin: 0 auto;
+  }
+
+  /* ===== Custom video controls (compact bar — scrubber row + button row) =====
+     Row 1: full-width scrubber so dragging is easy.
+     Row 2: small play/mute/fullscreen on the right, time on the left. */
+  .vid-controls {
+    display: flex; flex-direction: column;
+    gap: 6px;
+    padding: 8px 12px;
+    border: 1px solid var(--line-2);
+    background: rgba(10, 25, 18, 0.6);
+    border-radius: 4px;
+  }
+  .vc-scrubber-row { display: flex; align-items: center; }
+  .vc-button-row {
+    display: flex; align-items: center; gap: 8px;
+    justify-content: space-between;
+  }
+  .vc-btn {
+    flex: none;
+    width: 26px; height: 26px;
+    border: 1px solid var(--line-2);
+    background: rgba(10, 25, 18, 0.7);
+    color: var(--accent);
+    font-family: inherit; font-size: 12px;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: border-color 0.18s, background 0.18s, color 0.18s;
+    border-radius: 3px;
+    padding: 0;
+  }
+  .vc-btn:hover {
+    border-color: var(--accent);
+    background: rgba(15, 38, 28, 0.85);
+    color: var(--bright);
+  }
+  .vc-time {
+    flex: none;
+    font-size: 11px; letter-spacing: 0.12em;
+    color: var(--accent);
+    min-width: 108px;
+    text-align: left;
+    text-shadow: 0 0 6px rgba(126,236,170,0.4);
+  }
+  .vc-btn-group {
+    display: flex; gap: 6px;
+  }
+  .vc-scrubber {
+    flex: 1; min-width: 0;
+    -webkit-appearance: none; appearance: none;
+    height: 18px;
+    background: transparent;
+    margin: 0;
+    cursor: pointer;
+    padding: 0;
+  }
+  .vc-scrubber::-webkit-slider-runnable-track {
+    height: 4px;
+    background: linear-gradient(to right,
+      var(--accent) 0%, var(--accent) var(--progress, 0%),
+      rgba(126,236,170,0.18) var(--progress, 0%), rgba(126,236,170,0.18) 100%);
+    border-radius: 2px;
+    box-shadow: 0 0 6px rgba(126,236,170,0.5);
+  }
+  .vc-scrubber::-moz-range-track {
+    height: 4px;
+    background: rgba(126,236,170,0.18);
+    border-radius: 2px;
+  }
+  .vc-scrubber::-moz-range-progress {
+    height: 4px;
+    background: var(--accent);
+    border-radius: 2px;
+    box-shadow: 0 0 6px rgba(126,236,170,0.5);
+  }
+  .vc-scrubber::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 14px; height: 14px;
+    margin-top: -5px;
+    border-radius: 50%;
+    background: var(--bright);
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 8px rgba(126,236,170,0.7);
+    cursor: pointer;
+  }
+  .vc-scrubber::-moz-range-thumb {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--bright);
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 8px rgba(126,236,170,0.7);
+    cursor: pointer;
+  }
+  .vc-scrubber:focus { outline: none; }
+  /* Clean rectangular video stage — no curve, no bevel, no bend.
+     Video fills the entire 16:9 frame so in-game UI at the edges is fully visible. */
+  .video-stage {
+    position: absolute;
+    inset: 0;
+    border: 1px solid var(--line-2);
+    background: #02060a;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 4px;
+    box-shadow:
+      0 0 0 1px  rgba(126, 236, 170, 0.10),
+      0 0 24px 4px rgba(0, 0, 0, 0.70),
+      0 0 60px 8px rgba(0, 12, 6, 0.55);
+  }
+
+  /* Inner wrapper — now full-size with no inset; keeps the same HTML
+     structure as before but no longer creates a "mat". */
+  .video-inner {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    overflow: hidden;
+    background: #02060a;
+    z-index: 1;
+  }
+  /* Top phosphor scan-line catching the curve */
+  .video-stage::before {
+    content: "";
+    position: absolute; top: 0; left: 5%; right: 5%; height: 4px;
+    background: linear-gradient(to right, rgba(126,236,170,0), rgba(126,236,170,0.7), rgba(126,236,170,0));
+    z-index: 9;
+    pointer-events: none;
+  }
+  /* Curved-edge vignette removed — video is now a clean rectangle. */
+  .video-inner::after { display: none; }
+
+  /* Drifting dust / floater particles inside the tube */
+  .vid-dust {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    z-index: 6;
+    background-image:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='480' height='480'><g fill='rgb(180,255,210)'><circle cx='40'  cy='90'  r='0.6' opacity='0.55'/><circle cx='130' cy='220' r='0.4' opacity='0.40'/><circle cx='220' cy='60'  r='0.7' opacity='0.60'/><circle cx='280' cy='340' r='0.5' opacity='0.45'/><circle cx='330' cy='150' r='0.4' opacity='0.50'/><circle cx='410' cy='280' r='0.6' opacity='0.55'/><circle cx='90'  cy='380' r='0.5' opacity='0.40'/><circle cx='190' cy='420' r='0.4' opacity='0.50'/><circle cx='360' cy='420' r='0.6' opacity='0.45'/><circle cx='460' cy='80'  r='0.5' opacity='0.50'/></g></svg>");
+    background-size: 480px 480px;
+    mix-blend-mode: screen;
+    opacity: 0.30;
+    animation: dustDrift 22s linear infinite;
+    border-radius: inherit;
+  }
+  @keyframes dustDrift {
+    0%   { background-position:   0px   0px; }
+    50%  { background-position: -120px -80px; }
+    100% { background-position: -240px  60px; }
+  }
+  .section-video {
+    width: 100%; height: 100%;
+    object-fit: contain;
+    background: #02060a;
+    display: block;
+    position: relative; z-index: 2;
+    border-radius: inherit;
+    /* Slight contrast / saturation boost — applied at base; the more-specific
+       .video-stage .section-video rule below adds the SVG barrel filter on top. */
+    filter: contrast(1.04) saturate(1.08);
+  }
+  .video-stage:not(.has-video) .section-video { display: none; }
+
+
+  .placeholder {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    text-align: center;
+    color: var(--dim);
+    background:
+      repeating-linear-gradient(
+        45deg,
+        rgba(126,236,170,0.025) 0px,
+        rgba(126,236,170,0.025) 18px,
+        rgba(0,0,0,0) 18px,
+        rgba(0,0,0,0) 36px
+      );
+    z-index: 1;
+  }
+  .placeholder .play-glyph {
+    width: 90px; height: 90px; border: 2px solid var(--accent);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 22px;
+    box-shadow: 0 0 22px rgba(126,236,170,0.3);
+  }
+  .placeholder .play-glyph::after {
+    content: "";
+    border-left: 22px solid var(--accent);
+    border-top: 14px solid transparent;
+    border-bottom: 14px solid transparent;
+    margin-left: 6px;
+    filter: drop-shadow(0 0 4px rgba(126,236,170,0.6));
+  }
+  .placeholder .label {
+    font-size: 11px; letter-spacing: 0.36em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 8px;
+  }
+  .placeholder .filename {
+    font-size: 14px; color: var(--bright);
+    margin-bottom: 18px;
+  }
+  .placeholder .hint {
+    font-size: 11px; line-height: 1.65; color: var(--dim);
+    max-width: 44ch;
+  }
+  .placeholder .hint b { color: var(--accent-2); font-weight: 500; }
+
+  .section-aside {
+    display: flex; flex-direction: column;
+    gap: 20px;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .info-card {
+    border: 1px solid var(--line-2);
+    background: rgba(10, 25, 18, 0.55);
+    padding: 22px 26px;
+  }
+  .info-card .ctitle {
+    font-size: 12px; letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 14px;
+  }
+  .info-card .cbody {
+    font-size: 16px; line-height: 1.65; color: var(--text);
+  }
+  .info-card .cbody b { color: var(--bright); font-weight: 500; }
+  .info-card .cbody .accent2 { color: var(--accent-2); }
+  .info-card ul { list-style: none; padding: 0; margin: 6px 0 0; }
+  .info-card ul li {
+    padding-left: 18px; position: relative;
+    font-size: 15px; line-height: 1.6; color: var(--text);
+    margin: 6px 0;
+  }
+  .info-card ul li::before {
+    content: "›"; position: absolute; left: 0; top: 0;
+    color: var(--accent-2);
+    font-size: 16px;
+  }
+
+  /* Compact NEXT pill — slim bar under the video controls */
+  .next-section {
+    align-self: stretch;
+    border: 1px solid var(--line-2);
+    padding: 8px 14px;
+    background: rgba(10,25,18,0.5);
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease;
+    color: var(--text);
+    font-family: inherit;
+    text-align: center;
+    font-size: 12px; letter-spacing: 0.20em; text-transform: uppercase;
+    border-radius: 3px;
+  }
+  .next-section:hover {
+    border-color: var(--accent);
+    background: rgba(15, 38, 28, 0.7);
+    color: var(--bright);
+  }
+  .next-section .ns-label { color: var(--dim); }
+  .next-section .ns-title { color: var(--bright); }
+  .next-section .ns-arrow { color: var(--accent); font-size: 16px; }
+
+  /* ============================================================
+     VIDEO-STAGE HUD CHROME (archive monitor overlay)
+     ============================================================ */
+  .vid-hud {
+    /* HUD chrome (REC dot, TC, archive ID, signal bars, corner brackets)
+       hidden — the video is the centerpiece, no overlays should block the
+       in-game UI inside the recording. */
+    display: none;
+  }
+  .vid-hud > div { position: absolute; }
+
+  /* L-corner brackets inside the video frame */
+  .vid-corner {
+    position: absolute;
+    width: 18px; height: 18px;
+    border-color: var(--accent); border-style: solid; border-width: 0;
+    animation: phosphorPulse 2.4s ease-in-out infinite;
+  }
+  /* Pushed inward to clear the curved corners */
+  .vid-corner.tl { top: 52px; left: 76px;     border-top-width: 1.5px; border-left-width: 1.5px; }
+  .vid-corner.tr { top: 52px; right: 76px;    border-top-width: 1.5px; border-right-width: 1.5px; }
+  .vid-corner.bl { bottom: 52px; left: 76px;  border-bottom-width: 1.5px; border-left-width: 1.5px; }
+  .vid-corner.br { bottom: 52px; right: 76px; border-bottom-width: 1.5px; border-right-width: 1.5px; }
+  @keyframes phosphorPulse {
+    0%, 100% { filter: drop-shadow(0 0 2px rgba(126,236,170,0.6)); }
+    50%      { filter: drop-shadow(0 0 8px rgba(126,236,170,0.95)); }
+  }
+
+  /* Signal acquired indicator (top-left) — inset to clear the curve */
+  .vid-rec {
+    top: 58px; left: 100px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 10px; letter-spacing: 0.32em; text-transform: uppercase;
+    color: var(--accent);
+    text-shadow: 0 0 6px rgba(126,236,170,0.5);
+  }
+  .vid-rec .rec-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #ff5577;
+    box-shadow: 0 0 8px rgba(255,85,119,0.8);
+    animation: recBlink 1.1s steps(2) infinite;
+  }
+  @keyframes recBlink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.15; }
+  }
+
+  /* Timecode (top-right) — inset to clear the curve */
+  .vid-tc {
+    top: 58px; right: 100px;
+    font-size: 11px; letter-spacing: 0.10em;
+    color: var(--accent);
+    text-shadow: 0 0 6px rgba(126,236,170,0.45);
+  }
+  .vid-tc .tc-label {
+    color: var(--dim);
+    margin-right: 6px;
+    letter-spacing: 0.30em;
+  }
+
+  /* Archive registry stamp (bottom-left) — sits above the browser controls bar */
+  .vid-archive {
+    bottom: 96px; left: 100px;
+    font-size: 10px; letter-spacing: 0.30em; text-transform: uppercase;
+    color: var(--dim);
+    transition: bottom 0.3s ease;
+  }
+  .vid-archive .v { color: var(--accent); }
+  .video-stage:not(.has-video) .vid-archive { bottom: 58px; }
+
+  /* Signal strength bars (bottom-right) — also above controls */
+  .vid-bars {
+    bottom: 96px; right: 100px;
+    display: flex; align-items: flex-end; gap: 3px;
+    transition: bottom 0.3s ease;
+  }
+  .video-stage:not(.has-video) .vid-bars { bottom: 58px; }
+  .vid-bars .bar {
+    display: block;
+    width: 4px;
+    background: var(--accent);
+    box-shadow: 0 0 5px rgba(126,236,170,0.55);
+    animation: barWobble 1.8s ease-in-out infinite;
+  }
+  .vid-bars .bar:nth-child(1) { height:  6px; animation-delay: 0.0s; }
+  .vid-bars .bar:nth-child(2) { height:  9px; animation-delay: 0.12s; }
+  .vid-bars .bar:nth-child(3) { height: 12px; animation-delay: 0.24s; }
+  .vid-bars .bar:nth-child(4) { height: 16px; animation-delay: 0.36s; }
+  .vid-bars .bar:nth-child(5) { height: 20px; animation-delay: 0.48s; }
+  @keyframes barWobble {
+    0%, 100% { transform: scaleY(1); opacity: 0.85; }
+    50%      { transform: scaleY(0.55); opacity: 1; }
+  }
+
+  /* Vertical sweep beam travelling down the video stage */
+  .vid-sweep {
+    position: absolute; left: 0; right: 0; top: 0;
+    height: 90px;
+    z-index: 4;
+    pointer-events: none;
+    background: linear-gradient(to bottom,
+      rgba(126,236,170, 0) 0%,
+      rgba(126,236,170, 0.06) 40%,
+      rgba(126,236,170, 0.16) 49%,
+      rgba(230,246,232, 0.22) 50%,
+      rgba(126,236,170, 0.16) 51%,
+      rgba(126,236,170, 0.06) 60%,
+      rgba(126,236,170, 0) 100%);
+    mix-blend-mode: screen;
+    animation: vidSweep 7s linear infinite;
+  }
+  @keyframes vidSweep {
+    0%   { transform: translateY(-90px); }
+    100% { transform: translateY(100%); }
+  }
+
+  /* Scanlines local to the video stage — denser + slightly drifting */
+  .vid-scan {
+    position: absolute; inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    border-radius: inherit;
+    /* Lighter scanlines — visible texture, not blurriness */
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0,0,0,0)   0px,
+      rgba(0,0,0,0)   2px,
+      rgba(0, 60, 30, 0.18) 3px,
+      rgba(0,0,0,0)   4px
+    );
+    mix-blend-mode: multiply;
+    opacity: 0.55;
+    animation: scanDrift 14s linear infinite;
+  }
+  @keyframes scanDrift {
+    0%   { background-position: 0 0; }
+    100% { background-position: 0 3px; }
+  }
+
+  /* Persistent animated TV static — always-on snow, like the reference image.
+     Cycles position across 8 steps so it reads as flickering analog
+     interference, not a static pattern. */
+  .vid-noise {
+    position: absolute; inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    border-radius: inherit;
+    mix-blend-mode: screen;
+    /* Lighter snow — texture, not a wash of grey */
+    opacity: 0.13;
+    background-image:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='220' height='220'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.92' numOctaves='2' seed='1' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.55  0 0 0 0 1.0  0 0 0 0 0.72  0 0 0 1.6 0'/></filter><rect width='220' height='220' filter='url(%23n)'/></svg>");
+    background-size: 220px 220px;
+    animation: noiseShift 0.4s steps(8) infinite;
+  }
+  @keyframes noiseShift {
+    0%   { background-position:   0px   0px; }
+    12%  { background-position: -47px  31px; }
+    25%  { background-position:  18px -22px; }
+    37%  { background-position: -12px  55px; }
+    50%  { background-position:  29px -41px; }
+    62%  { background-position: -53px   9px; }
+    75%  { background-position:  37px  17px; }
+    87%  { background-position: -25px -33px; }
+    100% { background-position:   0px   0px; }
+  }
+
+  /* Video + placeholder render flat — no perspective, no barrel bend.
+     The video fills the full rectangle, edges of in-game UI are not clipped. */
+  .video-stage .section-video,
+  .video-stage .placeholder {
+    transform: none;
+    filter: none;
+  }
+  /* Light contrast pop only — preserves clarity without bending pixels */
+  .video-stage .section-video { filter: contrast(1.04) saturate(1.06); }
+
+  /* RGB pixel-triad grid local to the video stage */
+  .vid-pixelgrid {
+    position: absolute; inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    background-image: linear-gradient(to right,
+      rgba(255, 50, 80, 0.13) 0px, rgba(255, 50, 80, 0.13) 1px,
+      transparent 1px, transparent 2px,
+      rgba(60, 255, 120, 0.13) 2px, rgba(60, 255, 120, 0.13) 3px,
+      transparent 3px, transparent 4px,
+      rgba(60, 120, 255, 0.13) 4px, rgba(60, 120, 255, 0.13) 5px,
+      transparent 5px, transparent 6px);
+    background-size: 6px 100%;
+    mix-blend-mode: overlay;
+    opacity: 0.22;
+  }
+
+  /* Outer ambient halo only — no inner glow that would darken the video edges. */
+  .video-stage {
+    box-shadow:
+      0 0 0 1px  rgba(126, 236, 170, 0.10),
+      0 0 24px 4px rgba(0, 0, 0, 0.65),
+      0 0 60px 8px rgba(0, 12, 6, 0.50);
+  }
+  /* Inner wrapper — no insets that could darken the video. */
+  .video-inner {
+    box-shadow: none;
+  }
+
+  /* Slow analogue colour-temperature drift on the video pixels */
+  .section-video {
+    animation: videoTempDrift 22s ease-in-out infinite;
+  }
+  @keyframes videoTempDrift {
+    0%, 100% { filter: contrast(1.08) saturate(1.05) hue-rotate(0deg); }
+    30%      { filter: contrast(1.10) saturate(1.12) hue-rotate(4deg); }
+    50%      { filter: contrast(1.06) saturate(0.98) hue-rotate(-3deg); }
+    72%      { filter: contrast(1.12) saturate(1.16) hue-rotate(6deg); }
+  }
+
+  /* Periodic glitch flash */
+  .vid-glitch {
+    position: absolute; inset: 0;
+    z-index: 7; pointer-events: none; opacity: 0;
+  }
+  .vid-glitch.fire { animation: glitchFlash 0.55s steps(10, end); }
+  @keyframes glitchFlash {
+    0%   { opacity: 0;    transform: translateX(0);   box-shadow: inset 0 0 0 0 rgba(126,236,170,0); background: rgba(0,0,0,0); }
+    12%  { opacity: 0.85; transform: translateX(-10px); background: rgba(255, 30, 100, 0.20); box-shadow: inset 0 0 0 2px rgba(126,236,170,0.55); }
+    28%  { opacity: 0.5;  transform: translateX(11px);  background: rgba(0, 220, 200, 0.16); }
+    44%  { opacity: 0.6;  transform: translateX(-5px);  background: rgba(255, 80, 30, 0.14); box-shadow: inset 0 0 0 1px rgba(126,236,170,0.45); }
+    66%  { opacity: 0.32; transform: translateX(3px);   background: rgba(0,0,0,0); }
+    100% { opacity: 0;    transform: translateX(0);     background: rgba(0,0,0,0); box-shadow: none; }
+  }
+
+  /* Horizontal tear line */
+  .vid-tear {
+    position: absolute; left: 0; right: 0;
+    height: 2px; z-index: 8; pointer-events: none; opacity: 0;
+    background: linear-gradient(to right,
+      rgba(126,236,170,0),
+      rgba(126,236,170,0.85) 30%,
+      rgba(255,30,100,0.6) 50%,
+      rgba(126,236,170,0.85) 70%,
+      rgba(126,236,170,0));
+    box-shadow: 0 0 6px rgba(126,236,170,0.75);
+  }
+  .vid-tear.fire { animation: tearMove 0.42s ease-out; }
+  @keyframes tearMove {
+    0%   { opacity: 0; }
+    15%  { opacity: 1; }
+    100% { opacity: 0; transform: translateY(120%); }
+  }
+
+  /* Film perforations on left & right edges */
+  .vid-perfs {
+    position: absolute; top: 48px; bottom: 48px;
+    width: 12px; z-index: 5; pointer-events: none;
+    display: flex; flex-direction: column; justify-content: space-around;
+    align-items: center;
+  }
+  .vid-perfs.left  { left: 2px; }
+  .vid-perfs.right { right: 2px; }
+  .vid-perfs span {
+    display: block;
+    width: 5px; height: 9px;
+    background: rgba(126,236,170,0.10);
+    border: 1px solid rgba(126,236,170,0.30);
+    border-radius: 1px;
+  }
+
+  /* Center status pip — PLAY / PAUSED / SIGNAL LOST */
+  .vid-pip {
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    z-index: 6; pointer-events: none;
+    display: flex; align-items: center; gap: 8px;
+    padding: 3px 11px;
+    border: 1px solid var(--line-2);
+    background: rgba(2,6,10,0.7);
+    font-size: 9.5px; letter-spacing: 0.30em; text-transform: uppercase;
+    color: var(--accent);
+    text-shadow: 0 0 6px rgba(126,236,170,0.5);
+  }
+  .vid-pip .ind {
+    width: 8px; height: 8px;
+    background: var(--accent);
+    border-radius: 1px;
+    box-shadow: 0 0 6px rgba(126,236,170,0.85);
+  }
+  .video-stage.is-paused .vid-pip .ind {
+    background: var(--warm);
+    box-shadow: 0 0 6px rgba(215,196,137,0.85);
+  }
+  .video-stage:not(.has-video) .vid-pip .ind {
+    background: #ff5577;
+    box-shadow: 0 0 6px rgba(255,85,119,0.85);
+    animation: pipLost 0.9s steps(2) infinite;
+  }
+  @keyframes pipLost {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.2; }
+  }
+
+  /* Frame counter (rendered inside the timecode block) */
+  .vid-frame {
+    display: inline-block;
+    margin-left: 10px;
+    font-size: 10px; letter-spacing: 0.14em;
+    color: var(--dim);
+  }
+  .vid-frame::before {
+    content: "FR";
+    color: var(--dim); margin-right: 5px;
+    letter-spacing: 0.30em;
+  }
+  .vid-frame .fr-n { color: var(--accent-2); }
+
+  /* Static-burst noise overlay fired on entry */
+  .static-burst-vid {
+    position: absolute; inset: 0;
+    z-index: 6;
+    pointer-events: none;
+    opacity: 0;
+    mix-blend-mode: screen;
+    background-image:
+      url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.45  0 0 0 0 1.0  0 0 0 0 0.6  0 0 0 1.4 0'/></filter><rect width='240' height='240' filter='url(%23n)'/></svg>");
+    background-size: 240px 240px;
+  }
+  .static-burst-vid.fire { animation: staticPulse 0.65s steps(10, end); }
+  @keyframes staticPulse {
+    0%   { opacity: 0;   background-position: 0 0; }
+    10%  { opacity: 0.85; background-position: 17px 31px; }
+    25%  { opacity: 0.30; background-position: -23px 11px; }
+    40%  { opacity: 0.65; background-position: 53px -19px; }
+    60%  { opacity: 0.22; background-position: -11px 47px; }
+    80%  { opacity: 0.40; background-position: 29px -7px; }
+    100% { opacity: 0;   background-position: 0 0; }
+  }
+
+  /* RGB-split entry — runs once when section becomes active */
+  .view.section.active .video-stage {
+    animation: stageGlitchIn 0.95s steps(14, end) both;
+  }
+  @keyframes stageGlitchIn {
+    0%   { transform: translateX(-18px); filter: hue-rotate(160deg) saturate(2.4) blur(2px); }
+    20%  { transform: translateX(14px);  filter: hue-rotate(-50deg) saturate(1.8); }
+    40%  { transform: translateX(-9px);  filter: hue-rotate(80deg) saturate(1.4); }
+    60%  { transform: translateX(5px);   filter: hue-rotate(-20deg); }
+    80%  { transform: translateX(-2px);  filter: hue-rotate(10deg); }
+    100% { transform: translateX(0);     filter: none; }
+  }
+
+  /* Periodic micro-glitch — JS adds .hud-jitter for ~180ms */
+  .video-stage.hud-jitter { animation: hudJitter 0.18s steps(4, end); }
+  @keyframes hudJitter {
+    0%   { transform: translateX(-4px); filter: hue-rotate(20deg) saturate(1.5); }
+    33%  { transform: translateX(3px);  filter: hue-rotate(-15deg); }
+    66%  { transform: translateX(-2px); filter: hue-rotate(8deg); }
+    100% { transform: translateX(0);    filter: none; }
+  }
+
+  /* Decode-in scramble — JS drives the chars, CSS keeps the slot stable */
+  .decode { font-variant-numeric: tabular-nums; }
+
+  /* Slide-in for the aside info cards */
+  .view.section.active .info-card { animation: cardSlideIn 0.7s cubic-bezier(.22,.61,.36,1) both; }
+  .view.section.active .info-card:nth-child(1) { animation-delay: 0.20s; }
+  .view.section.active .info-card:nth-child(2) { animation-delay: 0.35s; }
+  .view.section.active .next-section           { animation: cardSlideIn 0.7s cubic-bezier(.22,.61,.36,1) 0.55s both; }
+  @keyframes cardSlideIn {
+    0%   { opacity: 0; transform: translateX(20px); filter: blur(4px); }
+    100% { opacity: 1; transform: translateX(0);    filter: blur(0); }
+  }
+
+  /* Glowing left edge on info cards — pulses */
+  .info-card {
+    border-left: 3px solid var(--accent);
+    box-shadow: -1px 0 12px rgba(126,236,170,0);
+    animation: cardEdgePulse 4s ease-in-out infinite;
+  }
+  @keyframes cardEdgePulse {
+    0%, 100% { box-shadow: -1px 0 8px rgba(126,236,170,0.25); }
+    50%      { box-shadow: -1px 0 18px rgba(126,236,170,0.55); }
+  }
+
+  /* Sidebar grain texture */
+  .section-aside::before {
+    content: ""; position: absolute; inset: 0;
+    pointer-events: none;
+    background-image:
+      radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+      radial-gradient(rgba(0,0,0,0.10) 1px, transparent 1px);
+    background-size: 3px 3px, 5px 5px;
+    background-position: 0 0, 1px 1px;
+    mix-blend-mode: overlay;
+    opacity: 0.3;
+  }
+  .section-aside { position: relative; }
+
+  /* shared atmosphere overlays */
+  .scanlines {
+    position: fixed; inset: 0;
+    pointer-events: none;
+    background:
+      repeating-linear-gradient(
+        to bottom,
+        rgba(0,0,0,0)    0px,
+        rgba(0,0,0,0)    2px,
+        rgba(0,40,20,0.22) 3px,
+        rgba(0,0,0,0)    4px
+      );
+    mix-blend-mode: multiply;
+    z-index: 40;
+    opacity: 0.6;
+  }
+  /* Global vignette — softened so it complements the curved CRT inside
+     the video stage instead of double-darkening the frame edges. */
+  .vignette {
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 41;
+    background:
+      /* primary subtle fall-off toward the corners */
+      radial-gradient(ellipse 90% 80% at 50% 50%,
+        rgba(0,0,0,0) 60%,
+        rgba(0,0,0,0.28) 88%,
+        rgba(0,0,0,0.62) 100%),
+      /* extra darkening only at the four screen corners */
+      radial-gradient(ellipse 40% 40% at 0% 0%,    rgba(0,0,0,0.35), rgba(0,0,0,0) 70%),
+      radial-gradient(ellipse 40% 40% at 100% 0%,  rgba(0,0,0,0.35), rgba(0,0,0,0) 70%),
+      radial-gradient(ellipse 40% 40% at 0% 100%,  rgba(0,0,0,0.35), rgba(0,0,0,0) 70%),
+      radial-gradient(ellipse 40% 40% at 100% 100%,rgba(0,0,0,0.35), rgba(0,0,0,0) 70%);
+  }
+
+  /* Horizontal-tear scanline — a bright thin band that randomly travels down */
+  .vid-tear {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    z-index: 8;
+    overflow: hidden;
+    border-radius: inherit;
+  }
+  .vid-tear::before {
+    content: "";
+    position: absolute; left: 0; right: 0; top: -10px;
+    height: 2px;
+    background: linear-gradient(to right,
+      rgba(126,236,170,0) 0%,
+      rgba(126,236,170,0.85) 50%,
+      rgba(126,236,170,0) 100%);
+    box-shadow: 0 0 8px rgba(126,236,170,0.5);
+    animation: tearDrop 7.5s linear infinite;
+    mix-blend-mode: screen;
+  }
+  @keyframes tearDrop {
+    0%   { top: -10px;  opacity: 0; }
+    5%   { opacity: 0.9; }
+    100% { top: 100%;  opacity: 0; }
+  }
+
+  /* Faint chromatic-aberration ghost on the curved sides (extra retro punch) */
+  .vid-chroma {
+    position: absolute; inset: 0;
+    pointer-events: none;
+    z-index: 6;
+    border-radius: inherit;
+    background:
+      linear-gradient(to right,
+        rgba(255, 30, 100, 0.10) 0%,
+        rgba(255, 30, 100, 0)    8%,
+        rgba(255, 30, 100, 0)    92%,
+        rgba(0, 200, 255, 0.10) 100%);
+    mix-blend-mode: screen;
+    opacity: 0.7;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     CRT BARREL FILTER · feDisplacementMap
+     R channel = X displacement, G channel = Y displacement.
+     Map: red gradient left→right (R=255 at left, 0 at right) +
+          green gradient top→bottom (G=255 at top, 0 at bottom),
+          blended with mix-blend-mode:screen so:
+            TL = #ffff00 (push right + down → samples from BR of source
+                 = barrel push outward at TL)
+            TR = #00ff00, BL = #ff0000, BR = #000000, centre = #808000.
+     Centre channel values land on 128 (neutral) so the middle of the
+     screen is undisturbed; edges get displaced outward proportionally.
+     ============================================================ -->
+<svg id="crt-filters" aria-hidden="true" width="0" height="0"
+     style="position:absolute; left:-9999px; pointer-events:none;">
+  <defs>
+    <filter id="crt-barrel" x="-3%" y="-3%" width="106%" height="106%"
+            color-interpolation-filters="sRGB"
+            filterUnits="objectBoundingBox" primitiveUnits="userSpaceOnUse">
+      <feImage
+        x="0" y="0" width="100%" height="100%"
+        preserveAspectRatio="none"
+        result="map"
+        href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><defs><linearGradient id='x' x1='0' y1='0' x2='1' y2='0'><stop offset='0' stop-color='%23ff0000'/><stop offset='1' stop-color='%23000000'/></linearGradient><linearGradient id='y' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%2300ff00'/><stop offset='1' stop-color='%23000000'/></linearGradient></defs><rect width='100' height='100' fill='black'/><g style='mix-blend-mode:screen'><rect width='100' height='100' fill='url(%23x)'/></g><g style='mix-blend-mode:screen'><rect width='100' height='100' fill='url(%23y)'/></g></svg>"
+      />
+      <feDisplacementMap in="SourceGraphic" in2="map"
+                         scale="170"
+                         xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
+</svg>
+
+<div class="stage">
+
+  <!-- corner brackets -->
+  <span class="corner tl"></span>
+  <span class="corner tr"></span>
+  <span class="corner bl"></span>
+  <span class="corner br"></span>
+
+  <!-- HUB VIEW -->
+  <div class="view hub active" id="view-hub">
+    <div class="hub-header">
+      <div class="left">
+        <div class="micro">LLM-NPC · UE 5.7 · Threshold</div>
+        <h1>The Memory Archive <span class="sub">/ Exhibit Hub</span></h1>
+      </div>
+      <div class="right">
+        <div class="label">Demo Console</div>
+        <div class="meta">SELECT A MECHANIC TO VIEW</div>
+        <span class="pill">TIER 2 · COMPLETE</span>
+      </div>
+    </div>
+
+    <div class="tiles">
+      <button class="tile" data-section="1">
+        <div class="head">
+          <div class="num">01</div>
+          <svg class="icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M52 32a20 20 0 1 1 -7 -15.2"/>
+            <polyline points="52,8 52,18 42,18"/>
+            <circle cx="32" cy="32" r="3.5" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="body">
+          <div class="title">THE LOOP</div>
+          <div class="desc">Full pipeline overview — voice in, Claude in the middle, animated speech out. Watch one whole turn from start to finish.</div>
+        </div>
+        <div class="footnote">
+          <span class="key">PRESS 1</span>
+          <span class="enter">ENTER</span>
+        </div>
+      </button>
+
+      <button class="tile" data-section="2">
+        <div class="head">
+          <div class="num">02</div>
+          <svg class="icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="32,12 50,22 50,42 32,52 14,42 14,22"/>
+            <polyline points="32,12 32,32 50,42"/>
+            <polyline points="32,32 14,42"/>
+          </svg>
+        </div>
+        <div class="body">
+          <div class="title">OBJECT INTERACTION</div>
+          <div class="desc">Pick up with E, rotate with the mouse, present with F. The model receives a structured annotation describing what you're holding.</div>
+        </div>
+        <div class="footnote">
+          <span class="key">PRESS 2</span>
+          <span class="enter">ENTER</span>
+        </div>
+      </button>
+
+      <button class="tile" data-section="3">
+        <div class="head">
+          <div class="num">03</div>
+          <svg class="icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="14" cy="14" r="4"/>
+            <circle cx="50" cy="14" r="4"/>
+            <circle cx="32" cy="50" r="4"/>
+            <line x1="32" y1="32" x2="14" y2="18"/>
+            <line x1="32" y1="32" x2="50" y2="18"/>
+            <line x1="32" y1="32" x2="32" y2="46"/>
+            <circle cx="32" cy="32" r="3" fill="currentColor"/>
+          </svg>
+        </div>
+        <div class="body">
+          <div class="title">EMOTION &amp; BRANCHING</div>
+          <div class="desc">PAD emotion, FACS animation, lip sync, and three climax branches — Convergent, Divergent, or Recursive Silence.</div>
+        </div>
+        <div class="footnote">
+          <span class="key">PRESS 3</span>
+          <span class="enter">ENTER</span>
+        </div>
+      </button>
+    </div>
+
+    <div class="hub-footer">
+      <span>BRANCH · claude/continue-llm-npc-api</span>
+      <span class="center">▮ MEMORY ARCHIVE · DEMO HUB ▮</span>
+      <span class="hint"><kbd>1</kbd>-<kbd>3</kbd> ENTER · <kbd>ESC</kbd> RETURN</span>
+    </div>
+  </div>
+
+  <!-- SECTION VIEW (filled in by JS) -->
+  <div class="view section" id="view-section">
+    <div class="section-header">
+      <button class="back" onclick="leaveSection()">BACK</button>
+      <div class="crumb"><span class="num" id="sec-num">01</span> &nbsp; / &nbsp; <span id="sec-crumb">THE LOOP</span></div>
+      <div class="title" id="sec-title">THE LOOP</div>
+      <div class="right">PRESS <kbd>ESC</kbd> TO RETURN</div>
+    </div>
+
+    <div class="section-body">
+      <div class="video-col">
+      <div class="video-frame">
+      <div class="video-stage" id="video-stage">
+
+        <!-- Inner playback surface (4% inset inside the curved mat).
+             Video + all content-tied overlays live here so they get
+             confined to the inner box and don't bleed into the mat. -->
+        <div class="video-inner">
+          <div class="placeholder" id="placeholder">
+            <div class="play-glyph"></div>
+            <div class="label">VIDEO PLACEHOLDER</div>
+            <div class="filename" id="placeholder-filename">videos/01-loop.mp4</div>
+            <div class="hint">
+              Drop the matching MP4 at <b id="placeholder-path">docs/videos/01-loop.mp4</b> and refresh — the player will detect it automatically.
+            </div>
+          </div>
+          <video class="section-video" id="section-video" preload="metadata" playsinline>
+            <source id="video-source" src="" type="video/mp4">
+          </video>
+
+          <!-- Content-tied overlays — texturing the video itself -->
+          <div class="vid-pixelgrid"></div>
+          <div class="vid-noise"></div>
+          <div class="vid-scan"></div>
+          <div class="vid-sweep"></div>
+          <div class="vid-chroma"></div>
+          <div class="vid-dust"></div>
+          <div class="vid-tear"></div>
+          <div class="static-burst-vid" id="vid-burst"></div>
+          <div class="vid-glitch" id="vid-glitch"></div>
+          <div class="vid-tear" id="vid-tear"></div>
+
+          <div class="vid-perfs left"  aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+          <div class="vid-perfs right" aria-hidden="true">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+          </div>
+
+          <!-- Center status pip — PLAY / PAUSED / SIGNAL LOST -->
+          <div class="vid-pip">
+            <span class="ind"></span>
+            <span id="pip-label">SIGNAL · LOST</span>
+          </div>
+        </div><!-- /.video-inner -->
+
+        <!-- HUD chrome over the video frame -->
+        <div class="vid-hud">
+          <span class="vid-corner tl"></span>
+          <span class="vid-corner tr"></span>
+          <span class="vid-corner bl"></span>
+          <span class="vid-corner br"></span>
+
+          <div class="vid-rec">
+            <span class="rec-dot"></span>
+            <span class="rec-label">SIGNAL · ACQUIRED</span>
+          </div>
+
+          <div class="vid-tc">
+            <span class="tc-label">TC</span>
+            <span id="tc-time" class="decode">00:00:00.000</span>
+            <span class="vid-frame"><span class="fr-n" id="tc-frame">00000</span></span>
+          </div>
+
+          <div class="vid-archive">
+            REG · ARCH-04-<span class="v" id="archive-section">01</span> &nbsp;·&nbsp; FRAME <span class="v" id="frame-counter">000000</span>
+          </div>
+
+          <div class="vid-bars" aria-hidden="true">
+            <span class="bar"></span>
+            <span class="bar"></span>
+            <span class="bar"></span>
+            <span class="bar"></span>
+            <span class="bar"></span>
+          </div>
+        </div>
+      </div><!-- /.video-stage -->
+      </div><!-- /.video-frame -->
+
+      <!-- Custom video controls — full-width scrubber on top, compact button row below -->
+      <div class="vid-controls" id="vid-controls">
+        <div class="vc-scrubber-row">
+          <input class="vc-scrubber" id="vc-scrubber" type="range" min="0" max="1000" step="0.1" value="0" aria-label="Timeline">
+        </div>
+        <div class="vc-button-row">
+          <span class="vc-time" id="vc-time">00:00 / 00:00</span>
+          <div class="vc-btn-group">
+            <button class="vc-btn vc-play" id="vc-play" type="button" aria-label="Play/Pause">▶</button>
+            <button class="vc-btn vc-mute" id="vc-mute" type="button" aria-label="Mute">♪</button>
+            <button class="vc-btn vc-fullscreen" id="vc-fullscreen" type="button" aria-label="Fullscreen">⛶</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Compact NEXT bar at the bottom of the video column -->
+      <button class="next-section" onclick="goNext()" type="button">
+        <span class="ns-label">NEXT &middot;</span>
+        <span class="ns-title" id="sec-next-title">—</span>
+        <span class="ns-arrow">→</span>
+      </button>
+      </div><!-- /.video-col -->
+
+      <aside class="section-aside">
+        <div class="info-card">
+          <div class="ctitle">About This Mechanic</div>
+          <div class="cbody" id="sec-about">—</div>
+        </div>
+
+        <div class="info-card">
+          <div class="ctitle">What To Watch For</div>
+          <div class="cbody"><ul id="sec-bullets"></ul></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+</div>
+
+<div class="scanlines"></div>
+<div class="vignette"></div>
+
+<!-- CRT barrel-bend filter — applied via CSS `filter: url(#crt-bend)` to .section-video.
+     fractalNoise + feDisplacementMap creates an organic analog-style warp. -->
+<svg width="0" height="0" style="position:absolute;pointer-events:none;" aria-hidden="true">
+  <defs>
+    <filter id="crt-bend" x="-2%" y="-2%" width="104%" height="104%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.009 0.014" numOctaves="1" seed="7" result="warp"/>
+      <feDisplacementMap in="SourceGraphic" in2="warp" scale="7" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
+</svg>
+
+<script>
+  const SECTIONS = {
+    1: {
+      title: "THE LOOP",
+      file:  "videos/The%20Loop.mp4",
+      about: "One full NPC turn — from voice capture to spoken response. Watch the four stages flow: <b>Input</b> → <b>Assembly</b> → <b>Claude</b> → <b>Output Broadcast</b>. This is the flagship demo.",
+      bullets: [
+        "Operator speaks · Whisper transcribes the audio",
+        "DialogueComponent builds the annotated request",
+        "Claude returns structured JSON · dialogue + emotion + item",
+        "ElevenLabs voice + FACS animation dispatch in parallel"
+      ]
+    },
+    2: {
+      title: "OBJECT INTERACTION",
+      file:  "videos/Item%20Inspect.mp4",
+      about: "Press <b>E</b> to pick up an InspectableItem (300 cm line trace, holds in front of camera, rotate with right-mouse-drag). Press <b>F</b> to <b>present</b> the item to The Friend — fires a Claude turn with the object's narrative metadata injected.",
+      bullets: [
+        "E pickup is silent · annotates 'Currently holding: ...'",
+        "F present triggers a Claude turn · 'The visitor presents to you ...'",
+        "Each item has ItemDisplayName · ItemWorldDescription · NPCKnowledgeText",
+        "Per-speaker memory writes to InspectedBy / PresentedBy maps"
+      ]
+    },
+    3: {
+      title: "EMOTION & BRANCHING",
+      file:  "videos/Ending.mp4",
+      about: "Claude returns an <b>emotion_update</b> per turn. <b>EmotionComponent</b> tracks PAD state with decay (0.015 / s). <b>TemplateAnimDriver</b> picks a MetaHuman montage (HappyA · SadA · AngerA · FearA · SurpriseA, plus B variants). Per-speaker memory determines which of three climax branches the model chooses.",
+      bullets: [
+        "Plutchik emotion + Pleasure / Arousal / Dominance vector",
+        "Auto-return to Idle 1.75 s after speech finishes",
+        "Eye tracking writes 8 ARKit curves toward the camera",
+        "Climax: Convergent · Divergent · Recursive Silence"
+      ]
+    }
+  };
+  const SECTION_COUNT = 3;
+
+  const hubView     = document.getElementById('view-hub');
+  const sectionView = document.getElementById('view-section');
+  const video       = document.getElementById('section-video');
+  const videoSource = document.getElementById('video-source');
+  const videoStage  = document.getElementById('video-stage');
+  const placeholderFile = document.getElementById('placeholder-filename');
+  const placeholderPath = document.getElementById('placeholder-path');
+  const secNum      = document.getElementById('sec-num');
+  const secCrumb    = document.getElementById('sec-crumb');
+  const secTitle    = document.getElementById('sec-title');
+  const secAbout    = document.getElementById('sec-about');
+  const secBullets  = document.getElementById('sec-bullets');
+  const secNextTitle = document.getElementById('sec-next-title');
+  const vidBurst    = document.getElementById('vid-burst');
+  const tcTime      = document.getElementById('tc-time');
+  const tcFrame     = document.getElementById('tc-frame');
+  const vidGlitch   = document.getElementById('vid-glitch');
+  const vidTear     = document.getElementById('vid-tear');
+  const pipLabel    = document.getElementById('pip-label');
+  const archiveSection = document.getElementById('archive-section');
+  const frameCounter   = document.getElementById('frame-counter');
+
+  let currentSection = null;
+  let placeholderTC  = 0; // synthetic clock when no video is loaded
+
+  // -- Decode/scramble text effect ------------------------------------------
+  const SCRAMBLE_CHARS = '0123456789ABCDEFｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎ#@/\\|░▒▓█';
+  function decodeText(el, finalText, durationMs = 700) {
+    if (!el) return;
+    const start = performance.now();
+    const len = finalText.length;
+    function tick(now) {
+      const t = Math.min(1, (now - start) / durationMs);
+      const reveal = Math.floor(t * len);
+      let out = '';
+      for (let i = 0; i < len; i++) {
+        const ch = finalText[i];
+        if (i < reveal || ch === ' ' || ch === ' ') out += ch;
+        else out += SCRAMBLE_CHARS[Math.floor(Math.random() * SCRAMBLE_CHARS.length)];
+      }
+      el.textContent = out;
+      if (t < 1) requestAnimationFrame(tick);
+      else el.textContent = finalText;
+    }
+    requestAnimationFrame(tick);
+  }
+
+  // -- Static-noise burst ---------------------------------------------------
+  function fireBurst() {
+    vidBurst.classList.remove('fire');
+    void vidBurst.offsetWidth; // restart animation
+    vidBurst.classList.add('fire');
+  }
+
+  // -- Timecode formatter / loop -------------------------------------------
+  function fmtTC(seconds) {
+    seconds = Math.max(0, seconds || 0);
+    const ms = Math.floor((seconds % 1) * 1000);
+    const totalSec = Math.floor(seconds);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    return [h,m,s].map(n => String(n).padStart(2,'0')).join(':') + '.' + String(ms).padStart(3,'0');
+  }
+  let lastTickTime = performance.now();
+  function tickTC(now) {
+    const dt = (now - lastTickTime) / 1000;
+    lastTickTime = now;
+    if (currentSection != null) {
+      let displaySeconds = 0;
+      const hasVideo = videoStage.classList.contains('has-video');
+      if (hasVideo && !video.paused) {
+        displaySeconds = video.currentTime;
+        videoStage.classList.remove('is-paused');
+        if (pipLabel) pipLabel.textContent = "PLAY · STREAM";
+      } else if (!hasVideo) {
+        placeholderTC += dt;
+        displaySeconds = placeholderTC;
+        if (pipLabel) pipLabel.textContent = "SIGNAL · LOST";
+      } else {
+        displaySeconds = video.currentTime;
+        videoStage.classList.add('is-paused');
+        if (pipLabel) pipLabel.textContent = "PAUSED · HOLD";
+      }
+      tcTime.textContent = fmtTC(displaySeconds);
+      const frames = String(Math.floor(displaySeconds * 24)).padStart(6, '0');
+      if (frameCounter) frameCounter.textContent = frames;
+      if (tcFrame)      tcFrame.textContent      = frames.slice(-5);
+    }
+    requestAnimationFrame(tickTC);
+  }
+  requestAnimationFrame(tickTC);
+
+  // Full glitch + tear-line flash (random vertical position)
+  function fireGlitch() {
+    if (vidGlitch) {
+      vidGlitch.classList.remove('fire');
+      void vidGlitch.offsetWidth;
+      vidGlitch.classList.add('fire');
+    }
+    if (Math.random() < 0.65 && vidTear) {
+      vidTear.style.top = (10 + Math.random() * 70).toFixed(1) + '%';
+      vidTear.classList.remove('fire');
+      void vidTear.offsetWidth;
+      vidTear.classList.add('fire');
+    }
+  }
+
+  // Periodic micro-glitch — light HUD jitter every few seconds, with occasional escalation to a full glitch flash
+  (function hudJitter() {
+    function scheduleNext() {
+      const delay = 4000 + Math.random() * 6000;
+      setTimeout(() => {
+        const stage = document.getElementById('video-stage');
+        if (stage && sectionView.classList.contains('active')) {
+          stage.classList.add('hud-jitter');
+          setTimeout(() => stage.classList.remove('hud-jitter'), 180);
+          if (Math.random() < 0.40) fireGlitch();
+        }
+        scheduleNext();
+      }, delay);
+    }
+    scheduleNext();
+  })();
+
+  function enterSection(n) {
+    const data = SECTIONS[n];
+    if (!data) return;
+    // Retrigger entry-glitch on ANY transition while the section view is up
+    // (same-section refresh AND section-to-section jumps via NEXT / keys 1-3).
+    const isReEntry = sectionView.classList.contains('active');
+    currentSection = n;
+
+    secNum.textContent    = String(n).padStart(2, '0');
+    secCrumb.textContent  = data.title;
+    secTitle.textContent  = data.title;
+    secAbout.innerHTML    = data.about;
+    secBullets.innerHTML  = data.bullets.map(b => '<li>' + b + '</li>').join('');
+    placeholderFile.textContent = data.file;
+    placeholderPath.textContent = 'docs/' + data.file;
+    archiveSection.textContent  = String(n).padStart(2, '0');
+
+    // Reset timecode each entry
+    placeholderTC = 0;
+    tcTime.textContent = '00:00:00.000';
+
+    // Next-up
+    const nextN = (n % SECTION_COUNT) + 1;
+    secNextTitle.textContent = String(nextN).padStart(2, '0') + ' · ' + SECTIONS[nextN].title;
+
+    // Load video — if it fails, the placeholder stays visible
+    videoStage.classList.remove('has-video');
+    video.pause();
+    videoSource.src = data.file;
+    video.load();
+
+    hubView.classList.remove('active');
+
+    // Force reflow to retrigger CSS entry animations on every section change
+    if (isReEntry) {
+      sectionView.classList.remove('active');
+      void sectionView.offsetWidth;
+    }
+    sectionView.classList.add('active');
+
+    // Fire archive flourishes
+    fireBurst();
+    setTimeout(() => decodeText(secTitle, data.title, 650),  120);
+    setTimeout(() => decodeText(secCrumb, data.title, 500),  220);
+    setTimeout(() => decodeText(secNum,   String(n).padStart(2, '0'), 350), 80);
+  }
+
+  function leaveSection() {
+    fireBurst();
+    sectionView.classList.remove('active');
+    hubView.classList.add('active');
+    video.pause();
+    currentSection = null;
+  }
+
+  function goNext() {
+    if (currentSection == null) return;
+    enterSection((currentSection % SECTION_COUNT) + 1);
+  }
+
+  // Detect video load success / failure
+  video.addEventListener('loadedmetadata', () => {
+    videoStage.classList.add('has-video');
+    updateVcTime();
+  });
+  video.addEventListener('error', () => {
+    videoStage.classList.remove('has-video');
+  });
+  videoSource.addEventListener('error', () => {
+    videoStage.classList.remove('has-video');
+  });
+
+  // ===== Custom video controls (timeline scrubber + play + mute + fullscreen) =====
+  const vcPlay       = document.getElementById('vc-play');
+  const vcTime       = document.getElementById('vc-time');
+  const vcScrubber   = document.getElementById('vc-scrubber');
+  const vcMute       = document.getElementById('vc-mute');
+  const vcFullscreen = document.getElementById('vc-fullscreen');
+  const videoFrame   = document.querySelector('.video-frame');
+
+  function fmtMS(s) {
+    s = Math.max(0, s || 0);
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return String(m).padStart(2,'0') + ':' + String(sec).padStart(2,'0');
+  }
+  function updateVcTime() {
+    const dur = isFinite(video.duration) ? video.duration : 0;
+    vcTime.textContent = fmtMS(video.currentTime) + ' / ' + fmtMS(dur);
+  }
+  function updateVcScrubber() {
+    const dur = isFinite(video.duration) && video.duration > 0 ? video.duration : 1;
+    const pct = (video.currentTime / dur) * 1000;
+    vcScrubber.value = pct;
+    vcScrubber.style.setProperty('--progress', (pct / 10) + '%');
+  }
+
+  vcPlay.addEventListener('click', () => {
+    if (video.paused) video.play().catch(()=>{});
+    else video.pause();
+  });
+  video.addEventListener('play',  () => { vcPlay.textContent = '❚❚'; });
+  video.addEventListener('pause', () => { vcPlay.textContent = '▶';  });
+  video.addEventListener('ended', () => { vcPlay.textContent = '▶';  });
+
+  let scrubbing = false;
+
+  video.addEventListener('timeupdate', () => {
+    updateVcTime();
+    // Only update slider position from playback when user is NOT dragging
+    if (!scrubbing) updateVcScrubber();
+  });
+  video.addEventListener('durationchange', () => {
+    updateVcTime();
+    if (!scrubbing) updateVcScrubber();
+  });
+
+  // pointerdown locks out timeupdate-driven slider resets
+  vcScrubber.addEventListener('pointerdown', () => { scrubbing = true; });
+  vcScrubber.addEventListener('pointerup',   () => { scrubbing = false; });
+  vcScrubber.addEventListener('pointercancel', () => { scrubbing = false; });
+  // Keyboard arrow keys on the slider also trigger input — same flow
+  vcScrubber.addEventListener('input', () => {
+    const dur = isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
+    if (dur > 0) {
+      video.currentTime = (parseFloat(vcScrubber.value) / 1000) * dur;
+    }
+    vcScrubber.style.setProperty('--progress', (parseFloat(vcScrubber.value) / 10) + '%');
+    updateVcTime();
+  });
+  vcScrubber.addEventListener('change', () => { scrubbing = false; });
+
+  vcMute.addEventListener('click', () => {
+    video.muted = !video.muted;
+    vcMute.textContent = video.muted ? '∅' : '♪';
+  });
+
+  vcFullscreen.addEventListener('click', () => {
+    const el = videoFrame;
+    if (!document.fullscreenElement) {
+      (el.requestFullscreen || el.webkitRequestFullscreen || (()=>{})).call(el);
+    } else {
+      document.exitFullscreen();
+    }
+  });
+
+  // Tile click handlers
+  document.querySelectorAll('.tile').forEach(tile => {
+    tile.addEventListener('click', () => enterSection(parseInt(tile.dataset.section, 10)));
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    if (sectionView.classList.contains('active')) {
+      if (e.key === 'Escape' || e.key === 'Backspace') {
+        e.preventDefault(); leaveSection();
+      } else if (e.key === 'ArrowRight' || e.key === ' ') {
+        e.preventDefault(); goNext();
+      } else if (['1','2','3'].includes(e.key)) {
+        e.preventDefault(); enterSection(parseInt(e.key, 10));
+      }
+    } else {
+      if (['1','2','3'].includes(e.key)) {
+        e.preventDefault(); enterSection(parseInt(e.key, 10));
+      } else if (e.key === 'Escape') {
+        // exit fullscreen if in it
+        if (document.fullscreenElement) document.exitFullscreen();
+      } else if (e.key.toLowerCase() === 'f') {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+        else document.exitFullscreen();
+      }
+    }
+  });
+</script>
+
+</body>
+</html>
