@@ -70,9 +70,7 @@ LLM-NPC/
 │   ├── DefaultEngine.ini        # MainMap startup, GPU settings
 │   ├── DefaultGame.ini
 │   └── DefaultInput.ini
-├── README.md                    # Full project documentation
-├── make_deck.py                 # Python script to generate presentation PowerPoint
-└── slide-deck.pptx              # 12-slide presentation deck
+└── README.md                    # Full project documentation
 ```
 
 ---
@@ -226,7 +224,6 @@ Claude response format (structured JSON):
 - Emotion-gated inventory system
 - Graceful degradation (text input fallback when voice/camera unavailable)
 - Data asset config system (procedural NPC generation ready)
-- Presentation deck (12 slides, `make_deck.py`)
 
 **THRESHOLD vertical slice — Phase 0 complete (Apr 2026):**
 - `EGestureIntent` enum added to `NPCTypes.h` — maps gesture type to TESTIMONIAL meta-communication intent

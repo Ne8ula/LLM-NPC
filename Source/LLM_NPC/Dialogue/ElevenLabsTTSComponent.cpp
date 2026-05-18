@@ -99,7 +99,6 @@ bool UElevenLabsTTSComponent::IsSubsystemAvailable() const
 
 void UElevenLabsTTSComponent::LoadAPIKey()
 {
-	// Try environment variable first
 	FString EnvKey = FPlatformMisc::GetEnvironmentVariable(TEXT("ELEVENLABS_API_KEY"));
 	if (!EnvKey.IsEmpty())
 	{
@@ -109,18 +108,8 @@ void UElevenLabsTTSComponent::LoadAPIKey()
 		return;
 	}
 
-	// Fallback: try config file
-	FString ConfigKey;
-	if (GConfig && GConfig->GetString(TEXT("/Script/LLM_NPC.ElevenLabsSettings"), TEXT("APIKey"), ConfigKey, GGameIni))
-	{
-		APIKey = ConfigKey;
-		bAPIKeyConfigured = true;
-		UE_LOG(LogTemp, Log, TEXT("ElevenLabsTTSComponent: API key loaded from project settings."));
-		return;
-	}
-
 	bAPIKeyConfigured = false;
-	UE_LOG(LogTemp, Warning, TEXT("ElevenLabsTTSComponent: No API key found. Set ELEVENLABS_API_KEY environment variable."));
+	UE_LOG(LogTemp, Warning, TEXT("ElevenLabsTTSComponent: No API key found. Set the ELEVENLABS_API_KEY environment variable."));
 }
 
 void UElevenLabsTTSComponent::SpeakText(const FString& Text, const FString& VoiceID, float Stability, float SimilarityBoost)

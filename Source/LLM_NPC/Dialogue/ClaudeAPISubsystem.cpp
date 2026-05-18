@@ -29,7 +29,6 @@ void UClaudeAPISubsystem::Deinitialize()
 
 void UClaudeAPISubsystem::LoadAPIKey()
 {
-	// Try environment variable first
 	FString EnvKey = FPlatformMisc::GetEnvironmentVariable(TEXT("ANTHROPIC_API_KEY"));
 	if (!EnvKey.IsEmpty())
 	{
@@ -38,16 +37,7 @@ void UClaudeAPISubsystem::LoadAPIKey()
 		return;
 	}
 
-	// Fallback: try loading from config file
-	FString ConfigKey;
-	if (GConfig && GConfig->GetString(TEXT("/Script/LLM_NPC.ClaudeAPISettings"), TEXT("APIKey"), ConfigKey, GGameIni))
-	{
-		APIKey = ConfigKey;
-		UE_LOG(LogTemp, Log, TEXT("ClaudeAPISubsystem: API key loaded from project settings."));
-		return;
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("ClaudeAPISubsystem: No API key found. Set ANTHROPIC_API_KEY environment variable or configure in project settings."));
+	UE_LOG(LogTemp, Warning, TEXT("ClaudeAPISubsystem: No API key found. Set the ANTHROPIC_API_KEY environment variable."));
 }
 
 bool UClaudeAPISubsystem::IsAPIKeyConfigured() const
