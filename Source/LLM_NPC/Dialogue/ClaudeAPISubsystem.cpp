@@ -1,4 +1,5 @@
 #include "ClaudeAPISubsystem.h"
+#include "LLM_NPC/Core/MemoryArchiveLogger.h"
 #include "HttpModule.h"
 #include "Interfaces/IHttpRequest.h"
 #include "Interfaces/IHttpResponse.h"
@@ -168,6 +169,19 @@ void UClaudeAPISubsystem::ExecuteRequest(TSharedPtr<FPendingRequest> PendingRequ
 	);
 	HttpRequest->SetContentAsString(RequestBody);
 
+	// Memory Archive: capture the exact payload leaving the process (Tier 3 logger).
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UMemoryArchiveLogger* Logger = GI->GetSubsystem<UMemoryArchiveLogger>())
+		{
+			Logger->LogRequestDispatched(
+				PendingRequest->ModelID,
+				PendingRequest->MaxTokens,
+				RequestBody,
+				PendingRequest->RetryCount);
+		}
+	}
+
 	TWeakObjectPtr<UClaudeAPISubsystem> WeakThis(this);
 	HttpRequest->OnProcessRequestComplete().BindLambda(
 		[WeakThis, PendingRequest](FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully)
@@ -243,8 +257,21 @@ void UClaudeAPISubsystem::HandleResponse(
 
 	// Fire callbacks on the game thread
 	TWeakObjectPtr<UClaudeAPISubsystem> WeakSelf(this);
-	AsyncTask(ENamedThreads::GameThread, [WeakSelf, PendingRequest, ParsedResponse]()
+	AsyncTask(ENamedThreads::GameThread, [WeakSelf, PendingRequest, ParsedResponse, ResponseCode, ResponseBody]()
 	{
+		// Memory Archive: emit the JSONL turn record before consumers mutate state.
+		// On the game thread so logger pending-state access is single-threaded.
+		if (WeakSelf.IsValid())
+		{
+			if (UGameInstance* GI = WeakSelf->GetGameInstance())
+			{
+				if (UMemoryArchiveLogger* Logger = GI->GetSubsystem<UMemoryArchiveLogger>())
+				{
+					Logger->LogResponse(ResponseCode, ResponseBody, ParsedResponse, PendingRequest->RetryCount);
+				}
+			}
+		}
+
 		PendingRequest->OnComplete.ExecuteIfBound(ParsedResponse);
 		if (WeakSelf.IsValid())
 		{

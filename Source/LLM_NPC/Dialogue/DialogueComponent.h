@@ -270,6 +270,15 @@ private:
 	/** Build a user emotion annotation string for the system context. */
 	FString BuildEmotionAnnotation(const FDetectedUserEmotion& UserEmotion) const;
 
+	/**
+	 * Snapshot structured turn context into UMemoryArchiveLogger (Tier 3) just before
+	 * dispatch. Values mirror what §7.7 OBSERVED STATE bakes into the prompt, plus the
+	 * raw pre-annotation user message. No-op if the logger subsystem is absent/disabled.
+	 */
+	void LogTurnContextToArchive(const TCHAR* Interaction, const FString& RawMessage,
+		const FString& AnnotatedContent, const FDetectedUserEmotion& UserEmotion,
+		EGestureIntent GestureIntent, FName SpeakerTag, FName ItemID) const;
+
 	/** Trim conversation history to the configured maximum. */
 	void TrimConversationHistory();
 

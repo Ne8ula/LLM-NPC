@@ -6,6 +6,7 @@
 #include "LLM_NPC/Emotion/EmotionComponent.h"
 #include "LLM_NPC/Dialogue/ElevenLabsTTSComponent.h"
 #include "LLM_NPC/Gesture/InspectableItem.h"
+#include "LLM_NPC/Core/MemoryArchiveLogger.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
 
@@ -232,6 +233,11 @@ void UDialogueComponent::SendUserMessage(const FString& UserMessage, const FDete
 		}
 	}
 
+	// Memory Archive: snapshot structured context AFTER the history add so trust /
+	// turn counts match what §7.7 bakes into this turn's system prompt.
+	LogTurnContextToArchive(TEXT("user_message"), UserMessage, AnnotatedContent,
+		UserEmotion, GestureIntent, SpeakerTag, HeldItem ? HeldItem->ItemID : NAME_None);
+
 	// Send to Claude
 	bWaitingForResponse = true;
 
@@ -360,6 +366,11 @@ void UDialogueComponent::SendObjectPresentMessage(AInspectableItem* Item, const 
 			}
 		}
 	}
+
+	// Memory Archive: snapshot structured context AFTER the history add + PresentedBy
+	// write so trust and item lists match what §7.7 bakes into this turn's prompt.
+	LogTurnContextToArchive(TEXT("object_present"), PresentBody, AnnotatedContent,
+		UserEmotion, GestureIntent, SpeakerTag, Item->ItemID);
 
 	bWaitingForResponse = true;
 
@@ -807,6 +818,61 @@ FString UDialogueComponent::BuildAnnotatedContent(
 	}
 
 	return Prefix.IsEmpty() ? UserMessage : (Prefix + UserMessage);
+}
+
+void UDialogueComponent::LogTurnContextToArchive(const TCHAR* Interaction, const FString& RawMessage,
+	const FString& AnnotatedContent, const FDetectedUserEmotion& UserEmotion,
+	EGestureIntent GestureIntent, FName SpeakerTag, FName ItemID) const
+{
+	UMemoryArchiveLogger* Logger = nullptr;
+	if (GetWorld())
+	{
+		if (UGameInstance* GI = GetWorld()->GetGameInstance())
+		{
+			Logger = GI->GetSubsystem<UMemoryArchiveLogger>();
+		}
+	}
+	if (!Logger || !Logger->bEnabled)
+	{
+		return;
+	}
+
+	// Mirror BuildBranchHintSection's speaker resolution so the logged item lists
+	// match the maps' actual write keys (single-speaker slice: everything Speaker_A).
+	const FName ResolvedSpeaker = SpeakerTag.IsNone() ? GetDefaultSpeakerID() : SpeakerTag;
+
+	FMemoryArchiveTurnContext Ctx;
+	Ctx.NPCName = NPCConfig ? NPCConfig->NPCName.ToString() : FString();
+	Ctx.Interaction = Interaction;
+	Ctx.SpeakerTag = SpeakerTag.IsNone() ? FString() : SpeakerTag.ToString();
+	Ctx.GestureIntent = StaticEnum<EGestureIntent>()->GetNameStringByValue(static_cast<int64>(GestureIntent));
+	Ctx.PlayerEmotion = StaticEnum<EEmotionType>()->GetNameStringByValue(static_cast<int64>(UserEmotion.Emotion));
+	Ctx.PlayerEmotionConfidence = UserEmotion.Confidence;
+	Ctx.ItemID = ItemID.IsNone() ? FString() : ItemID.ToString();
+	Ctx.UserMessageRaw = RawMessage;
+	Ctx.UserContentAnnotated = AnnotatedContent;
+	Ctx.Trust = ComputeTrust();
+
+	for (const TPair<FName, TSet<FName>>& Pair : InspectedBy)
+	{
+		if (Pair.Value.Contains(ResolvedSpeaker))
+		{
+			Ctx.ItemsInspected.Add(Pair.Key.ToString());
+		}
+	}
+	for (const TPair<FName, TSet<FName>>& Pair : PresentedBy)
+	{
+		if (Pair.Value.Contains(ResolvedSpeaker))
+		{
+			Ctx.ItemsPresented.Add(Pair.Key.ToString());
+		}
+	}
+
+	Ctx.SessionElapsedSeconds = GetSessionElapsedSeconds();
+	Ctx.SessionRemainingSeconds = GetSessionRemainingSeconds();
+	Ctx.GameTimeSeconds = GetWorld() ? static_cast<float>(GetWorld()->GetTimeSeconds()) : 0.0f;
+
+	Logger->BeginTurnContext(Ctx);
 }
 
 // ===========================================================================
